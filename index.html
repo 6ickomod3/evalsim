@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EvalSim — Closed-Loop Simulation-Evaluation Platform</title>
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #131822; --panel-2: #1a2130; --line: #232c3d;
+    --ink: #e6edf6; --muted: #8b98ad; --dim: #5f6b80;
+    --accent: #5ac8fa; --accent-2: #7c9cff;
+    --done: #3fb950; --prog: #d9a441; --todo: #4a5568;
+    --mac: #5ac8fa; --cloud: #b784f5;
+    --radius: 14px; --shadow: 0 6px 24px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: radial-gradient(1200px 700px at 80% -10%, #16203300, #0b0e14 60%), var(--bg);
+    color: var(--ink); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  header.hero { margin-bottom: 32px; }
+  .eyebrow { color: var(--accent); font-weight: 600; letter-spacing: .14em; text-transform: uppercase; font-size: 12px; }
+  h1 { font-size: 34px; margin: 8px 0 6px; letter-spacing: -.02em; }
+  .stack { color: var(--muted); font-size: 14px; }
+  .stack b { color: var(--ink); font-weight: 600; }
+  .lede { color: var(--muted); max-width: 760px; margin-top: 14px; font-size: 16px; }
+
+  .grid { display: grid; gap: 18px; }
+  .cards-2 { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 760px){ .cards-2 { grid-template-columns: 1fr; } }
+
+  section { margin-top: 40px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--dim); margin: 0 0 16px; }
+
+  .panel { background: linear-gradient(180deg, var(--panel), #10141d); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow); }
+  .panel h3 { margin: 0 0 8px; font-size: 16px; }
+  .panel p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  .quote { border-left: 3px solid var(--accent); padding: 6px 0 6px 16px; color: var(--ink);
+    font-size: 16px; margin: 4px 0 0; }
+
+  /* progress bar */
+  .prog-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom: 12px; }
+  .prog-pct { font-size: 28px; font-weight: 700; letter-spacing:-.02em; }
+  .prog-sub { color: var(--muted); font-size: 13px; }
+  .bar { height: 10px; background: var(--panel-2); border-radius: 999px; overflow: hidden; border:1px solid var(--line); }
+  .bar > i { display:block; height:100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); width:0; transition: width .5s ease; }
+  .legend { display:flex; gap:18px; margin-top:14px; flex-wrap:wrap; color: var(--muted); font-size:13px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:7px; vertical-align: middle; }
+  .dot.done{background:var(--done)} .dot.prog{background:var(--prog)} .dot.todo{background:var(--todo)}
+  .dot.mac{background:var(--mac)} .dot.cloud{background:var(--cloud)}
+
+  /* pipeline */
+  .pipe { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .node { background: var(--panel-2); border:1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+  .node small { color: var(--dim); display:block; font-size:11px; }
+  .arrow { color: var(--dim); }
+
+  /* milestone table */
+  .ms { display:grid; grid-template-columns: 64px 1fr auto; gap: 0; border:1px solid var(--line); border-radius: var(--radius); overflow:hidden; }
+  .ms .row { display:contents; }
+  .ms .cell { padding: 14px 16px; border-top:1px solid var(--line); display:flex; align-items:center; }
+  .ms .row:first-child .cell { border-top: none; }
+  .ms .id { font-weight:700; color: var(--accent-2); font-variant-numeric: tabular-nums; }
+  .ms .body { flex-direction:column; align-items:flex-start; gap:3px; }
+  .ms .body .t { font-weight:600; }
+  .ms .body .d { color: var(--muted); font-size:13px; }
+  .ms .tags { gap:8px; }
+  .tag { font-size:11px; padding:3px 8px; border-radius: 999px; border:1px solid var(--line); color: var(--muted); white-space:nowrap; }
+  .tag.mac { color: var(--mac); border-color: #274b63; }
+  .tag.cloud { color: var(--cloud); border-color: #4a3a63; }
+  .status-btn { cursor:pointer; user-select:none; border:1px solid var(--line); background: var(--panel-2);
+    color: var(--ink); border-radius: 999px; padding: 5px 12px; font-size:12px; font-weight:600; min-width: 104px; text-align:center; transition: all .15s; }
+  .status-btn:hover { border-color: var(--accent); }
+  .status-btn[data-s="done"]{ color: var(--done); border-color:#1f5c2b; background: #12241733; }
+  .status-btn[data-s="prog"]{ color: var(--prog); border-color:#5c4a1f; background: #24201233; }
+  .status-btn[data-s="todo"]{ color: var(--dim); }
+  .row.milestone .cell { background: transparent; }
+  .row.milestone.done .cell { background: #0e1b1180; }
+  .row.milestone.prog .cell { background: #1c180d55; }
+  .stopline { grid-column: 1 / -1; padding: 8px 16px; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color: var(--accent); background: #0f1622; border-top:1px solid var(--line); }
+
+  .hint { color: var(--dim); font-size:12px; margin-top:10px; }
+  .kv { display:grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size:14px; }
+  .kv .k { color: var(--muted); }
+  footer { margin-top: 56px; color: var(--dim); font-size: 12px; border-top:1px solid var(--line); padding-top:18px; }
+  .reset { cursor:pointer; color: var(--dim); font-size:12px; border:1px solid var(--line); background:transparent; padding:4px 10px; border-radius:8px; }
+  .reset:hover { color: var(--ink); border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">Interview Project · 2026</div>
+    <h1>EvalSim</h1>
+    <div class="stack">Closed-Loop Simulation-Evaluation Platform &nbsp;·&nbsp;
+      <b>Waymo Open Motion Dataset</b> · <b>Waymax</b> · <b>JAX</b> · <b>Python</b></div>
+    <p class="lede">An evaluation platform that decides whether a traffic simulator is realistic, reactive,
+      diverse, physically feasible, and <em>useful</em> for closed-loop autonomous-driving testing — instead of
+      collapsing simulation quality into one leaderboard number.</p>
+  </header>
+
+  <!-- WHAT ARE WE DOING -->
+  <section>
+    <h2>What are we doing here?</h2>
+    <div class="panel">
+      <p class="quote">The contribution is the <b>evaluation methodology</b>, not the simulator. We use simple
+      baselines (log-replay, constant-velocity, IDM) with deliberately different failure modes, and invest all
+      the engineering in the system <em>around</em> them.</p>
+    </div>
+    <div class="grid cards-2" style="margin-top:18px;">
+      <div class="panel">
+        <h3>The core problem</h3>
+        <p>A simulator can ace one metric while being unusable for closed-loop eval. Log-replay matches real
+        trajectories but can't react when the ego deviates. A rule-based agent reacts but turns unrealistically
+        defensive. A stochastic model looks diverse by being noisy and infeasible. EvalSim reveals these
+        differences instead of hiding them.</p>
+      </div>
+      <div class="panel">
+        <h3>The key design move</h3>
+        <p><b>Contract-first, substrate-agnostic.</b> A frozen <code>Scenario</code> contract has two producers:
+        a <span style="color:var(--mac)">synthetic generator (Mac)</span> and a
+        <span style="color:var(--cloud)">Waymax/WOMD loader (Cloud)</span>. Everything downstream reads only the
+        contract — so ~95% is built &amp; validated on a Mac CPU, and the Waymax stage is quarantined to one
+        short cloud session.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PIPELINE -->
+  <section>
+    <h2>Architecture (data flow)</h2>
+    <div class="panel">
+      <div class="pipe">
+        <div class="node">Producers<small>synthetic · WOMD</small></div><span class="arrow">→</span>
+        <div class="node">Scenario Contract<small>frozen schema</small></div><span class="arrow">→</span>
+        <div class="node">Simulator Adapters<small>replay · CV · IDM</small></div><span class="arrow">→</span>
+        <div class="node">Rollout Engine<small>+ ego perturb.</small></div><span class="arrow">→</span>
+        <div class="node">Metric Registry<small>kinematic · interaction · map</small></div><span class="arrow">→</span>
+        <div class="node">Result Store<small>Parquet · DuckDB</small></div><span class="arrow">→</span>
+        <div class="node">Statistics<small>scenario bootstrap</small></div><span class="arrow">→</span>
+        <div class="node">Reports<small>scorecards · viz</small></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROGRESS -->
+  <section>
+    <h2>Progress</h2>
+    <div class="panel">
+      <div class="prog-head">
+        <div><span class="prog-pct" id="pct">0%</span> <span class="prog-sub" id="counts">— / — milestones</span></div>
+        <button class="reset" id="reset">Reset tracker</button>
+      </div>
+      <div class="bar"><i id="barfill"></i></div>
+      <div class="legend">
+        <span><span class="dot done"></span>Done</span>
+        <span><span class="dot prog"></span>In progress</span>
+        <span><span class="dot todo"></span>Not started</span>
+        <span style="margin-left:auto"><span class="dot mac"></span>Runs on Mac</span>
+        <span><span class="dot cloud"></span>Runs on Cloud</span>
+      </div>
+      <div class="hint">Click a status pill to cycle Not started → In progress → Done. Saved in your browser.</div>
+    </div>
+  </section>
+
+  <!-- MILESTONES -->
+  <section>
+    <h2>Milestones</h2>
+    <div class="ms" id="ms"></div>
+  </section>
+
+  <!-- RESUME MAPPING -->
+  <section>
+    <h2>Résumé mapping (every claim → a milestone)</h2>
+    <div class="panel">
+      <div class="kv">
+        <div class="k">Reproducible platform</div><div>M0 · M7</div>
+        <div class="k">log-replay / const-velocity / IDM</div><div>M2</div>
+        <div class="k">kinematic realism / interaction / map adherence</div><div>M3</div>
+        <div class="k">behavioral slices</div><div>M4</div>
+        <div class="k">scenario-level confidence intervals</div><div>M4</div>
+        <div class="k">counterfactual ego-perturbation + reactivity</div><div>M5</div>
+        <div class="k">metric stress-test (mode collapse, dispersion, infeasibility)</div><div>M6</div>
+        <div class="k">hand-designed realism metrics</div><div>M3</div>
+        <div class="k"><b>learned</b> realism metrics</div><div>S1</div>
+        <div class="k">header: WOMD · Waymax · JAX</div><div>W1 (Google Cloud)</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    EvalSim · design + plan in <code>docs/plans/</code> · dashboard state stored locally in your browser ·
+    updated 2026-07-27
+  </footer>
+</div>
+
+<script>
+const MILESTONES = [
+  {id:"M0", t:"Repo skeleton + contracts", d:"Scenario/Rollout/Metric seams, Parquet round-trip, run manifest", run:"mac"},
+  {id:"M1", t:"Synthetic source + visualization", d:"Parametric scenarios into the contract + matplotlib viewer", run:"mac"},
+  {id:"M2", t:"Simulator adapters + rollout engine", d:"log-replay · constant-velocity · IDM + NumPy closed-loop engine", run:"mac"},
+  {id:"M3", t:"Metric registry + core metrics", d:"kinematic · interaction · map-adherence + per-scenario Parquet store", run:"mac"},
+  {id:"M4", t:"Scenario slicing + statistics", d:"slice registry, scorecards, scenario-cluster bootstrap, paired diffs", run:"mac", stop:"MVP complete"},
+  {id:"M5", t:"Counterfactual ego-perturbation + reactivity", d:"braking / accel / timing perturbations + reactivity metrics", run:"mac"},
+  {id:"M6", t:"Metric stress-test suite", d:"frozen / mode-collapse / over-dispersion / infeasible → detection matrix", run:"mac"},
+  {id:"S1", t:"Learned real-vs-sim discriminator", d:"leakage-safe splits, AUC, disagreement vs hand-designed metrics", run:"mac", stop:"Strong version complete"},
+  {id:"M7", t:"Config, caching, reproducibility", d:"YAML runs, deterministic cache keys, one-command benchmark", run:"mac"},
+  {id:"M8", t:"Report, visualizations, tests", d:"README + technical report + curated failure viz + ~30 tests", run:"mac"},
+  {id:"W1", t:"WaymaxSource — WOMD ingestion", d:"WOMD → Scenario contract → Parquet; smoke-test then re-run platform on real data", run:"cloud", stop:"Résumé header made true"},
+  {id:"W2", t:"Rollout dynamics cross-check (optional)", d:"validate NumPy engine vs Waymax reference dynamics", run:"cloud"},
+];
+const KEY = "evalsim_progress_v1";
+const ORDER = ["todo","prog","done"];
+const LABEL = {todo:"Not started", prog:"In progress", done:"Done"};
+let state = JSON.parse(localStorage.getItem(KEY) || "{}");
+
+function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+function render(){
+  const host = document.getElementById("ms");
+  host.innerHTML = "";
+  MILESTONES.forEach(m => {
+    const s = state[m.id] || "todo";
+    const row = document.createElement("div");
+    row.className = "row milestone " + s;
+    row.innerHTML = `
+      <div class="cell id">${m.id}</div>
+      <div class="cell body"><div class="t">${m.t}</div><div class="d">${m.d}</div></div>
+      <div class="cell tags">
+        <span class="tag ${m.run}">${m.run === "mac" ? "Mac · CPU" : "Google Cloud"}</span>
+        <span class="status-btn" data-s="${s}" data-id="${m.id}">${LABEL[s]}</span>
+      </div>`;
+    host.appendChild(row);
+    if(m.stop){
+      const sl = document.createElement("div");
+      sl.className = "stopline";
+      sl.textContent = "▲ Stop-line — " + m.stop;
+      host.appendChild(sl);
+    }
+  });
+  host.querySelectorAll(".status-btn").forEach(b => b.addEventListener("click", () => {
+    const id = b.dataset.id;
+    const cur = state[id] || "todo";
+    state[id] = ORDER[(ORDER.indexOf(cur)+1) % ORDER.length];
+    save(); render(); updateBar();
+  }));
+  updateBar();
+}
+function updateBar(){
+  const total = MILESTONES.length;
+  const done = MILESTONES.filter(m => (state[m.id]||"todo") === "done").length;
+  const prog = MILESTONES.filter(m => (state[m.id]||"todo") === "prog").length;
+  const pctVal = Math.round((done + prog*0.5) / total * 100);
+  document.getElementById("pct").textContent = pctVal + "%";
+  document.getElementById("counts").textContent = `${done} done · ${prog} in progress · ${total-done-prog} to go`;
+  document.getElementById("barfill").style.width = pctVal + "%";
+}
+document.getElementById("reset").addEventListener("click", () => {
+  if(confirm("Reset all milestone progress?")){ state = {}; save(); render(); }
+});
+render();
+</script>
+</body>
+</html>

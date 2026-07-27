@@ -1,0 +1,1418 @@
+# EvalSim — Closed-Loop Simulation Evaluation Platform
+
+**Technology:** Waymo Open Motion Dataset, Waymax, JAX, Python, Parquet, DuckDB
+**Primary focus:** Evaluation of stochastic traffic-agent simulators under closed-loop rollout
+**Project status:** Planned and under development; all quantitative results below are targets until experiments are completed
+
+EvalSim is an evaluation platform for answering a deceptively difficult question:
+
+> How do we determine whether a traffic simulator produces behavior that is realistic, reactive, diverse, physically feasible, and useful for evaluating an autonomous-driving system?
+
+The project is intentionally not centered on training the most sophisticated traffic-generation model. The main contribution is the evaluation system around the models: the methodology, abstractions, experiments, failure analysis, statistical validation, reproducibility, and release-oriented reporting.
+
+This distinction matters. A simulator can score well on one metric while being fundamentally unsuitable for closed-loop evaluation. Log replay can closely reproduce real trajectories but cannot respond when the autonomous vehicle behaves differently from the recorded drive. A rule-based model can react to the ego vehicle but become unrealistically defensive. A stochastic model can produce diverse futures but achieve that diversity by generating noisy, physically implausible behavior.
+
+EvalSim is designed to reveal these differences rather than collapse simulation quality into one number.
+
+---
+
+# 1. Project objective
+
+The central objective is to build a reproducible platform that compares multiple traffic-agent simulators along several independent dimensions:
+
+* Kinematic realism
+* Interaction realism
+* Map adherence
+* Behavioral diversity
+* Closed-loop reactivity
+* Physical feasibility
+* Long-tail and scenario-sliced performance
+* Robustness of evaluation metrics themselves
+
+The platform should answer questions such as:
+
+* Does a simulator reproduce realistic speed, acceleration, turning, and braking behavior?
+* Does it maintain plausible distances from surrounding vehicles?
+* Does it avoid collisions for the right reasons?
+* Does it remain on drivable surfaces and follow lane geometry?
+* Does it generate multiple plausible futures or repeatedly produce the same mode?
+* Does it respond appropriately when the ego vehicle deviates from the logged trajectory?
+* Are its improvements consistent across intersections, merges, pedestrians, and dense traffic?
+* Are apparent improvements statistically distinguishable from scenario noise?
+* Can a simulator game one metric while becoming worse in another important dimension?
+* Do learned evaluation models agree with interpretable hand-designed metrics?
+* What evidence should be presented before approving a simulator change?
+
+The broader goal is to demonstrate that simulation evaluation is a multi-dimensional model-validation problem, not simply a leaderboard exercise.
+
+---
+
+# 2. Why this project is relevant to a simulation-evaluation role
+
+The project maps directly to several skills expected in a simulation-evaluation engineer.
+
+First, it requires translating a vague product concept—“simulation realism”—into measurable engineering properties.
+
+Second, it requires distinguishing between metrics that are convenient and metrics that are decision-relevant. For example, a lower collision rate is not automatically better if the simulator achieves it by freezing all agents.
+
+Third, it requires working with correlated temporal data, stochastic rollouts, long-tail scenarios, and heterogeneous behavioral slices.
+
+Fourth, it requires designing a platform that other engineers could extend with new simulator policies, metrics, scenario definitions, and experiment configurations.
+
+Finally, it requires communicating model limitations honestly. The end product should not say that one simulator is universally best. It should explain where each simulator is useful, where it fails, and how confidently those conclusions are supported.
+
+This connects directly to the evaluation work already present in large-scale recommendation and integrity systems: identifying missing objectives, finding aggregate-metric blind spots, introducing better measurement, and using the resulting framework to guide system decisions.
+
+---
+
+# 3. Dataset and simulation environment
+
+The project uses the Waymo Open Motion Dataset as the source of real-world driving scenarios.
+
+Each scenario provides information such as:
+
+* Agent trajectories over time
+* Agent types
+* Position and orientation
+* Velocity and acceleration-related state
+* Validity masks
+* Road and lane geometry
+* Traffic-control context where available
+* Ego and surrounding-agent behavior
+
+Waymax provides the simulation environment. It allows traffic-agent policies to be rolled forward and evaluated using JAX-compatible state representations and metrics.
+
+The first development version should use a relatively small scenario subset so that the data pipeline and simulator abstractions can be debugged quickly. The final experimental version should target approximately:
+
+* **Minimum credible scope:** 500 scenarios
+* **Strong target:** 2,000 scenarios
+* **Stretch target:** 5,000 scenarios
+
+The exact scenario IDs must be saved in an immutable manifest. Results should never depend on an undocumented random sample.
+
+The scenario set should also avoid being dominated by easy cases. Where possible, it should be stratified or filtered to contain meaningful representation of:
+
+* Intersections
+* Turning behavior
+* Dense traffic
+* Vehicle-following
+* Merges
+* Pedestrian and cyclist interactions
+* Low time-to-collision states
+* High-curvature road segments
+* Different agent counts and speeds
+
+A small, well-characterized evaluation set is more valuable than a larger but opaque set.
+
+---
+
+# 4. Simulator baselines
+
+EvalSim should begin with simple simulators that have clearly different strengths and weaknesses.
+
+## Log-replay baseline
+
+The log-replay policy reproduces the recorded trajectories of surrounding agents.
+
+Its main strength is that it closely resembles real behavior when the ego vehicle remains near the originally recorded trajectory.
+
+Its central weakness is nonreactivity. If the ego vehicle brakes unexpectedly or enters an intersection at a different time, replayed agents continue following the recorded world. This can produce collisions or unrealistic interactions that were not present in the original log.
+
+Log replay is therefore useful as a reference but insufficient as a closed-loop world model.
+
+## Constant-velocity baseline
+
+The constant-velocity simulator extrapolates each agent using its current or recently estimated velocity.
+
+It is simple, deterministic, and easy to debug.
+
+Its likely weaknesses include:
+
+* Failure to anticipate turns
+* Failure to brake for other agents
+* Drift from lane geometry
+* Unrealistic behavior at intersections
+* No meaningful interaction response
+
+This baseline is useful because it defines a low-complexity reference and exposes which metrics can distinguish simplistic extrapolation from realistic behavior.
+
+## IDM reactive baseline
+
+The Intelligent Driver Model or an IDM-like policy provides basic reactive longitudinal behavior.
+
+It may adjust speed based on a leading vehicle, following distance, desired speed, and safety-related parameters.
+
+Its strength is that it reacts to nearby traffic rather than blindly replaying recorded trajectories.
+
+Its weaknesses may include:
+
+* Excessive conservatism
+* Limited lateral reasoning
+* Simplified interaction assumptions
+* Poor behavior in complex intersections
+* Sensitivity to manually selected parameters
+* Unnatural behavior when the environment differs from its assumptions
+
+The key comparison is not simply whether IDM scores higher or lower than log replay. It is whether it is more useful under ego divergence and whether its reactivity comes at the cost of realism.
+
+## Optional learned stochastic policy
+
+A learned policy is a stretch goal rather than an MVP requirement.
+
+A modest version could take:
+
+* Recent agent-motion history
+* Nearby-agent features
+* Simple map context
+* Relative positions and velocities
+
+It could output:
+
+* Acceleration
+* Yaw-rate or heading change
+* A mixture of trajectory modes
+* A probabilistic next-state distribution
+
+A small GRU, MLP, or Transformer-based policy is sufficient. The purpose is not to compete with state-of-the-art models. It is to provide a simulator with stochastic behavior and new failure modes, such as mode collapse, excessive dispersion, calibration problems, or compounding rollout errors.
+
+---
+
+# 5. Platform architecture
+
+EvalSim should be organized as a real evaluation platform rather than a collection of notebooks.
+
+A high-level architecture is:
+
+```text
+Waymo Open Motion Dataset
+          │
+          ▼
+Scenario Loader and Normalizer
+          │
+          ├── Scenario Manifest
+          ├── Scenario Slicer
+          └── Eligibility Filters
+          │
+          ▼
+Simulator Adapter Layer
+          │
+          ├── Log Replay
+          ├── Constant Velocity
+          ├── IDM
+          └── Optional Learned Policy
+          │
+          ▼
+Closed-Loop Rollout Engine
+          │
+          ├── Standard Logged Conditions
+          └── Counterfactual Ego Perturbations
+          │
+          ▼
+Pluggable Metric Registry
+          │
+          ├── Kinematic Metrics
+          ├── Interaction Metrics
+          ├── Map-Adherence Metrics
+          ├── Diversity Metrics
+          ├── Reactivity Metrics
+          └── Learned Real-vs-Sim Evaluator
+          │
+          ▼
+Per-Scenario Result Store
+          │
+          ├── Parquet
+          ├── Run Manifest
+          ├── Metric Versions
+          └── Cached Intermediate Results
+          │
+          ▼
+Aggregation and Statistical Analysis
+          │
+          ├── Slice Scorecards
+          ├── Paired Comparisons
+          ├── Cluster Bootstrap
+          ├── Regression Detection
+          └── Multiple-Comparison Handling
+          │
+          ▼
+Reports, Dashboards, and Failure Visualizations
+```
+
+Each layer should have a clean interface.
+
+---
+
+# 6. Configuration-driven execution
+
+Every evaluation run should be generated from a version-controlled configuration file.
+
+The configuration should specify:
+
+* Dataset version
+* Scenario manifest
+* Simulator policy
+* Simulator parameters
+* Number of stochastic rollouts
+* Random seeds
+* Ego-control source
+* Counterfactual perturbations
+* Enabled metrics
+* Enabled scenario slices
+* Aggregation behavior
+* Statistical settings
+* Output directory
+* Code or Git commit identifier
+
+A conceptual configuration could look like:
+
+```yaml
+dataset:
+  name: womd
+  split: validation
+  manifest: manifests/eval_2000.json
+
+simulator:
+  name: idm
+  config:
+    desired_speed_mps: 13.0
+    minimum_gap_m: 2.0
+
+rollout:
+  horizon_seconds: 8
+  num_samples: 1
+  seed: 42
+
+counterfactual:
+  enabled: true
+  perturbations:
+    - ego_brake_moderate
+    - ego_brake_hard
+    - delayed_intersection_entry
+
+metrics:
+  - speed_distribution
+  - acceleration_distribution
+  - jerk
+  - collision
+  - minimum_distance
+  - time_to_collision
+  - offroad_rate
+  - wrong_way_rate
+  - response_latency
+
+slices:
+  - intersection
+  - low_ttc
+  - pedestrian_present
+  - dense_traffic
+
+statistics:
+  bootstrap_samples: 1000
+  confidence_level: 0.95
+  cluster_unit: scenario
+```
+
+The goal is that another engineer can reproduce an evaluation run without manually changing Python code.
+
+---
+
+# 7. Simulator adapter abstraction
+
+Every simulator should implement a shared interface.
+
+Conceptually:
+
+```python
+class SimulatorPolicy:
+    def initialize(self, scenario, seed):
+        ...
+
+    def step(self, state, observation):
+        ...
+
+    def metadata(self):
+        ...
+```
+
+The adapter should expose:
+
+* Policy name
+* Policy version
+* Deterministic or stochastic behavior
+* Required input features
+* Supported agent types
+* Policy parameters
+* Random-seed handling
+* Known limitations
+
+The shared interface allows evaluation logic to remain independent of simulator implementation.
+
+This is a meaningful Staff-level design signal. It demonstrates separation between:
+
+* Simulation policy
+* Rollout environment
+* Metric computation
+* Statistical aggregation
+* Reporting
+
+A new policy should be added by implementing an adapter rather than modifying the evaluation pipeline.
+
+---
+
+# 8. Metric registry
+
+Metrics should be registered through a common contract.
+
+Each metric definition should specify:
+
+* Name and version
+* Required simulation fields
+* Unit of analysis
+* Whether it is frame-, agent-, or scenario-level
+* Whether higher or lower is better
+* Aggregation method
+* Validity requirements
+* Dependencies on other metrics
+* Deterministic behavior
+* Expected failure modes
+
+Conceptually:
+
+```python
+class Metric:
+    name: str
+    version: str
+
+    def compute(self, scenario, rollout):
+        ...
+
+    def aggregate(self, per_scenario_values):
+        ...
+
+    def validate_inputs(self, scenario, rollout):
+        ...
+```
+
+The project should avoid reducing all evaluation results to one composite score.
+
+A composite may be reported for compatibility or convenience, but component metrics and sliced outcomes must remain visible.
+
+The platform should distinguish between:
+
+* A metric value
+* A metric distribution
+* A difference between simulators
+* Statistical uncertainty
+* Operational interpretation
+
+For example, a collision-rate difference of 0.1 percentage points may be statistically significant but operationally unimportant, or vice versa for rare high-severity conditions.
+
+---
+
+# 9. Kinematic realism metrics
+
+Kinematic metrics measure whether simulated motion resembles plausible real-world motion.
+
+Candidate metrics include:
+
+* Linear-speed distribution
+* Longitudinal acceleration
+* Lateral acceleration
+* Jerk
+* Yaw rate
+* Angular acceleration
+* Heading change
+* Kinematic feasibility
+* Divergence from logged trajectories
+
+These metrics should be evaluated as distributions, not only averages.
+
+For example, matching mean acceleration is insufficient if the simulator:
+
+* Has excessive extreme braking
+* Never performs moderate acceleration
+* Produces implausible jerk
+* Has different behavior for pedestrians and vehicles
+* Matches the global distribution but not intersections
+
+Useful reporting includes:
+
+* Histograms or empirical cumulative distributions
+* Quantile differences
+* Per-agent-type analysis
+* Slice-level comparisons
+* Wasserstein, MMD, or another distributional distance where appropriate
+* Examples of trajectories at distribution extremes
+
+The platform should also make clear that closeness to logged motion is not always the same as closed-loop quality. A reactive agent may appropriately diverge from the log after the ego vehicle is perturbed.
+
+---
+
+# 10. Interaction metrics
+
+Interaction metrics characterize relationships among agents.
+
+Candidate metrics include:
+
+* Collision or overlap rate
+* Minimum inter-agent distance
+* Time to collision
+* Following distance
+* Relative speed
+* Yielding behavior
+* Response to a lead vehicle
+* Response latency
+* Cut-in handling
+* Interaction smoothness
+
+Collision rate alone is dangerous as an evaluation target.
+
+A frozen-agent simulator may have a low collision rate because nothing moves. An extremely conservative simulator may stop unnecessarily and avoid collisions while producing unusable traffic behavior.
+
+Therefore, interaction metrics should be interpreted alongside:
+
+* Progress
+* Speed
+* Map adherence
+* Reactivity
+* Kinematic realism
+* Scenario type
+
+The platform should actively demonstrate this through metric stress tests.
+
+---
+
+# 11. Map-adherence metrics
+
+Map-adherence metrics test whether simulated agents behave consistently with the road.
+
+Potential metrics include:
+
+* Off-road rate
+* Wrong-way driving
+* Distance to lane center
+* Distance to road edge
+* Lane departure
+* Route progression
+* Turn consistency
+* Drivable-area occupancy
+
+These metrics require careful validity handling.
+
+For example:
+
+* A parked vehicle may legitimately remain near a road edge.
+* A pedestrian should not be evaluated using vehicle lane-center rules.
+* A lane change may temporarily increase lane-center distance.
+* Map data may be incomplete or noisy.
+* A simulator should not be rewarded merely for remaining on the map if it fails to interact properly.
+
+The metric registry should allow metrics to define eligibility criteria by agent type and scenario context.
+
+---
+
+# 12. Behavioral diversity and stochastic coverage
+
+A stochastic simulator should generate multiple plausible futures.
+
+Diversity evaluation should distinguish at least three failure modes:
+
+## Mode collapse
+
+The simulator produces nearly identical trajectories across all samples.
+
+The individual trajectory may look plausible, but the simulator fails to represent uncertainty.
+
+## Excessive dispersion
+
+The simulator generates many distinct futures, but most are noisy, physically invalid, or behaviorally implausible.
+
+Raw diversity may look high even though quality is poor.
+
+## Incorrect mode allocation
+
+The simulator generates multiple plausible modes but assigns unrealistic probabilities to them.
+
+For example, it may generate left turns and straight motion, but heavily favor a maneuver inconsistent with the road context.
+
+Potential diversity metrics include:
+
+* Pairwise trajectory distance
+* Endpoint dispersion
+* Mode count after clustering
+* Coverage of logged behavior
+* Precision-versus-recall style generative metrics
+* Entropy of sampled outcomes
+* Conditional diversity by scenario type
+* Diversity after filtering physically invalid samples
+
+The project should explicitly show that “more diverse” is not automatically “better.”
+
+---
+
+# 13. Counterfactual ego-perturbation evaluation
+
+This should be one of the most distinctive parts of the project.
+
+Standard logged evaluation observes a simulator under the ego trajectory that actually occurred. Closed-loop evaluation must ask what happens when the ego vehicle behaves differently.
+
+EvalSim should modify the ego trajectory while holding the initial scenario context constant.
+
+The initial perturbation suite should include three families.
+
+## Braking perturbations
+
+Examples:
+
+* Begin braking earlier
+* Increase braking severity
+* Stop unexpectedly
+* Reduce deceleration recovery
+
+## Acceleration perturbations
+
+Examples:
+
+* Delay acceleration
+* Accelerate more slowly
+* Fail to proceed immediately at an intersection
+* Stop after initially moving
+
+## Timing or lateral perturbations
+
+Examples:
+
+* Enter an intersection later
+* Shift slightly within a lane
+* Change arrival timing at a merge
+* Follow a different but nearby trajectory
+
+Each perturbation family should have multiple severity levels.
+
+A reasonable target is:
+
+* Three perturbation families
+* Three severity levels each
+* Nine counterfactual conditions
+* Applied to 300–500 eligible scenarios
+
+Not every scenario is suitable for every perturbation. Eligibility logic must be explicit. For example, braking reactivity should be tested only when a relevant following agent is present.
+
+---
+
+# 14. Reactivity metrics
+
+Counterfactual tests require metrics that quantify whether surrounding agents meaningfully adapt.
+
+Potential measures include:
+
+* Change in following-agent acceleration
+* Change in minimum distance
+* Change in time to collision
+* Collision avoidance rate
+* Agent response latency
+* Difference between perturbed and unperturbed world-agent trajectories
+* Fraction of relevant agents that respond
+* Excessive braking or unnecessary stopping
+* Progress lost due to over-conservatism
+* Smoothness of the response
+
+A simulator can fail in two opposite directions.
+
+## Nonreactivity
+
+The surrounding agent behaves nearly identically after ego behavior changes.
+
+This is likely for log replay.
+
+## Overreaction
+
+The surrounding agent responds, but with implausibly severe braking, excessive distance, or unnecessary stopping.
+
+This may occur with simple rule-based agents.
+
+The project should not define reactivity as simply “more trajectory change.” It should distinguish appropriate adaptation from exaggerated adaptation.
+
+A useful reactivity report might show:
+
+* Perturbation
+* Relevant-agent count
+* Median response latency
+* Minimum-distance change
+* Collision change
+* Progress change
+* Comparison with unperturbed rollout
+* Qualitative trajectory examples
+
+---
+
+# 15. Metric stress-test suite
+
+EvalSim should treat metrics as systems that can fail.
+
+The platform should include intentionally corrupted simulators designed to expose blind spots.
+
+## Frozen simulator
+
+All or selected agents remain stationary.
+
+This simulator may appear safe under collision rate but fail:
+
+* Speed realism
+* Progress
+* Responsiveness
+* Interaction realism
+
+## Mode-collapsed simulator
+
+A stochastic simulator returns the same rollout repeatedly.
+
+It may produce a plausible representative trajectory while failing to represent uncertainty.
+
+## Over-dispersed simulator
+
+Random noise is added to agent actions or trajectories.
+
+It may score highly on naive diversity while failing:
+
+* Kinematic feasibility
+* Map adherence
+* Interaction quality
+* Conditional plausibility
+
+## Kinematically infeasible simulator
+
+Trajectories contain abrupt changes in:
+
+* Velocity
+* Heading
+* Acceleration
+* Jerk
+
+Position error might remain modest while physical realism becomes poor.
+
+## Nonreactive simulator
+
+Log replay is evaluated under modified ego behavior.
+
+It may look realistic under the original log but fail after ego divergence.
+
+## Excessively conservative simulator
+
+Agents brake too early or maintain unrealistic gaps.
+
+It may score well on collisions but poorly on:
+
+* Progress
+* Speed distributions
+* Interaction efficiency
+* Human-likeness
+
+The output should include a metric-detection matrix.
+
+```text
+                         Collision  Speed  Jerk  Diversity  Reactivity  Progress
+Frozen agents                weak   strong strong     n/a       strong    strong
+Mode collapse                weak    weak   weak    strong        weak      weak
+Over-dispersion             mixed  strong strong    mixed        mixed     mixed
+Infeasible motion            weak   mixed strong     weak         weak      weak
+Nonreactive replay          mixed    weak   weak      weak       strong      weak
+Over-conservative policy    strong  strong mixed      weak       mixed     strong
+```
+
+The actual matrix should be based on experimental findings, not predetermined expectations.
+
+The important question is:
+
+> Which metrics detect which simulator defects, and which apparently reasonable metrics can be gamed?
+
+---
+
+# 16. Scenario slicing
+
+Aggregate results are rarely sufficient.
+
+EvalSim should define a scenario-slice registry that assigns each scenario to meaningful categories.
+
+Recommended slices include:
+
+* Intersection
+* Non-intersection
+* Left turn
+* Right turn
+* Straight
+* Merge
+* High curvature
+* Dense traffic
+* Sparse traffic
+* Low initial time to collision
+* Pedestrian present
+* Cyclist present
+* High agent count
+* High-speed scenario
+* Near road edge
+* Stationary lead agent
+* Ego braking
+* Ego accelerating
+* Vulnerable-road-user interaction
+
+Each slice must report its sample size. Small slices should be flagged rather than presented with false precision.
+
+Slice definitions should be:
+
+* Versioned
+* Deterministic
+* Testable
+* Documented
+* Independent of the simulator being evaluated
+
+The project should distinguish:
+
+* **Predefined slices:** chosen before looking at results
+* **Exploratory slices:** discovered after observing failures
+
+This prevents exploratory findings from being presented as if they were preplanned confirmatory tests.
+
+The desired output is not simply “Model A is best.” A stronger conclusion is:
+
+> Model A improves average kinematic realism but regresses interaction quality in dense intersections, while Model B remains stable in low-TTC following scenarios but loses progress through overly conservative braking.
+
+---
+
+# 17. Statistical validation
+
+Evaluation results should use scenarios as the primary statistical unit.
+
+Frames within a scenario are strongly correlated. Agents within the same scenario are also correlated. Treating every frame or agent state as independent would produce confidence intervals that are far too narrow.
+
+The default analysis should use:
+
+* Paired comparisons between simulators on the same scenarios
+* Scenario-level cluster bootstrap
+* Approximately 1,000 bootstrap resamples
+* 95% confidence intervals
+* Effect sizes
+* Sample counts
+* False-discovery-rate handling across exploratory slices
+
+For a simulator pair (A) and (B), the project should compute the per-scenario difference:
+
+[
+d_i = m_i(A) - m_i(B)
+]
+
+Then resample scenarios rather than frames.
+
+The reporting format should include:
+
+* Mean or median difference
+* Confidence interval
+* Direction of improvement
+* Effect magnitude
+* Number of scenarios
+* Whether the result survives multiple-comparison correction
+* Whether the magnitude is practically important
+
+Statistical significance should not be treated as the final release criterion. A tiny difference can be statistically significant on a large dataset while being operationally irrelevant.
+
+Likewise, a large but uncertain difference in a rare high-risk slice may warrant investigation even without conventional significance.
+
+---
+
+# 18. Learned real-versus-sim evaluator
+
+EvalSim should include one learned evaluator as a diagnostic.
+
+The idea is to train a classifier that distinguishes real trajectories from simulated trajectories.
+
+Possible feature inputs include:
+
+* Speed statistics
+* Acceleration statistics
+* Jerk
+* Yaw rate
+* Minimum distance
+* Time to collision
+* Agent count
+* Off-road behavior
+* Interaction summaries
+* Temporal trajectory embeddings
+
+A simple model is sufficient:
+
+* Logistic regression
+* Gradient-boosted trees
+* Small MLP
+* Small temporal encoder
+
+The purpose is not to build a powerful neural evaluator. The purpose is to compare what a learned discriminator detects against what hand-designed metrics detect.
+
+The most important methodological constraint is preventing leakage.
+
+All rollouts derived from the same source scenario must remain in the same train, validation, or test split.
+
+Otherwise, the classifier may memorize scenario identity instead of learning meaningful realism differences.
+
+The evaluator should report:
+
+* Held-out ROC-AUC
+* Confidence interval
+* Calibration where useful
+* Feature ablations
+* Performance by simulator
+* Performance by scenario slice
+* Error examples
+* Sensitivity to preprocessing artifacts
+
+Interpretation must remain careful.
+
+A high AUC means the classifier can distinguish simulation from real data.
+
+A low AUC does not prove that the simulation is realistic. It may mean:
+
+* The classifier is weak
+* The features are insufficient
+* The dataset is small
+* The split is noisy
+* The simulator and real data differ in ways the classifier does not capture
+
+The most valuable output is a disagreement analysis.
+
+Examples:
+
+* Hand-designed metrics show small differences, but the classifier easily distinguishes the simulator.
+* The classifier gives high AUC because of a preprocessing artifact.
+* The classifier identifies a difference concentrated in one scenario slice.
+* Collision and off-road metrics appear good, but temporal features reveal unrealistic control smoothness.
+
+This demonstrates judgment about learned evaluators rather than blind trust in them.
+
+---
+
+# 19. Reproducibility and versioning
+
+Every reported result should be traceable to a complete run manifest.
+
+The manifest should include:
+
+* Dataset version
+* Scenario manifest
+* Simulator name and version
+* Simulator configuration
+* Number of rollouts
+* Random seeds
+* Metric versions
+* Slice versions
+* Counterfactual definitions
+* Code commit
+* Environment information
+* Result-store location
+* Timestamp
+* Parent or baseline run
+
+Results should be stored at the per-scenario level before aggregation.
+
+That enables:
+
+* Recomputing slices without rerunning simulation
+* Adding new statistical analyses
+* Debugging outliers
+* Comparing simulator versions
+* Performing paired tests
+* Reproducing specific figures
+* Inspecting failures
+
+Parquet is a reasonable storage format, and DuckDB is sufficient for local analysis.
+
+The platform does not need to use Spark simply to look scalable. It should instead establish abstractions that could migrate to distributed execution:
+
+* Scenarios are independent execution units.
+* Rollouts can be sharded by scenario.
+* Metric computation can be parallelized.
+* Outputs are immutable and partitionable.
+* Aggregation consumes stored per-scenario results.
+* Failed shards can be retried idempotently.
+
+The résumé should state the scale actually run, while the design document can describe how the system would move to distributed compute.
+
+---
+
+# 20. Caching and incremental evaluation
+
+Simulation may be more expensive than aggregation.
+
+The platform should separate:
+
+1. Simulation rollout generation
+2. Raw per-step outputs
+3. Per-scenario metric computation
+4. Aggregation and reporting
+
+This separation allows several caching layers.
+
+For example:
+
+* If slice definitions change, reuse per-scenario metrics.
+* If confidence-interval settings change, reuse aggregated inputs.
+* If one new metric is added, reuse saved rollouts when possible.
+* If one simulator parameter changes, rerun only that simulator.
+* If a few scenarios fail, retry only those scenarios.
+
+A run should produce a deterministic cache key based on:
+
+* Scenario ID
+* Simulator version
+* Simulator configuration
+* Seed
+* Perturbation
+* Metric version
+
+A realistic engineering target is to demonstrate that repeated analysis using cached results is several times faster than full recomputation. The exact speedup should be measured, not assumed.
+
+---
+
+# 21. Regression comparison
+
+The platform should support comparing a candidate simulator release with a baseline release.
+
+The regression report should contain:
+
+* Overall metric differences
+* Slice-level differences
+* Confidence intervals
+* Largest regressions
+* Largest improvements
+* Ranking changes
+* New failure examples
+* Changes in reactivity
+* Changes in computational cost where relevant
+
+Regression thresholds may include:
+
+* Absolute guardrails
+* Relative changes
+* Statistical confidence
+* Minimum sample sizes
+* Severity-weighted rules
+
+For example:
+
+* Block if off-road rate increases beyond a fixed threshold.
+* Warn if a slice has a large negative effect but low sample size.
+* Investigate if aggregate realism improves while low-TTC collision behavior worsens.
+* Require manual review when the learned evaluator and component metrics strongly disagree.
+
+The project should avoid claiming that it has found a universal launch policy. Instead, it should show how evidence is organized to support a decision.
+
+---
+
+# 22. Visualization and qualitative analysis
+
+Numbers alone are insufficient.
+
+The platform should generate scenario visualizations showing:
+
+* Road geometry
+* Logged trajectories
+* Simulated trajectories
+* Ego perturbations
+* Collision locations
+* Off-road motion
+* Agent responses
+* Multiple stochastic samples
+
+For every major finding, include qualitative examples.
+
+Examples:
+
+* A log-replay agent collides after unexpected ego braking.
+* IDM avoids the collision but stops much earlier than necessary.
+* A noisy simulator produces broad diversity but leaves the drivable area.
+* A mode-collapsed policy repeats the same plausible future.
+* Aggregate behavior looks good, but a pedestrian-interaction slice fails.
+
+The final report should include approximately 10–20 carefully chosen failure visualizations, not hundreds of uncurated images.
+
+---
+
+# 23. Testing strategy
+
+The project should include meaningful tests.
+
+Target approximately 30 tests across:
+
+## Unit tests
+
+* Metric calculations on synthetic trajectories
+* TTC edge cases
+* Collision geometry
+* Map-adherence logic
+* Slice definitions
+* Perturbation severity
+* Cache-key generation
+* Run-manifest serialization
+* Statistical aggregation
+
+## Integration tests
+
+* Load a small scenario
+* Run each simulator
+* Compute enabled metrics
+* Save results
+* Reload cached outputs
+* Generate a comparison report
+
+## Property tests or invariants
+
+Examples:
+
+* Log replay without ego perturbation should closely match the recorded log.
+* Frozen agents should have near-zero speed after initialization.
+* Repeated deterministic runs should be identical.
+* A fixed seed should reproduce stochastic rollouts.
+* Stronger noise should not reduce the injected-noise magnitude.
+* Scenario splits should never overlap.
+
+Testing is important because evaluation infrastructure can silently produce convincing but incorrect results.
+
+---
+
+# 24. Target project scale
+
+The project should have staged targets.
+
+## Minimum viable project
+
+* 500 WOMD scenarios
+* Log replay, constant velocity, IDM
+* Six to eight metrics
+* Six scenario slices
+* Two ego perturbations
+* Three simulator corruptions
+* Scenario-level confidence intervals
+* Reproducible command-line evaluation
+* Basic report and visualizations
+
+This is enough for a serious interview discussion.
+
+## Strong résumé version
+
+* 2,000 WOMD scenarios
+* Three main baselines
+* Four injected failure simulators
+* Approximately 10–14 component metrics
+* 12–16 scenario slices
+* Nine counterfactual perturbation conditions
+* 1,000 scenario-cluster bootstrap resamples
+* Learned real-versus-sim evaluator
+* Metric-disagreement analysis
+* Cached per-scenario result store
+* Automatic simulator-regression reports
+* 30 meaningful tests
+* Measured runtime and caching improvements
+
+## Stretch version
+
+* 5,000 scenarios
+* Small learned stochastic policy
+* Distributed or multi-process execution
+* Interactive dashboard
+* More advanced generative distribution metrics
+* Scenario-clustering or failure-discovery tools
+* Conditional learned evaluator
+* Severity-weighted release policy
+
+The stretch work should only begin after the core project is complete and reproducible.
+
+---
+
+# 25. Expected findings and hypotheses
+
+The project should begin with hypotheses, but it must report actual results honestly.
+
+Likely hypotheses include:
+
+* Log replay will closely match recorded trajectories under the original ego behavior but fail counterfactual reactivity tests.
+* Constant velocity will perform poorly in turning, braking, and intersection scenarios.
+* IDM will react better to ego perturbations but may be overly conservative.
+* Frozen agents may achieve deceptively low collision rates.
+* Mode-collapsed simulators may appear plausible under single-sample evaluation while failing diversity analysis.
+* Excessively noisy simulators may score highly on naive diversity while failing physical and map metrics.
+* Aggregate results may hide regressions in dense, low-TTC, intersection, or vulnerable-road-user slices.
+* A learned discriminator may detect differences missed by hand-designed metrics, but it may also exploit artifacts.
+* Simulator rankings may change depending on whether the objective prioritizes logged similarity, reactivity, progress, or interaction safety.
+
+These should remain hypotheses until verified.
+
+An honest negative result is acceptable. For example:
+
+> The learned discriminator did not add useful signal after controlling for kinematic features.
+
+That is still a meaningful evaluation conclusion.
+
+---
+
+# 26. Final report structure
+
+The final project report should contain:
+
+## Executive summary
+
+A one-page explanation of:
+
+* What was evaluated
+* Why the problem matters
+* Main findings
+* Major limitations
+
+## Problem definition
+
+Define simulation realism and explain why it cannot be reduced to one metric.
+
+## System architecture
+
+Describe:
+
+* Dataset ingestion
+* Simulator adapters
+* Rollout engine
+* Metric registry
+* Result storage
+* Statistical analysis
+* Reporting
+
+## Experimental setup
+
+Include:
+
+* Scenario count
+* Scenario selection
+* Simulator configurations
+* Perturbations
+* Metrics
+* Seeds
+* Hardware
+* Runtime
+
+## Main results
+
+Provide:
+
+* Overall scorecard
+* Component metrics
+* Slice-level results
+* Confidence intervals
+
+## Counterfactual reactivity
+
+Show how policies respond to ego divergence.
+
+## Metric stress testing
+
+Present the metric-versus-corruption detection matrix.
+
+## Learned-evaluator analysis
+
+Report AUC, ablations, leakage controls, and disagreement cases.
+
+## Failure case studies
+
+Show several concrete trajectories and explain what happened.
+
+## System scalability
+
+Discuss runtime, caching, parallelism, and a migration path to distributed execution.
+
+## Limitations
+
+Possible limitations include:
+
+* Restricted scenario sample
+* Simplified simulator policies
+* Limited counterfactual realism
+* Imperfect map data
+* Metrics are proxies
+* Lack of human-driver judgment
+* Learned discriminator limitations
+* No direct claim about production AV safety
+
+## Future work
+
+Possible directions include:
+
+* Train a learned stochastic policy
+* Add richer map and traffic-light behavior
+* Introduce human evaluation
+* Learn conditional realism metrics
+* Scale to larger scenario sets
+* Add scenario search and automatic failure discovery
+
+---
+
+# 27. What you should be ready to explain in an interview
+
+The project is valuable only if you can defend the design.
+
+You should be ready for questions such as:
+
+### Why not use one composite realism score?
+
+Because different simulator failures are operationally different. A single score can conceal regressions, obscure tradeoffs, and be gamed. Component metrics and slices are needed to understand why a score changed.
+
+### Why is log replay insufficient?
+
+It reproduces logged behavior but does not model how surrounding agents would respond when the ego trajectory diverges from the log.
+
+### Why use scenario-level bootstrap?
+
+Frames and agents within a scenario are correlated. Resampling them independently would underestimate uncertainty.
+
+### Why evaluate frozen and corrupted simulators?
+
+They act as metric unit tests. If a metric cannot distinguish an obviously defective simulator, its validity is questionable.
+
+### Why use a learned discriminator?
+
+To test whether systematic real-versus-sim differences exist beyond the selected hand-designed metrics. But it is a diagnostic rather than ground truth.
+
+### How would this scale?
+
+Shard by scenario, execute rollouts independently, store immutable per-scenario outputs, and perform aggregation as a separate distributed stage.
+
+### What is the difference between realism and usefulness?
+
+A simulator may resemble logged data but fail to react in closed loop. Useful simulation requires realistic conditional responses to the autonomous system’s behavior.
+
+### What is the hardest design choice?
+
+Likely defining evaluation dimensions that are sufficiently interpretable for debugging but broad enough to capture important simulator behavior.
+
+### What did you deliberately not build?
+
+A state-of-the-art simulator. The project prioritizes evaluation validity, reproducibility, and failure diagnosis.
+
+---
+
+# 28. Target résumé framing after completion
+
+Once the work is finished and measurements exist, the résumé version should be concise.
+
+A target structure is:
+
+**EvalSim — Closed-Loop Simulation Evaluation Platform**
+*Waymo Open Motion Dataset · Waymax · JAX · Python*
+
+* **Reproducible Evaluation Platform.** Built a configuration-driven platform evaluating log-replay, constant-velocity, IDM, and injected-failure simulators across **[N] WOMD scenarios and [R] rollouts**, with a pluggable metric registry, **[S] behavioral slices**, scenario-clustered bootstrap confidence intervals, and cached per-scenario results.
+
+* **Counterfactual Reactivity.** Developed **[P] ego-perturbation conditions** to measure closed-loop agent response under braking, acceleration, and trajectory divergence, identifying **[actual finding]** and quantifying simulator tradeoffs between nonreactivity and excessive conservatism.
+
+* **Metric Validation.** Created frozen, mode-collapsed, over-dispersed, and kinematically infeasible simulator variants to stress-test evaluation quality; found **[K] actual metric blind spots or slice-level ranking reversals** and compared hand-designed metrics with a leakage-controlled real-versus-sim discriminator.
+
+Until those results exist, the honest wording remains:
+
+**EvalSim — Closed-Loop Simulation Evaluation Platform — In Progress**
+
+* **Evaluation Platform.** Building a reproducible framework for comparing log-replay, constant-velocity, and IDM traffic-agent simulators across kinematic realism, interaction behavior, map adherence, behavioral slices, and scenario-level confidence intervals.
+
+* **Failure-Oriented Validation.** Developing counterfactual ego-perturbation and metric stress-test suites to evaluate simulator reactivity and determine which hand-designed and learned metrics detect nonreactivity, mode collapse, excessive dispersion, and kinematic infeasibility.
+
+---
+
+# 29. Recommended implementation order
+
+Do not attempt everything simultaneously.
+
+## Phase 1: Data and baseline execution
+
+* Set up Waymax
+* Load a small WOMD scenario set
+* Visualize scenarios
+* Run log replay
+* Run constant velocity
+* Run IDM
+* Understand state shapes and validity masks
+
+## Phase 2: Evaluation foundation
+
+* Create run configuration
+* Create simulator interface
+* Create metric interface
+* Store per-scenario results
+* Implement basic kinematic, interaction, and map metrics
+* Add tests
+
+## Phase 3: Slices and statistics
+
+* Define scenario slices
+* Produce scorecards
+* Add scenario-level bootstrap
+* Add paired comparisons
+* Validate sample counts and uncertainty
+
+## Phase 4: Counterfactual reactivity
+
+* Add ego braking
+* Add delayed acceleration
+* Add timing or lateral perturbation
+* Define response metrics
+* Compare log replay and IDM
+
+## Phase 5: Metric stress testing
+
+* Add frozen agents
+* Add mode collapse
+* Add over-dispersion
+* Add infeasible motion
+* Produce metric-detection matrix
+
+## Phase 6: Learned evaluator
+
+* Extract features
+* Split by source scenario
+* Train discriminator
+* Run ablations
+* Compare with hand-designed metrics
+* Inspect artifacts
+
+## Phase 7: Scale and reporting
+
+* Expand to 500–2,000 scenarios
+* Add caching
+* Measure runtime
+* Generate regression reports
+* Produce polished visualizations
+* Write README and technical report
+* Finalize résumé numbers
+
+---
+
+# 30. Final definition of done
+
+EvalSim is complete enough for the résumé when all of the following are true:
+
+* The repository can be installed and executed from documented instructions.
+* A clean small benchmark runs with one command.
+* The final reported scenario manifest is versioned.
+* Log replay, constant velocity, and IDM all execute successfully.
+* Per-scenario results are stored and reproducible.
+* The metric registry covers kinematic, interaction, and map-adherence dimensions.
+* At least six meaningful scenario slices are implemented; ideally 12 or more.
+* Confidence intervals use scenario-level resampling.
+* Counterfactual ego perturbations are implemented and visualized.
+* At least three intentionally defective simulator variants are evaluated.
+* The metric stress-test matrix is based on real results.
+* The learned discriminator uses leakage-safe scenario splits.
+* At least several non-obvious findings are documented.
+* Limitations are stated honestly.
+* Every résumé number can be regenerated from a saved run.
+* You can explain the architecture, experiments, tradeoffs, and failures without reading the README.
+
+The strongest project narrative is not:
+
+> “I built a traffic simulator.”
+
+It is:
+
+> “I built an evaluation platform to determine when traffic simulators are realistic, reactive, and trustworthy enough for closed-loop testing. I compared policies with fundamentally different failure modes, introduced counterfactual ego perturbations and behavioral slicing, stress-tested the metrics themselves, and designed the system so every result was reproducible at the scenario level.”
+
+That is the core of EvalSim.
