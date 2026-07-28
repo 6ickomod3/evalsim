@@ -5,6 +5,8 @@ independent dimensions — kinematic realism, agent interaction, map adherence, 
 diversity, closed-loop reactivity, and physical feasibility — rather than collapsing
 simulation quality into a single leaderboard number.
 
+**Hosted presentation:** [Explore the EvalSim policy lab](https://evalsim-policy-lab.jdai2013.chatgpt.site/)
+
 > **The contribution is the evaluation methodology, not the simulator.** We use simple
 > baselines (log-replay, constant-velocity, IDM) with deliberately different failure modes
 > and invest the engineering in the system *around* them.
