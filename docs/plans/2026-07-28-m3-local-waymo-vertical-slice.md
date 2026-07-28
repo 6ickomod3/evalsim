@@ -1,7 +1,7 @@
 # M3 implementation plan — local Waymo vertical slice
 
 **Date:** 2026-07-28
-**Status:** Accepted locally; release pending
+**Status:** ✅ Accepted, released, and post-release verified on 2026-07-28
 **Milestone:** M3 — WOMD TFRecord → Waymax/JAX → EvalSim → Parquet → visualization
 
 This plan is the M3 execution record required by the repository's milestone delivery
@@ -479,7 +479,7 @@ M3 is accepted only when all boxes can be supported by reviewed evidence:
 - [x] Wheel and sdist both contain `NOTICE.md`; neither contains Waymax source or data.
 - [x] README, roadmap, presentation, claim ledger, and limitations match the evidence.
 - [x] Adversarial execution review has no unresolved acceptance blocker.
-- [ ] Milestone-scoped commit is pushed and the presentation deploy is verified.
+- [x] Milestone-scoped commit is pushed and the presentation deploy is verified.
 
 ## 10. Adversarial plan-review record
 
@@ -517,8 +517,19 @@ publishing source-derived values:
 
 The acceptance report does not print or publish the native scenario identity,
 coordinates, trajectories, map samples, absolute data paths, or the real-data image.
-Archive, staged-content, and adversarial execution audits passed. Push, deployment, and
-post-release verification remain open until their respective steps actually complete.
+Archive, staged-content, and adversarial execution audits passed.
+
+### Release and post-release verification
+
+The milestone implementation was committed as
+`94541a2318d4f4a2d7ae5ec164f4a4c7fc35a654`, pushed to the GitHub `main` branch, and
+pushed as the exact source state for Sites version 4. The validated presentation archive
+was built from that source and deployed successfully to the existing owner-only
+presentation at
+[`evalsim-policy-lab.jdai2013.chatgpt.site`](https://evalsim-policy-lab.jdai2013.chatgpt.site/).
+The Sites deployment reported success without changing the existing access policy.
+This execution record is completed in a follow-up documentation-only commit so the
+release gate is never claimed before it happens.
 
 ### Post-registration execution deviation
 

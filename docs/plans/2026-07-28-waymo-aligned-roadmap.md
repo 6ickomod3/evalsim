@@ -72,9 +72,7 @@ manifests/checksums, and sanitized documentation permitted by `AGENTS.md`.
 
 ### M3 — Local Waymo vertical slice
 
-**Status:** ✅ Implemented and accepted locally on 2026-07-28; release verification
-remains pending and is tracked in the milestone execution plan until the post-release
-gate completes.
+**Status:** ✅ Implemented, accepted, released, and post-release verified on 2026-07-28.
 
 **Question:** Can one real scenario travel through
 WOMD TFRecord → Waymax/JAX → EvalSim contract → local Parquet → visualization without
@@ -119,6 +117,10 @@ native identity, coordinates, image, and converted payload remain ignored and lo
 **Claim unlocked after acceptance:** integrated one local WOMD v1.3.1 scenario through
 pinned Waymax/JAX into a validated simulator-neutral EvalSim contract on Apple Silicon
 CPU.
+
+**Release record:** implementation commit `94541a2` is on GitHub `main`, and the exact
+source state was deployed as owner-only presentation version 4. Dataset and derived
+artifacts remained local and ignored.
 
 ### M4 — Deterministic WOMD cohort and Waymax parity
 

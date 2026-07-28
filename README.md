@@ -50,7 +50,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M11 | Decision package + staff-caliber communication | ⬜ | 🖥️ |
 
 **Tests:** 170 passing with the Waymo extra; 152 passing core-only; 1 additional
-opt-in local-WOMD test · **Last updated:** 2026-07-28 (M3 accepted locally)
+opt-in local-WOMD test · **Last updated:** 2026-07-28 (M3 released)
 
 ## Completed work
 
