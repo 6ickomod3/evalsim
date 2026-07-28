@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07110f">
-  <meta name="description" content="EvalSim is a contract-first platform for evaluating traffic simulators. Explore the implemented M0–M2 architecture, three baseline policies, rollout mechanics, test evidence, and honest limitations.">
+  <meta name="description" content="EvalSim is a contract-first platform for evaluating traffic simulators. Explore the implemented M0–M3 architecture, local WOMD/Waymax/JAX vertical slice, three baseline policies, test evidence, and honest limitations.">
   <link rel="canonical" href="https://evalsim-policy-lab.jdai2013.chatgpt.site/">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/">
   <meta property="og:title" content="EvalSim — Closed-loop simulator evaluation">
-  <meta property="og:description" content="M0–M2 complete · 134 tests · 3 deliberately limited baseline policies">
+  <meta property="og:description" content="M0–M3 complete · 170 tests · one local WOMD/Waymax/JAX vertical slice">
   <meta property="og:image" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/og.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="EvalSim — Closed-loop simulator evaluation">
-  <meta name="twitter:description" content="M0–M2 complete · 134 tests · 3 deliberately limited baseline policies">
+  <meta name="twitter:description" content="M0–M3 complete · 170 tests · one local WOMD/Waymax/JAX vertical slice">
   <meta name="twitter:image" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/og.png">
   <title>EvalSim — Closed-loop simulator evaluation</title>
   <style>
@@ -991,6 +991,56 @@
       font-size: 13px;
     }
 
+    .license-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .license-card {
+      min-width: 0;
+      border: 1px solid rgba(255, 209, 102, .42);
+      border-radius: 18px;
+      padding: 26px;
+      background: linear-gradient(145deg, rgba(255, 209, 102, .06), transparent 55%), var(--panel);
+    }
+    .license-card h3 { margin-bottom: 13px; font-size: 19px; }
+    .license-card p,
+    .license-card li {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .license-quote {
+      margin: 18px 0;
+      border-left: 2px solid var(--amber);
+      padding: 4px 0 4px 16px;
+    }
+    .license-quote p { margin: 0; color: var(--ink); }
+    .license-card pre {
+      overflow-x: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: 10px;
+      line-height: 1.55;
+    }
+    .license-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px 16px;
+      margin-top: 18px;
+    }
+    .license-links a { color: var(--mint); }
+    .license-scope {
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+      background: var(--panel-strong);
+    }
+
     footer {
       border-top: 1px solid var(--line);
       padding: 34px 0 48px;
@@ -1069,7 +1119,8 @@
       .rollout-flow li:nth-child(even)::after { display: none; }
       .contract-callout,
       .trust-panel,
-      .reproduce { grid-template-columns: 1fr; }
+      .reproduce,
+      .license-grid { grid-template-columns: 1fr; }
       .next-question { grid-column: 1; }
       .architecture { grid-template-columns: repeat(2, 1fr); }
       .arch-node:nth-child(3)::after { display: block; }
@@ -1134,6 +1185,7 @@
         <li><a href="#policy-lab">Policy lab</a></li>
         <li><a href="#evidence">Evidence</a></li>
         <li><a href="#roadmap">Roadmap</a></li>
+        <li><a href="#terms">Terms</a></li>
         <li><a class="source-link" href="https://github.com/6ickomod3/evalsim" rel="noreferrer">View source ↗</a></li>
       </ul>
     </nav>
@@ -1142,7 +1194,7 @@
   <main id="main">
     <section class="shell hero" id="top" aria-labelledby="hero-title">
       <div>
-        <p class="kicker">M0 → M2 implemented and tested</p>
+        <p class="kicker">M0 → M3 implemented and tested</p>
         <h1 id="hero-title">A simulator can match the log—and still <em>fail the test.</em></h1>
         <p class="hero-copy">EvalSim is a contract-first platform for discovering how traffic simulators differ: what they replay, what they react to, where their motion breaks, and whether their outputs are useful for closed-loop evaluation.</p>
         <div class="hero-actions">
@@ -1175,11 +1227,11 @@
     </section>
 
     <div class="shell evidence-ribbon" aria-label="Current project evidence">
-      <div class="stat"><strong>3</strong><span>milestones complete</span></div>
-      <div class="stat"><strong>134</strong><span>regression tests pass</span></div>
+      <div class="stat"><strong>4</strong><span>milestones complete</span></div>
+      <div class="stat"><strong>170</strong><span>Waymo-extra tests pass</span></div>
       <div class="stat"><strong>5</strong><span>synthetic families</span></div>
-      <div class="stat"><strong>50 × 3</strong><span>scenario-policy acceptance</span></div>
-      <div class="stat"><strong>CPU</strong><span>current local substrate</span></div>
+      <div class="stat"><strong>1</strong><span>real-data vertical slice</span></div>
+      <div class="stat"><strong>CPU</strong><span>Apple Silicon acceptance</span></div>
     </div>
 
     <section class="section shell" id="why" aria-labelledby="why-title">
@@ -1188,7 +1240,7 @@
           <span class="section-index">01 / Evaluation tension</span>
           <h2 id="why-title">Realism is not a scalar.</h2>
         </div>
-        <p>The project starts with deliberately limited policies so their different failure modes remain legible. M3 now brings those hypotheses onto a real WOMD and Waymax/JAX substrate before M5 turns them into measured dimensions.</p>
+        <p>The project starts with deliberately limited policies so their different failure modes remain legible. M3 has now put the same contract on a real local WOMD and pinned Waymax/JAX substrate; M4 tests cohort and reference-backend parity before M5 turns failures into measured dimensions.</p>
       </div>
       <div class="tension-grid">
         <article class="tension-card">
@@ -1398,12 +1450,13 @@
         <article class="proof-card"><span class="proof-id">EVIDENCE / F</span><h3>IDM equation</h3><p>Canonical acceleration, leader selection, bumper gaps, monotonicity, fallback behavior, and clamps have direct checks.</p></article>
         <article class="proof-card"><span class="proof-id">EVIDENCE / G</span><h3>Batch acceptance</h3><p>50 scenarios × 3 policies execute through the same engine and each result survives an exact Parquet round-trip.</p></article>
         <article class="proof-card"><span class="proof-id">EVIDENCE / H</span><h3>Defensive contracts</h3><p>Scenario, rollout, policy, metric, and manifest boundaries validate shapes, ranges, and provenance; engine-owned copies isolate policy mutation.</p></article>
+        <article class="proof-card"><span class="proof-id">EVIDENCE / I</span><h3>Real Waymo boundary</h3><p>One ignored WOMD record passes native-identity, SDC, time, mask, supported motion, dimension, gated-map, and provenance parity against source tensors and raw Waymax leaves.</p></article>
       </div>
 
       <div class="review-strip" aria-label="Current validation evidence">
-        <div><strong>134 / 134</strong><span>repository regression tests passing</span></div>
+        <div><strong>170 / 170</strong><span>Waymo-extra repository tests passing; 152 also pass in a clean core-only environment</span></div>
         <div><strong>150</strong><span>literal rollout and exact Parquet acceptance cases</span></div>
-        <div><strong>66</strong><span>M2-focused policy, engine, dynamics, and adversarial tests</span></div>
+        <div><strong>1 / 1</strong><span>opted-in local WOMD/Waymax/JAX vertical-slice acceptance passing</span></div>
       </div>
     </section>
 
@@ -1414,12 +1467,12 @@
           <h2 id="limits-title">What we do not know—yet.</h2>
         </div>
         <ul class="trust-list">
-          <li><strong>No M3 real-data path.</strong> Local WOMD ingestion and substantive Waymax/JAX execution are the next milestone, not completed work.</li>
+          <li><strong>M3 is one record, not a cohort.</strong> It proves a supported-field integration path, not dataset-scale representativeness, Waymax rollout parity, or substantive JAX batching.</li>
           <li><strong>No M5 scorecards.</strong> Collision, off-road, kinematic realism, uncertainty, and policy comparisons have not been implemented or measured.</li>
           <li><strong>No M6 counterfactual result.</strong> M2 keeps ego on its logged trajectory; ego perturbation and reactivity metrics remain planned.</li>
           <li><strong>Limited nonlinear world-agent coverage.</strong> Current simulated curvature is mainly in merge; the left-turn family’s turning actor is the logged ego.</li>
         </ul>
-        <p class="next-question"><span>Next falsifiable question / M3</span>Can one real WOMD scenario move through Waymax/JAX into the EvalSim contract and round-trip locally without losing its time boundary, agent validity, identity, or map frame?</p>
+        <p class="next-question"><span>Next falsifiable question / M4</span>Can an auditable cohort selected from exactly ten shards preserve the M3 contract while EvalSim and Waymax reference rollouts, masks, metrics, and batched JAX execution either agree within declared tolerances or produce explained discrepancies?</p>
       </div>
     </section>
 
@@ -1436,20 +1489,56 @@
         <article class="arch-node done"><span class="arch-status">Implemented · M1</span><h3>Scenario source</h3><p>Five deterministic synthetic families into one validated contract.</p></article>
         <article class="arch-node done"><span class="arch-status">Implemented · M0</span><h3>Contracts</h3><p>Scenario, rollout, simulator, metric, serialization, and manifest seams.</p></article>
         <article class="arch-node done"><span class="arch-status">Implemented · M2</span><h3>Simulation</h3><p>Replay, CV, IDM, typed policy steps, engine dynamics, and provenance.</p></article>
-        <article class="arch-node next"><span class="arch-status">Next · M3</span><h3>Waymo substrate</h3><p>Local WOMD decode, Waymax/JAX adapter, schema mapping, and contract acceptance.</p></article>
-        <article class="arch-node planned"><span class="arch-status">Planned · M4–M9</span><h3>Evaluation</h3><p>Waymax parity, metrics, causal response, evaluator red-team, learned and multimodal evaluators.</p></article>
+        <article class="arch-node done"><span class="arch-status">Implemented · M3</span><h3>Waymo substrate</h3><p>Exact local WOMD decode, pinned Waymax/JAX adapter, mapping, and one-record contract acceptance.</p></article>
+        <article class="arch-node next"><span class="arch-status">Next · M4</span><h3>Evaluation</h3><p>Deterministic cohort, Waymax reference rollouts, batching, and semantic discrepancy analysis.</p></article>
         <article class="arch-node planned"><span class="arch-status">Planned · M10–M11</span><h3>Decision system</h3><p>Resumable execution, measured scale, release reasoning, and interview-ready evidence.</p></article>
       </div>
       <div class="producer-note" aria-label="Source implementation status">
         <span class="implemented">Synthetic producer · implemented locally</span>
-        <span class="planned">WOMD / Waymax / JAX path · next M3 on local CPU</span>
+        <span class="implemented">WOMD / Waymax / JAX producer · one-record M3 path accepted locally</span>
       </div>
+    </section>
+
+    <section class="section shell" id="terms" aria-labelledby="terms-title">
+      <div class="section-head">
+        <div>
+          <span class="section-index">06 / Upstream terms</span>
+          <h2 id="terms-title">Local evidence, licensed inputs.</h2>
+        </div>
+        <p>The M3+ path is maintained under the repository owner’s stated personal, non-commercial interview-preparation purpose. The complete upstream agreements control; this summary is not legal advice.</p>
+      </div>
+
+      <div class="license-grid">
+        <article class="license-card">
+          <h3>Waymo Open Dataset attribution</h3>
+          <blockquote class="license-quote">
+            <p>This software was made using the Waymo Open Dataset, provided by Waymo LLC under the Waymo Dataset License Agreement for Non-Commercial Use, available at waymo.com/open/terms, and your access and use of such work are governed by the terms and conditions therein.</p>
+          </blockquote>
+          <p>No WOMD data, TFRecord, extract, converted scenario, native scenario identity, trajectory, map sample, or real-data image is included in this repository or deployment.</p>
+          <div class="license-links">
+            <a href="https://waymo.com/open/terms/" rel="noreferrer">Complete WOD terms ↗</a>
+          </div>
+        </article>
+
+        <article class="license-card">
+          <h3>Waymax prescribed notice and citation</h3>
+          <blockquote class="license-quote">
+            <p>This software was made using the Waymax Licensed Materials, provided by Waymo LLC under the Waymax License Agreement for Non-Commercial Use, available at https://github.com/waymo-research/waymax/blob/main/LICENSE, and your access and use of the Waymx Licensed Materials are governed by the terms and conditions contained therein.</p>
+          </blockquote>
+          <pre><code>@inproceedings{waymax, title={Waymax: An Accelerated, Data-Driven Simulator for Large-Scale Autonomous Driving Research}, author={Cole Gulino and Justin Fu and Wenjie Luo and George Tucker and Eli Bronstein and Yiren Lu and Jean Harb and Xinlei Pan and Yan Wang and Xiangyu Chen and John D. Co-Reyes and Rishabh Agarwal and Rebecca Roelofs and Yao Lu and Nico Montali and Paul Mougin and Zoey Yang and Brandyn White and Aleksandra Faust, and Rowan McAllister and Dragomir Anguelov and Benjamin Sapp}, booktitle={Proceedings of the Neural Information Processing Systems Track on Datasets and Benchmarks},year={2023}}</code></pre>
+          <div class="license-links">
+            <a href="https://github.com/waymo-research/waymax/blob/main/LICENSE" rel="noreferrer">Canonical Waymax license ↗</a>
+            <a href="https://github.com/waymo-research/waymax/blob/a64dfec9be8576b60d9cecc94f406d9812d4a7d0/LICENSE" rel="noreferrer">Pinned-revision license ↗</a>
+          </div>
+        </article>
+      </div>
+      <p class="license-scope">Applicable restrictions include non-commercial use and limits on Production Systems, commercial driving-scenario simulation, real-world vehicle development/operation/testing/validation, and specified foundation-model development using Waymax source, Documentation, or derivatives. No unmodified Waymax source, Documentation, wheel, or cache is redistributed here. EvalSim’s copyright remains with its owner or owners; this notice does not itself grant an MIT, Apache, or other project license. If the purpose changes, the affected Waymo/Waymax work stops pending a fresh license review and any required permission.</p>
     </section>
 
     <section class="section shell" id="roadmap" aria-labelledby="roadmap-title">
       <div class="section-head">
         <div>
-          <span class="section-index">06 / Roadmap</span>
+          <span class="section-index">07 / Roadmap</span>
           <h2 id="roadmap-title">A claim ledger, not a completion meter.</h2>
         </div>
         <p>Every statement is separated into implemented, next, or planned work. The repository README remains the detailed source of truth.</p>
@@ -1462,20 +1551,21 @@
             <div class="roadmap-item"><dt>M0</dt><dd><strong>Contracts + serialization</strong><span>Typed seams, Parquet, manifests</span></dd></div>
             <div class="roadmap-item"><dt>M1</dt><dd><strong>Synthetic scenarios</strong><span>Five families, deterministic generation, visualization</span></dd></div>
             <div class="roadmap-item"><dt>M2</dt><dd><strong>Policies + rollout engine</strong><span>Replay, CV, IDM, lifecycle, dynamics, provenance</span></dd></div>
+            <div class="roadmap-item"><dt>M3</dt><dd><strong>Local Waymo vertical slice</strong><span>Exact WOMD shard, pinned Waymax/JAX, independent supported-field parity</span></dd></div>
           </dl>
         </article>
         <article class="roadmap-column next">
-          <h3>Next <span>real Waymo foundation</span></h3>
+          <h3>Next <span>evaluation substrate</span></h3>
           <dl class="roadmap-list">
-            <div class="roadmap-item"><dt>M3</dt><dd><strong>Local Waymo vertical slice</strong><span>WOMD → Waymax/JAX → EvalSim contract</span></dd></div>
             <div class="roadmap-item"><dt>M4</dt><dd><strong>Cohort + parity</strong><span>Fixed ten shards, Waymax rollout and semantic cross-checks</span></dd></div>
             <div class="roadmap-item"><dt>M5</dt><dd><strong>Metrics + statistics</strong><span>Real-WOMD scorecards, paired effects, scenario bootstrap</span></dd></div>
+            <div class="roadmap-item"><dt>M6</dt><dd><strong>Counterfactual reactivity</strong><span>Typed ego interventions and paired causal evidence</span></dd></div>
           </dl>
         </article>
         <article class="roadmap-column future">
           <h3>Planned <span>role evidence</span></h3>
           <dl class="roadmap-list">
-            <div class="roadmap-item"><dt>M6–7</dt><dd><strong>Causal + adversarial evaluation</strong><span>Counterfactual reactivity, severity curves, metric governance</span></dd></div>
+            <div class="roadmap-item"><dt>M7</dt><dd><strong>Evaluator red-team</strong><span>Severity curves, held-out defects, metric governance</span></dd></div>
             <div class="roadmap-item"><dt>M8</dt><dd><strong>Learned discriminator</strong><span>Flax, leakage audits, calibration, generator holdout</span></dd></div>
             <div class="roadmap-item"><dt>M9</dt><dd><strong>Video / VLM bridge</strong><span>Semantic BEV first; real camera evidence before camera claims</span></dd></div>
             <div class="roadmap-item"><dt>M10–11</dt><dd><strong>Scale + decisions</strong><span>Resume/retry, measured cost, governance, communication</span></dd></div>
@@ -1485,9 +1575,9 @@
 
       <div class="reproduce">
         <article class="reproduce-copy">
-          <h3>Run the implemented core.</h3>
-          <p>The current M0–M2 path runs locally through the repository’s <code>uv</code>-managed environment.</p>
-          <p class="data-note">WOMD data is intentionally excluded from Git. M3 users download TFRecord shards separately into the documented local-only path.</p>
+          <h3>Run the implemented paths.</h3>
+          <p>M0–M3 run locally through the repository’s <code>uv</code>-managed environment. The core remains usable without Waymo dependencies.</p>
+          <p class="data-note">WOMD data and all derived artifacts are excluded from Git and deployment. The optional M3 command requires separately obtained shard <code>00000</code>, explicit data-access opt-in, and acceptance of the complete upstream terms above.</p>
         </article>
         <div class="code-card">
           <div class="code-head">
@@ -1497,8 +1587,16 @@
           <pre id="commands"><code>uv sync --extra dev
 uv run pytest
 
-# Expected at M2:
-# 134 passed</code></pre>
+# Clean core-only suite:
+# 152 passed, 3 skipped
+
+# Optional licensed M3 path:
+uv sync --extra dev --extra waymo
+uv run --extra waymo pytest
+# 170 passed, 1 skipped
+
+EVALSIM_RUN_WAYMO_LOCAL=1 uv run --extra waymo pytest -m waymo_local
+EVALSIM_RUN_WAYMO_LOCAL=1 uv run --extra waymo evalsim-waymax-smoke --shard 00000</code></pre>
         </div>
       </div>
     </section>
@@ -1506,7 +1604,7 @@ uv run pytest
 
   <footer>
     <div class="shell footer-row">
-      <span>EvalSim · M0–M2 · updated 2026-07-28</span>
+      <span>EvalSim · M0–M3 · updated 2026-07-28</span>
       <div class="footer-links">
         <a href="https://github.com/6ickomod3/evalsim" rel="noreferrer">Source</a>
         <a href="https://github.com/6ickomod3/evalsim/blob/main/README.md" rel="noreferrer">README</a>

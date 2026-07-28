@@ -30,6 +30,24 @@
   deleting the user's local copy, then report what happened.
 - Do not bypass or weaken the dataset-related `.gitignore` rules.
 
+## Waymo and Waymax use restrictions
+
+- The Waymo-backed path is scoped to the repository owner's stated personal,
+  non-commercial interview preparation and experimentation. This is an operating
+  assumption, not legal advice or a conclusion that every use is permitted.
+- Keep the required Waymo Open Dataset attribution, Waymax prescribed notice/citation,
+  canonical and pinned license links, and applicable restriction summary in
+  `NOTICE.md`. Keep a prominent notice before optional Waymo installation instructions
+  and direct notice text in any separately deployed presentation.
+- Do not use the Waymo Open Dataset or Waymax path for paid/commercial services,
+  Production Systems, real-world vehicle development/operation/testing/validation, or
+  prohibited foundation-model development.
+- If the actual purpose or publication scope changes, stop the affected work and obtain
+  a fresh license review and any required permission before proceeding.
+- Do not vendor, redistribute, or publish unmodified Waymax source, documentation,
+  wheels, caches, or WOMD data. Pin upstream dependencies to immutable revisions and
+  preserve the applicable notices in wheel and sdist artifacts.
+
 ## Project workflow
 
 - Use `uv` and the repository-local `.venv`.

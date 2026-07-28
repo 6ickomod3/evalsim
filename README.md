@@ -24,11 +24,11 @@ the canonical
 ## Design in one paragraph
 
 The platform is built **contract-first** (ports-and-adapters). The validated `Scenario`
-contract currently has a synthetic producer that runs locally. M3 now adds a second
-WOMD producer through Waymax/JAX on the local Mac/CPU, and M4 makes Waymax a recurring
-reference rollout and semantic-parity path. Downstream components continue to consume
-**only** project contracts. Synthetic scenes remain analytic oracles while every core
-feature from M3 onward also gets a real-WOMD acceptance path.
+contract has both a synthetic producer and an M3 local WOMD producer through pinned
+Waymax/JAX on Apple Silicon CPU. M4 makes Waymax a recurring reference rollout and
+semantic-parity path. Downstream components continue to consume **only** project
+contracts. Synthetic scenes remain analytic oracles while every core feature from M3
+onward also gets a real-WOMD acceptance path.
 
 ## Progress
 
@@ -39,7 +39,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M0 | Repo skeleton + data contracts | ✅ | 🖥️ |
 | M1 | Synthetic scenario source + visualization | ✅ | 🖥️ |
 | M2 | Simulator adapters + rollout engine | ✅ | 🖥️ |
-| M3 | Local WOMD → Waymax/JAX → EvalSim vertical slice | ⬜ | 🖥️ |
+| M3 | Local WOMD → Waymax/JAX → EvalSim vertical slice | ✅ | 🖥️ |
 | M4 | Deterministic WOMD cohort + Waymax parity | ⬜ | 🖥️ |
 | M5 | Real-WOMD metrics + statistical scorecards | ⬜ | 🖥️ |
 | M6 | Counterfactual closed-loop reactivity | ⬜ | 🖥️ |
@@ -49,7 +49,8 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M10 | Scalable, resumable evaluation pipeline | ⬜ | 🖥️/☁️ |
 | M11 | Decision package + staff-caliber communication | ⬜ | 🖥️ |
 
-**Tests:** 134 passing · **Last updated:** 2026-07-28 (roadmap revised; M2 remains the implementation boundary)
+**Tests:** 170 passing with the Waymo extra; 152 passing core-only; 1 additional
+opt-in local-WOMD test · **Last updated:** 2026-07-28 (M3 accepted locally)
 
 ## Completed work
 
@@ -73,8 +74,8 @@ The validated seams every later layer depends on:
 
 ### M1 — Synthetic scenario source + visualization ✅
 
-Local, deterministic scenarios with the same contract that the later WOMD adapter will
-produce:
+Local, deterministic scenarios with the same contract that the WOMD adapter also
+produces:
 
 - **Five parametric families** — following, four-way intersection, merge, left turn,
   and pedestrian crossing; a 50-scenario set contains 10 of each.
@@ -107,7 +108,7 @@ Three deliberately limited baselines now run through one typed, reusable NumPy e
 - **Closed-loop lifecycle** — actual per-step `dt`, logged history through
   `metadata.current_index`, synchronous world-agent updates, observed-state
   births/re-entries, preserved masks and identity, and an exogenous logged ego ready for
-  M5 perturbations.
+  M6 perturbations.
 - **Audited point-mass dynamics** — acceleration, braking, speed, and yaw-rate clamps;
   physically timed stops/speed caps; no reverse motion; clamp counts and complete
   engine/policy config in rollout provenance.
@@ -122,6 +123,35 @@ IDM-vs-CV separation on following, but broader nonlinear world-agent coverage sh
 added (with a synthetic source-version bump) before M5 scorecards claim five-family
 differentiation.
 
+### M3 — Local WOMD / Waymax / JAX vertical slice ✅
+
+One real, ignored WOMD v1.3.1 validation record now traverses the full local source
+boundary on Apple Silicon CPU:
+
+- **Pinned optional runtime** — NumPy 1.26.4, JAX/jaxlib 0.4.38, TensorFlow 2.18.1,
+  Flax 0.10.4, and immutable Waymax commit
+  `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`.
+- **Exact local reader** — `WaymaxSource` resolves only shard `00000`, preserves the
+  native scenario identity internally, and applies the pre-registered earliest record
+  within the first 32 that retains supported map geometry and has both the SDC and a
+  non-SDC vehicle valid from current to next.
+- **Simulator-neutral conversion** — agent identity/type/order, SDC identity, the
+  10-past/1-current/80-future boundary, validity, supported motion, dimensions, and
+  strictly gated lane/road-edge geometry enter the existing `Scenario` contract.
+- **Independent parity** — source tensors and raw Waymax leaves are compared against
+  EvalSim without reusing the adapter's conversion helpers.
+- **End-to-end acceptance** — deterministic conversion, exact Parquet round-trip,
+  current-boundary visualization, log replay, real CV and IDM vehicle transitions, and
+  a compiled JAX CPU operation pass locally.
+- **Safe publication boundary** — raw data, converted scenarios, acceptance reports,
+  native IDs, coordinates, and real-data images remain local and ignored.
+
+M3 does **not** claim cohort scale, Waymax environment/policy parity, JAX batching,
+metrics, statistical comparison, or learned evaluation. See the
+[field mapping](docs/data/womd-waymax-m3-mapping.md), the
+[reviewed M3 plan](docs/plans/2026-07-28-m3-local-waymo-vertical-slice.md), and the
+[third-party notice](NOTICE.md).
+
 ## Setup
 
 Uses [`uv`](https://docs.astral.sh/uv/) for an isolated environment (independent of the
@@ -132,6 +162,11 @@ export PATH="$HOME/.local/bin:$PATH"   # uv lives here
 uv sync --extra dev                    # create .venv and install deps
 uv run pytest                          # run the test suite
 ```
+
+A clean core-only environment currently reports **152 passed, 3 optional skips**. After
+installing the licensed Waymo extra documented below, the normal suite reports
+**170 passed, 1 local-data skip**; explicitly opting into that local test reports
+**1 passed, 170 deselected**.
 
 ## Generate synthetic scenarios
 
@@ -179,6 +214,13 @@ The Waymo Open Motion Dataset (WOMD) is **not stored in this repository**. Raw
 TFRecords and converted Parquet files are too large for source control and are covered
 by the repository's `.gitignore` rules. Do not commit them, push them to GitHub, or add
 them with Git LFS.
+
+> **Use restriction:** the M3+ Waymo path is maintained only for the repository
+> owner's stated personal, non-commercial interview preparation and experimentation.
+> WOMD and Waymax access/use remain governed by their upstream non-commercial
+> agreements, including additional restrictions summarized in [`NOTICE.md`](NOTICE.md).
+> If the purpose may become commercial, production, real-world-vehicle work, or
+> prohibited foundation-model work, stop and obtain a fresh license review.
 
 To run M3 and later Waymo-backed milestones, request access to and download
 **Motion Dataset v1.3.1**
@@ -231,6 +273,31 @@ the project's deterministic reference cohort. Dataset access and use remain subj
 may be committed for reproducibility, but the dataset files themselves must remain
 local.
 
+## Run the M3 local Waymo vertical slice
+
+> Installing the optional `waymo` extra downloads pinned Waymax and related runtime
+> dependencies. Read and accept the complete
+> [Waymax non-commercial license](https://github.com/waymo-research/waymax/blob/a64dfec9be8576b60d9cecc94f406d9812d4a7d0/LICENSE)
+> and the [Waymo Open Dataset terms](https://waymo.com/open/terms/) before continuing.
+> The summaries in [`NOTICE.md`](NOTICE.md) are not a substitute for those agreements.
+
+After shard `00000` is in the local directory documented above:
+
+```bash
+uv sync --extra dev --extra waymo
+EVALSIM_RUN_WAYMO_LOCAL=1 uv run --extra waymo pytest -m waymo_local
+EVALSIM_RUN_WAYMO_LOCAL=1 uv run --extra waymo evalsim-waymax-smoke --shard 00000
+```
+
+Run these commands from the EvalSim Git checkout root. A normally installed wheel can
+also run the entry point from that checkout, or use `--project-root /path/to/evalsim`;
+the command deliberately refuses an unverified or non-ignored output location.
+
+The environment flag is a deliberate data-access opt-in. The command examines only the
+fixed M3 shard and writes a sanitized summary, converted Parquet, and visualization
+under ignored `outputs/m3/`. It prints no native scenario ID, trajectory, coordinate,
+map sample, or absolute data path.
+
 ## Layout
 
 ```
@@ -249,6 +316,7 @@ evalsim/
   viz.py        # static scenario visualization (M1)
 tests/          # contracts, sources, policies, rollout engine, dynamics, and visualization
 docs/plans/     # historical M0–M2 design + canonical Waymo-aligned roadmap
+docs/data/      # tracked schema mappings and omission crosswalks (never dataset payloads)
 docs/interview/ # sanitized role matrix, claim ledger, and study plan
 index.html      # interactive, evidence-led technical presentation
 public/og.png   # social preview artwork (not an experiment artifact)
@@ -257,10 +325,12 @@ scripts/        # dependency-free presentation build and structural checks
 
 ## Résumé framing
 
-The current implemented stack is **Python · NumPy · PyArrow · Matplotlib**. Downloaded
-data does not yet make **Waymo Open Motion Dataset · Waymax · JAX** an implemented
-claim. M3 makes the integration minimally true; M4 makes the Waymax/JAX usage
-substantive. Metrics, slices, confidence intervals, counterfactuals, stress tests,
+The current implemented stack is **Python · NumPy · PyArrow · Matplotlib**, plus an
+optional pinned **WOMD · Waymax · JAX · TensorFlow · Flax** source runtime. M3 supports
+the narrow claim that one local WOMD v1.3.1 scenario was integrated through
+Waymax/JAX into the validated EvalSim contract on Apple Silicon CPU. M4 is still needed
+before claiming an auditable cohort, Waymax rollout parity, batching, or substantive JAX
+evaluation. Metrics, slices, confidence intervals, counterfactuals, stress tests,
 learned evaluators, scale, and video/VLM work each remain unavailable as claims until
 their evidence gate passes. See the
 [claim-to-evidence ledger](docs/interview/claim-evidence-ledger.md).

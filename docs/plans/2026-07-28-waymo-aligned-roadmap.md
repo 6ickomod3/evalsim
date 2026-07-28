@@ -29,30 +29,40 @@ work.
 
 - **Implemented:** contracts, lossless scenario/rollout serialization, deterministic
   synthetic scenarios, visualization, log replay, constant velocity, IDM, closed-loop
-  world-agent rollout, and 134 regression tests.
-- **Available locally but not yet used by code:** WOMD v1.3.1 TFExample validation
-  shards. The fixed reference shard set is `00000`–`00009`; additional files in the
-  directory must not silently expand the population.
-- **Not yet implemented:** WOMD ingestion, Waymax/JAX execution, metrics, statistical
-  scorecards, counterfactual ego control, evaluator stress tests, learned evaluators,
-  multimodal/video/VLM evaluation, and a scalable resumable pipeline.
+  world-agent rollout, and the M3 one-record WOMD → pinned Waymax/JAX → EvalSim local
+  vertical slice. The Waymo-extra suite has 170 passing tests (the clean core-only path
+  has 152); the additional real-data test is opt-in and passes against local shard
+  `00000`.
+- **Available locally for the next gate:** WOMD v1.3.1 TFExample validation shards
+  `00000`–`00009`. Additional files in the directory must not silently expand the M4
+  population.
+- **Not yet implemented:** the M4 deterministic cohort/Waymax rollout parity, metrics,
+  statistical scorecards, counterfactual ego control, evaluator stress tests, learned
+  evaluators, multimodal/video/VLM evaluation, and a scalable resumable pipeline.
 
 Plans and downloaded files do not count as implemented evidence.
 
 ## Milestone completion protocol
 
-Every milestone uses the same six gates:
+Every milestone uses the same nine-step workflow:
 
-1. **Pre-register:** state the hypothesis, scope, acceptance tests, and known risks before
-   inspecting comparative results.
-2. **Implement:** preserve typed seams and complete provenance; avoid a demo-only path.
-3. **Verify:** run unit, contract, analytic-oracle, and end-to-end acceptance tests.
-4. **Cross-check:** compare with an independent implementation or known-defect oracle
-   where one exists.
-5. **Red-team:** have an adversarial reviewer look for leakage, cherry-picking,
-   metric gaming, semantic mismatches, and résumé overclaiming.
-6. **Close:** update the README, presentation, plan, claim ledger, and limitations. A
-   milestone is complete only after all required evidence exists.
+1. **Understand and pre-register:** inspect the baseline and lock the hypothesis, scope,
+   falsification criteria, acceptance gates, risks, and non-goals.
+2. **Plan:** write the implementation, verification, evidence, documentation, and
+   rollback plan.
+3. **Review the plan:** adversarially challenge architecture, semantics, leakage,
+   feasibility, privacy, metric gaming, and claim risk.
+4. **Execute:** implement incrementally behind typed seams with complete provenance.
+5. **Verify and review execution:** run unit, contract, analytic-oracle, real-data, and
+   independent-reference checks, then obtain an adversarial implementation review.
+6. **Close documentation:** update the README, presentation, roadmap, claim ledger,
+   limitations, mappings, and small permitted reproducibility metadata.
+7. **Audit the release:** inspect tracked/staged content, archives, tests, site checks,
+   privacy boundaries, and every public claim.
+8. **Release:** make a milestone-scoped commit, push, and deploy without local-only
+   artifacts.
+9. **Verify after release:** confirm the remote commit, deployed site/health, and public
+   evidence boundary.
 
 Raw data, converted data, model checkpoints, caches, run outputs, and generated
 experiment artifacts remain local-only. Commit only code, tests, schemas, small
@@ -61,6 +71,10 @@ manifests/checksums, and sanitized documentation permitted by `AGENTS.md`.
 ## Replacement milestones
 
 ### M3 — Local Waymo vertical slice
+
+**Status:** ✅ Implemented and accepted locally on 2026-07-28; release verification
+remains pending and is tracked in the milestone execution plan until the post-release
+gate completes.
 
 **Question:** Can one real scenario travel through
 WOMD TFRecord → Waymax/JAX → EvalSim contract → local Parquet → visualization without
@@ -89,13 +103,22 @@ semantic loss at the fields we intentionally support?
 - Conversion is deterministic and the contract plus Parquet round-trip tests pass.
 - EvalSim and Waymax views agree on scenario/SDC identity, agent count, supported
   horizon, valid masks, and map placement.
-- The existing 134 tests remain green.
+- The full Waymo-extra suite passes 170 tests; the separately opted-in real-data integration
+  test also passes.
 - No real-data golden fixture or converted payload is committed; regular CI uses
   synthetic Waymax-shaped fixtures, while a marked local integration test reads the
   ignored TFRecord.
 
-**Claim unlocked after acceptance:** integrated WOMD v1.3.1 through Waymax/JAX into a
-validated simulator-neutral contract.
+**Accepted evidence:** exact shard `00000` was decoded locally; the pre-registered
+earliest eligible record passed native-identity, SDC, time-boundary, agent/mask,
+supported-trajectory, dimension, retained-map, provenance, deterministic conversion,
+Parquet, visualization, log-replay, CV, IDM-vehicle-branch, and JAX CPU `jit` checks.
+Only sanitized booleans and runtime/version facts are publishable; the selected record,
+native identity, coordinates, image, and converted payload remain ignored and local.
+
+**Claim unlocked after acceptance:** integrated one local WOMD v1.3.1 scenario through
+pinned Waymax/JAX into a validated simulator-neutral EvalSim contract on Apple Silicon
+CPU.
 
 ### M4 — Deterministic WOMD cohort and Waymax parity
 

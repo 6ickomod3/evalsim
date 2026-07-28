@@ -22,6 +22,8 @@ htmlcov/
 
 # Data & experiment artifacts (keep the repo clean; store manifests, not raw data)
 data/
+!docs/data/
+!docs/data/**
 *.tfrecord*
 *.parquet
 runs/

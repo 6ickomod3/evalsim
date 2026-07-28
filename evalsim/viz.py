@@ -88,6 +88,17 @@ def plot_scenario(
         )
         used_labels.add(label)
 
+    raw_current_index = scenario.metadata.get("current_index")
+    current_index = (
+        int(raw_current_index)
+        if (
+            not isinstance(raw_current_index, (bool, np.bool_))
+            and isinstance(raw_current_index, (int, np.integer))
+            and 0 <= int(raw_current_index) < scenario.num_steps
+        )
+        else None
+    )
+
     for agent_index, agent in enumerate(scenario.agents):
         finite = (
             np.isfinite(agent.x)
@@ -109,14 +120,42 @@ def plot_scenario(
             linewidth = 1.8
             zorder = 3
 
-        ax.plot(
-            x,
-            y,
-            color=color,
-            linewidth=linewidth,
-            label=label if label not in used_labels else None,
-            zorder=zorder,
-        )
+        if current_index is None:
+            ax.plot(
+                x,
+                y,
+                color=color,
+                linewidth=linewidth,
+                label=label if label not in used_labels else None,
+                zorder=zorder,
+            )
+        else:
+            history_x = np.array(x, copy=True)
+            history_y = np.array(y, copy=True)
+            history_x[current_index + 1 :] = np.nan
+            history_y[current_index + 1 :] = np.nan
+            future_x = np.array(x, copy=True)
+            future_y = np.array(y, copy=True)
+            future_x[:current_index] = np.nan
+            future_y[:current_index] = np.nan
+            ax.plot(
+                history_x,
+                history_y,
+                color=color,
+                linewidth=linewidth,
+                label=label if label not in used_labels else None,
+                zorder=zorder,
+            )
+            ax.plot(
+                future_x,
+                future_y,
+                color=color,
+                linewidth=max(1.0, linewidth * 0.75),
+                linestyle=":",
+                alpha=0.72,
+                label=None,
+                zorder=zorder,
+            )
         used_labels.add(label)
 
         valid_indices = np.flatnonzero(visible)
@@ -139,6 +178,25 @@ def plot_scenario(
                 s=64 if is_ego else 40,
                 zorder=zorder + 1,
             )
+            if (
+                current_index is not None
+                and is_ego
+                and visible[current_index]
+            ):
+                ax.scatter(
+                    [agent.x[current_index]],
+                    [agent.y[current_index]],
+                    color="#ffffff",
+                    edgecolor=color,
+                    linewidth=1.5,
+                    marker="D",
+                    s=72,
+                    label="current frame"
+                    if "current frame" not in used_labels
+                    else None,
+                    zorder=zorder + 2,
+                )
+                used_labels.add("current frame")
 
     scenario_kind = scenario.metadata.get("scenario_kind")
     default_title = scenario.scenario_id

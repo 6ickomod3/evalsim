@@ -52,3 +52,17 @@ def test_plot_tolerates_non_string_optional_kind_metadata() -> None:
 
     assert axes.get_title() == scenario.scenario_id
     plt.close(figure)
+
+
+def test_plot_marks_current_frame_and_styles_logged_future() -> None:
+    scenario = SyntheticSource().generate_one(0)
+    scenario.metadata["current_index"] = 10
+
+    figure, axes = plot_scenario(scenario)
+
+    assert any(
+        collection.get_label() == "current frame"
+        for collection in axes.collections
+    )
+    assert any(line.get_linestyle() == ":" for line in axes.lines)
+    plt.close(figure)

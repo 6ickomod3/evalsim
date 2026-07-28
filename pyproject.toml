@@ -19,14 +19,34 @@ dependencies = [
 dev = [
     "pytest>=8.0",
 ]
+waymo = [
+    "numpy==1.26.4",
+    "jax==0.4.38",
+    "jaxlib==0.4.38",
+    "tensorflow==2.18.1",
+    "flax==0.10.4",
+    "waymo-waymax @ git+https://github.com/waymo-research/waymax.git@a64dfec9be8576b60d9cecc94f406d9812d4a7d0",
+]
+
+[project.scripts]
+evalsim-waymax-smoke = "evalsim.sources.waymax_cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["evalsim"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"NOTICE.md" = "share/evalsim/NOTICE.md"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "waymo_local: opt-in tests that read ignored local WOMD shards",
+]

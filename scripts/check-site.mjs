@@ -26,9 +26,23 @@ const requiredPatterns = [
   ["policy lab", /id="policy-lab"/],
   ["evidence section", /id="evidence"/],
   ["limitations section", /id="limits"/],
+  ["upstream terms section", /id="terms"/],
   ["roadmap section", /id="roadmap"/],
   ["reduced motion", /prefers-reduced-motion/],
   ["canvas text equivalent", /<table class="comparison">/],
+  [
+    "Waymo Open Dataset attribution",
+    /This software was made using the Waymo Open Dataset, provided by Waymo LLC under the Waymo Dataset License Agreement for Non-Commercial Use/
+  ],
+  [
+    "Waymax prescribed notice",
+    /This software was made using the Waymax Licensed Materials, provided by Waymo LLC under the Waymax License Agreement for Non-Commercial Use/
+  ],
+  ["Waymax prescribed spelling", /use of the Waymx Licensed Materials/],
+  ["Waymax full citation", /Waymax: An Accelerated, Data-Driven Simulator for Large-Scale Autonomous Driving Research/],
+  ["pinned Waymax license", /a64dfec9be8576b60d9cecc94f406d9812d4a7d0\/LICENSE/],
+  ["non-commercial scope", /personal, non-commercial interview-preparation purpose/],
+  ["current test evidence", /170 \/ 170/],
   ["worker fetch handler", /async fetch\(request\)/]
 ];
 

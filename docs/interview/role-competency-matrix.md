@@ -15,10 +15,11 @@ The strongest positioning is:
 > Waymo-domain evidence: real WOMD/Waymax/JAX execution, evaluator validation,
 > learned discriminators, and a bounded multimodal/VLM bridge.
 
-The current repository is a strong software foundation, but it is not yet an empirical
-simulation-evaluation system. M0–M2 prove contracts, deterministic scenarios, baseline
-policies, rollout mechanics, provenance, and testing. They do not yet prove metric
-validity, realism, generalization, learned evaluation, Waymo-tool proficiency, or scale.
+The repository now includes a narrow but real M3 Waymo vertical slice in addition to the
+M0–M2 software foundation. It proves local WOMD decode, pinned Waymax state
+construction, independent supported-field parity, and a JAX CPU `jit` smoke on one
+record. It does not yet prove cohort-scale Waymax rollout parity, metric validity,
+realism, generalization, learned evaluation, or scale.
 
 ## Evidence matrix
 
@@ -27,12 +28,12 @@ exists but the role-specific proof is incomplete; **Gap** = no credible current 
 
 | Role signal | Current evidence | Status | Evidence to build |
 |---|---|:---:|---|
-| Python and ML systems engineering | Typed Python architecture, deterministic execution, serialization, manifests, and 134 tests; prior professional evidence is strong | Strong | Preserve quality while adding real-data and ML paths |
+| Python and ML systems engineering | Typed Python architecture, deterministic execution, serialization, manifests, 170 Waymo-extra passing tests (152 core-only), and an opted-in local-WOMD acceptance; prior professional evidence is strong | Strong | Preserve quality while adding real-data and ML paths |
 | Evaluation frameworks for complex ML systems | Contract-first evaluator seams and explicit limitations; prior production-evaluation experience is relevant | Partial | M5 metrics/statistics, M7 evaluator validation, M11 decision memo |
-| Autonomous-driving simulation | Five synthetic scene families and three limited policies in a world-agent rollout engine | Partial | M3–M6 on real WOMD scenes and Waymax environments |
-| WOMD workflow | Reference validation shards are local and documented but unused by code | Gap | M3 adapter and M4 deterministic cohort |
-| Waymax proficiency | Planned only | Gap | Use loading, immutable state, environment/dynamics, policies, batching, and metric cross-checks in M3–M7 |
-| JAX/Flax depth | Current implementation is NumPy; no JAX or Flax code | Gap | Real `jit`/`vmap` path in M3–M4 and Flax training/evaluation in M8 |
+| Autonomous-driving simulation | Five synthetic scene families, three limited policies, and one real WOMD scene accepted into the same rollout contract | Partial | M4–M6 cohort, reference environment, metrics, and counterfactuals |
+| WOMD workflow | Exact local TFRecord selection, native-ID preservation, field mapping, omission accounting, and one-record acceptance | Partial | M4 deterministic ten-shard cohort and classified accounting |
+| Waymax proficiency | Pinned dataloader and immutable state construction execute locally with independent field parity | Partial | M4 environment/dynamics, policies, batching, rollout conversion, and metric cross-checks |
+| JAX/Flax depth | Pinned JAX executes a compiled CPU operation; Flax is compatibility-pinned but unused | Partial | Meaningful `jit`/`vmap` computation and benchmark in M4; Flax training/evaluation in M8 |
 | Learned discriminator pipelines | No learned evaluator is implemented | Gap | M8 leakage-safe baselines, temporal model, calibration, OOD tests, and batch inference |
 | Evaluator validity and governance | Good adversarial software tests, but no proof that metrics detect meaningful realism defects | Gap | M7 severity curves, invariances, false positives/misses, metric cards, and held-out defects |
 | Temporal stability evaluation | Trajectory representation can support it, but no evaluator exists | Gap | Motion temporal checks in M5/M7; true video temporal evaluation in M9 |
@@ -50,8 +51,9 @@ exists but the role-specific proof is incomplete; **Gap** = no credible current 
 
 ## Highest-priority gaps
 
-1. **The named stack is not implemented.** Downloaded WOMD data does not make
-   WOMD/Waymax/JAX a current-tense project claim.
+1. **The named stack is only a narrow M3 claim.** One real local vertical slice makes
+   WOMD/Waymax/JAX minimally current-tense, but M4 cohort, rollout, batching, and
+   discrepancy evidence are still required for substantive proficiency.
 2. **The role emphasizes learned evaluators.** A one-day classifier would look toy;
    M8 must test calibration, leakage, shortcuts, and generator-held-out behavior.
 3. **The role emphasizes evaluator validity.** M7 should be central: known defects,
