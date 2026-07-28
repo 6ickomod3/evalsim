@@ -35,7 +35,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ runs on Mac/C
 |---|-----------|:------:|:-----:|
 | M0 | Repo skeleton + data contracts | ✅ | 🖥️ |
 | M1 | Synthetic scenario source + visualization | ✅ | 🖥️ |
-| M2 | Simulator adapters + rollout engine | ⬜ | 🖥️ |
+| M2 | Simulator adapters + rollout engine | ✅ | 🖥️ |
 | M3 | Metric registry + core metrics | ⬜ | 🖥️ |
 | M4 | Scenario slicing + statistics *(MVP)* | ⬜ | 🖥️ |
 | M5 | Counterfactual ego-perturbation + reactivity | ⬜ | 🖥️ |
@@ -46,7 +46,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ runs on Mac/C
 | W1 | WaymaxSource — WOMD ingestion | ⬜ | ☁️ |
 | W2 | Rollout dynamics cross-check *(optional)* | ⬜ | ☁️ |
 
-**Tests:** 67 passing · **Last updated:** 2026-07-27 (M1)
+**Tests:** 134 passing · **Last updated:** 2026-07-28 (M2)
 
 ## Completed work
 
@@ -85,9 +85,39 @@ produce:
   existing manifests are never overwritten.
 - **`plot_scenario()`** — map-aware Matplotlib rendering with valid-mask gaps, distinct
   agent types, and an emphasized ego trajectory.
-- **54 M1 tests** — 50-scenario contract and Parquet acceptance, determinism,
+- **55 M1 tests** — 50-scenario contract and Parquet acceptance, determinism,
   collision/map/kinematic invariants, family semantics, manifest provenance and
-  immutability, and headless PNG renders for all five families.
+  immutability, non-aliased agent buffers, and headless PNG renders for all five
+  families.
+
+### M2 — Simulator adapters + rollout engine ✅
+
+Three deliberately limited baselines now run through one typed, reusable NumPy engine:
+
+- **`LogReplayPolicy`** — exact recorded world-agent replay; deliberately nonreactive.
+- **`ConstantVelocityPolicy`** — causal world-frame extrapolation with no interaction or
+  map following.
+- **`IDMPolicy`** — canonical bumper-gap longitudinal interaction for vehicles, with
+  explicit constant-velocity fallback for pedestrians and cyclists.
+- **Typed Seam B** — immutable `AgentFrame`, `PolicyObservation`, and `PolicyStep`
+  objects distinguish engine-integrated controls from exact absolute-state overrides.
+- **Closed-loop lifecycle** — actual per-step `dt`, logged history through
+  `metadata.current_index`, synchronous world-agent updates, observed-state
+  births/re-entries, preserved masks and identity, and an exogenous logged ego ready for
+  M5 perturbations.
+- **Audited point-mass dynamics** — acceleration, braking, speed, and yaw-rate clamps;
+  physically timed stops/speed caps; no reverse motion; clamp counts and complete
+  engine/policy config in rollout provenance.
+- **66 M2 tests** — analytic CV/IDM/dynamics oracles, future-log poisoning, lifecycle and
+  determinism checks, malformed-policy rejection, 50 scenarios × 3 policies, and exact
+  Parquet round-trips.
+
+Experimental scope is intentionally honest: with logged ego control, the current
+synthetic set gives simulated world-agent curvature mainly in the merge family; the turn
+family's 90° actor is the logged ego. M2 proves CV-vs-replay separation on merge and
+IDM-vs-CV separation on following, but broader nonlinear world-agent coverage should be
+added (with a synthetic source-version bump) before M3 scorecards claim five-family
+differentiation.
 
 ## Setup
 
@@ -119,6 +149,25 @@ source.write_manifest(scenarios, "manifests/synthetic_eval_50.json")
 Path("outputs").mkdir(exist_ok=True)
 figure, axes = plot_scenario(scenarios[0])
 figure.savefig("outputs/synthetic_example.png", dpi=150)
+```
+
+## Run the M2 baselines
+
+Policies simulate non-ego/world agents; ego follows its logged trajectory. A future W1
+scenario must set `metadata["current_index"]` to its last observed history frame.
+
+```python
+from evalsim.rollout import RolloutEngine
+from evalsim.simulators import (
+    ConstantVelocityPolicy,
+    IDMPolicy,
+    LogReplayPolicy,
+)
+
+engine = RolloutEngine()
+for policy in (LogReplayPolicy(), ConstantVelocityPolicy(), IDMPolicy()):
+    rollout = engine.run(scenarios[0], policy, seed=2026)
+    print(rollout.sim_name, rollout.metadata["dynamics"]["clamp_counts"])
 ```
 
 ## WOMD data (not included in Git)

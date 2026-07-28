@@ -44,11 +44,11 @@ Tasks
 **Goal:** Three baselines with genuinely different failure modes + a closed-loop rollout engine.
 
 Tasks
-- [ ] `LogReplayPolicy` (replays recorded agent states).
-- [ ] `ConstantVelocityPolicy` (extrapolate current velocity).
-- [ ] `IDMPolicy` (longitudinal reactive; desired speed, min gap, safe headway).
-- [ ] `RolloutEngine.run(scenario, policy, seed, perturbation=None)` → `Rollout`; NumPy, deterministic.
-- [ ] Bicycle/point-mass kinematic integration with feasibility clamping.
+- [x] `LogReplayPolicy` (replays recorded agent states).
+- [x] `ConstantVelocityPolicy` (extrapolate current velocity).
+- [x] `IDMPolicy` (longitudinal reactive; desired speed, min gap, safe headway).
+- [x] `RolloutEngine.run(scenario, policy, seed, perturbation=None)` → `Rollout`; NumPy, deterministic.
+- [x] Bicycle/point-mass kinematic integration with feasibility clamping.
 
 **Acceptance:** log-replay (no perturbation) reproduces the log within tolerance; frozen-input sanity holds;
 fixed seed → identical rollout.

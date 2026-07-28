@@ -220,7 +220,7 @@ const MILESTONES = [
 const KEY = "evalsim_progress_v1";
 const ORDER = ["todo","prog","done"];
 const LABEL = {todo:"Not started", prog:"In progress", done:"Done"};
-const PROJECT_STATE = {M0:"done", M1:"done"};
+const PROJECT_STATE = {M0:"done", M1:"done", M2:"done"};
 let state = {...PROJECT_STATE, ...JSON.parse(localStorage.getItem(KEY) || "{}")};
 
 function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }

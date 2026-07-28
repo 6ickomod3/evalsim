@@ -210,6 +210,20 @@ def test_generate_50_is_balanced_and_contract_valid() -> None:
     assert partial_mask_count > 0
 
 
+def test_agent_trajectory_arrays_never_alias_each_other() -> None:
+    for scenario in SyntheticSource(seed=2026).generate(50):
+        for left_index, left in enumerate(scenario.agents):
+            for right in scenario.agents[left_index + 1 :]:
+                for field in ("valid", "x", "y", "heading", "vx", "vy"):
+                    assert not np.shares_memory(
+                        getattr(left, field),
+                        getattr(right, field),
+                    ), (
+                        f"{scenario.scenario_id}: agents {left.id} and {right.id} "
+                        f"share {field}"
+                    )
+
+
 def test_kind_specific_semantics_are_present() -> None:
     source = SyntheticSource(seed=11)
     scenarios = {

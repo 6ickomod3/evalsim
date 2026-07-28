@@ -333,8 +333,10 @@ def _agent_from_xy(
 ) -> Agent:
     """Construct an agent with velocities and headings tangent to its path."""
 
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
+    # Each agent owns its buffers. Callers often reuse a constant lane array, and
+    # NumPy views here would make mutating one agent silently mutate its peers.
+    x = np.array(x, dtype=float, copy=True)
+    y = np.array(y, dtype=float, copy=True)
     vx = np.gradient(x, dt, edge_order=2)
     vy = np.gradient(y, dt, edge_order=2)
     moving = np.hypot(vx, vy) > 1e-9
@@ -352,7 +354,7 @@ def _agent_from_xy(
     return Agent(
         id=agent_id,
         type=agent_type,
-        valid=np.asarray(valid, dtype=bool),
+        valid=np.array(valid, dtype=bool, copy=True),
         x=x,
         y=y,
         heading=heading,

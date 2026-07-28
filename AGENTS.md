@@ -37,3 +37,16 @@
 - Preserve the contract-first architecture: downstream components consume the
   `Scenario`, `Rollout`, `SimulatorPolicy`, and `Metric` contracts rather than depending
   directly on WOMD or Waymax representations.
+
+## Rollout semantics
+
+- `Scenario.metadata["current_index"]` is the last observed/current frame. The rollout
+  engine copies history through that frame and simulates subsequent transitions. The
+  synthetic source defaults to index 0; W1 adapters must set the real history boundary.
+- Ego is exogenous: M2 copies the logged ego trajectory while policies simulate world
+  agents. M5 may replace the ego trajectory through a typed perturbation/controller,
+  while world policies continue to observe the current ego state.
+- The rollout engine owns timestamps, validity masks, lifecycle births/re-entries, and
+  feasibility integration. Policies synchronously return typed controls or explicit
+  absolute-state overrides and must not mutate observations or retain run-local state on
+  reusable policy instances.

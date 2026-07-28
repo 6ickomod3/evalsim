@@ -39,6 +39,17 @@ def test_scenario_ego_index_out_of_range_raises():
         Scenario(scenario_id="s", timestamps=np.zeros(10), agents=[_agent(10)], ego_index=5)
 
 
+@pytest.mark.parametrize("ego_index", [True, np.bool_(True), 0.0])
+def test_scenario_ego_index_must_be_an_integer(ego_index):
+    with pytest.raises(ValueError, match="integer"):
+        Scenario(
+            scenario_id="s",
+            timestamps=np.zeros(10),
+            agents=[_agent(10)],
+            ego_index=ego_index,
+        )
+
+
 def test_scenario_defaults_source_metadata():
     scn = Scenario(scenario_id="s", timestamps=np.zeros(10), agents=[_agent(10)])
     assert scn.metadata["source"] == "unknown"

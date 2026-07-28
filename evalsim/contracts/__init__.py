@@ -2,7 +2,13 @@
 from .types import AgentType, MapType
 from .scenario import Agent, MapPolyline, Scenario
 from .rollout import Rollout
-from .simulator import PolicyMetadata, SimulatorPolicy
+from .simulator import (
+    AgentFrame,
+    PolicyMetadata,
+    PolicyObservation,
+    PolicyStep,
+    SimulatorPolicy,
+)
 from .metric import Metric, MetricResult, MetricSpec
 from .manifest import RunManifest
 from .serialization import (
@@ -19,7 +25,10 @@ __all__ = [
     "MapPolyline",
     "Scenario",
     "Rollout",
+    "AgentFrame",
     "PolicyMetadata",
+    "PolicyObservation",
+    "PolicyStep",
     "SimulatorPolicy",
     "Metric",
     "MetricResult",

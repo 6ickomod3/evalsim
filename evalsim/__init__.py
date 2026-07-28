@@ -1,11 +1,12 @@
 """EvalSim — closed-loop simulation-evaluation platform.
 
-Public API re-exports the core data contracts; deeper layers (sources, simulators,
-rollout engine, metrics, slices, stats, perturbations, stress tests, reporting) are added
-in later milestones.
+The top-level API re-exports the stable data contracts. Implemented deeper layers use
+their focused namespaces (for example, ``evalsim.sources``, ``evalsim.simulators``, and
+``evalsim.rollout``) so the contract surface remains explicit.
 """
 from .contracts import (
     Agent,
+    AgentFrame,
     AgentType,
     MapPolyline,
     MapType,
@@ -13,6 +14,8 @@ from .contracts import (
     MetricResult,
     MetricSpec,
     PolicyMetadata,
+    PolicyObservation,
+    PolicyStep,
     Rollout,
     RunManifest,
     Scenario,
@@ -27,6 +30,7 @@ __version__ = "0.1.0"
 
 __all__ = [
     "Agent",
+    "AgentFrame",
     "AgentType",
     "MapPolyline",
     "MapType",
@@ -34,6 +38,8 @@ __all__ = [
     "MetricResult",
     "MetricSpec",
     "PolicyMetadata",
+    "PolicyObservation",
+    "PolicyStep",
     "Rollout",
     "RunManifest",
     "Scenario",

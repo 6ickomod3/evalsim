@@ -98,6 +98,12 @@ class Scenario:
                 raise ValueError(
                     f"Agent {a.id} has {a.num_steps} steps but scenario has {T}"
                 )
+        if (
+            isinstance(self.ego_index, (bool, np.bool_))
+            or not isinstance(self.ego_index, (int, np.integer))
+        ):
+            raise ValueError("ego_index must be an integer")
+        self.ego_index = int(self.ego_index)
         if self.agents and not (0 <= self.ego_index < len(self.agents)):
             raise ValueError(
                 f"ego_index {self.ego_index} out of range for {len(self.agents)} agents"
