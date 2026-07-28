@@ -37,13 +37,39 @@
 - Preserve the contract-first architecture: downstream components consume the
   `Scenario`, `Rollout`, `SimulatorPolicy`, and `Metric` contracts rather than depending
   directly on WOMD or Waymax representations.
-- For each milestone, define hypotheses and acceptance gates before implementation,
-  verify them with targeted and end-to-end tests, obtain an adversarial review for
-  leakage/semantic errors/overclaiming, and update the README, presentation, roadmap,
-  claim ledger, and limitations before marking it complete.
 - From M3 onward, retain synthetic scenarios as analytic oracles but require a real-WOMD
   acceptance path for every core evaluation feature. Use Waymax repeatedly as a
   data/execution/reference adapter while keeping it behind the project contracts.
+
+## Milestone delivery workflow
+
+For every milestone, follow this sequence:
+
+1. **Understand and pre-register:** inspect the current implementation and evidence,
+   confirm required local data/environment readiness, run the existing baseline tests,
+   and define the hypothesis, scope, falsification criteria, acceptance gates, risks,
+   and explicit non-goals before implementation.
+2. **Plan:** write an implementation, verification, evidence, documentation, and
+   rollback plan that preserves the project contracts and provenance boundaries.
+3. **Review the plan:** adversarially review architecture, semantics, leakage,
+   dataset/privacy safety, metric gaming, feasibility, and claim risk; revise the plan
+   before execution.
+4. **Execute:** implement incrementally with targeted tests and complete provenance.
+   Keep plans and unverified results from being represented as completed evidence.
+5. **Verify and review the execution:** run unit, contract, analytic-oracle, and
+   end-to-end tests; exercise the required real-WOMD path; cross-check against an
+   independent reference where possible; inspect negative and contradictory results;
+   and obtain an adversarial review for semantic errors, leakage, and overclaiming.
+6. **Close documentation:** update the README, presentation/webpage, canonical roadmap,
+   claim ledger, limitations, and any relevant schemas or small reproducibility metadata.
+7. **Audit the release:** inspect the working tree and staged files for datasets,
+   private material, generated artifacts, secrets, and unrelated changes; run the full
+   test and presentation checks; and confirm every new claim has passed its evidence
+   gate.
+8. **Release:** commit, push, and deploy the presentation when applicable, using a
+   milestone-scoped commit and without publishing local-only artifacts.
+9. **Verify after release:** confirm the remote commit, deployed site/health checks, and
+   public claims match the reviewed local state; record any follow-up or rollback need.
 
 ## Interview-material safety
 
