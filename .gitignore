@@ -22,7 +22,7 @@ htmlcov/
 
 # Data & experiment artifacts (keep the repo clean; store manifests, not raw data)
 data/
-*.tfrecord
+*.tfrecord*
 *.parquet
 runs/
 outputs/

@@ -14,11 +14,11 @@ Stop-lines: **MVP** after M4 · **Strong** after M6+S1 · **Header-true** after 
 **Goal:** Establish the seams everything else depends on.
 
 Tasks
-- [ ] `pyproject.toml` / venv; deps: `numpy pandas pyarrow duckdb matplotlib scipy scikit-learn pytest pyyaml`.
-- [ ] Package layout: `evalsim/{contracts,sources,simulators,rollout,metrics,slices,stats,perturb,stress,report,config}`.
-- [ ] Define `Scenario`, `Agent`, `MapPolyline`, `Rollout` dataclasses (Seam A) + Parquet (de)serialization.
-- [ ] Define `SimulatorPolicy` (Seam B) and `Metric` base classes.
-- [ ] `RunManifest` dataclass + JSON serialization.
+- [x] `pyproject.toml` / venv; deps: `numpy pandas pyarrow duckdb matplotlib scipy scikit-learn pytest pyyaml`.
+- [x] Package layout: `evalsim/{contracts,sources,simulators,rollout,metrics,slices,stats,perturb,stress,report,config}`.
+- [x] Define `Scenario`, `Agent`, `MapPolyline`, `Rollout` dataclasses (Seam A) + Parquet (de)serialization.
+- [x] Define `SimulatorPolicy` (Seam B) and `Metric` base classes.
+- [x] `RunManifest` dataclass + JSON serialization.
 
 **Acceptance:** a `Scenario` round-trips to/from Parquet losslessly; `pytest` runs (even if ~empty).
 
@@ -29,11 +29,11 @@ Tasks
 **Goal:** Get real-shaped scenarios into the contract, locally and instantly.
 
 Tasks
-- [ ] `SyntheticSource` generating parametric scenarios: straight-road following, 4-way intersection,
+- [x] `SyntheticSource` generating parametric scenarios: straight-road following, 4-way intersection,
       merge, turning, pedestrian-crossing. Deterministic by seed.
-- [ ] Emit valid masks, lane/edge polylines, ego index, tags for later slicing.
-- [ ] `viz.plot_scenario()` — matplotlib render of map + agent trajectories + ego highlight.
-- [ ] Scenario manifest writer (immutable list of generated scenario_ids).
+- [x] Emit valid masks, lane/edge polylines, ego index, tags for later slicing.
+- [x] `viz.plot_scenario()` — matplotlib render of map + agent trajectories + ego highlight.
+- [x] Scenario manifest writer (immutable list of generated scenario_ids).
 
 **Acceptance:** generate 50 scenarios, render 3 to PNG, all pass contract tests.
 

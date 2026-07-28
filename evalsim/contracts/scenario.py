@@ -60,7 +60,12 @@ class Agent:
 
 @dataclass
 class MapPolyline:
-    """A polyline map feature (lane centerline, road edge, crosswalk, ...)."""
+    """A polyline map feature (lane centerline, road edge, crosswalk, ...).
+
+    Point order is semantic for directed features: lane centerlines follow the permitted
+    travel direction, and road edges keep the drivable surface on their left.  Point
+    order has no directional meaning for crosswalks, stop lines, or unknown features.
+    """
 
     type: MapType
     xy: np.ndarray  # float [P, 2]

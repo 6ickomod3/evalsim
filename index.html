@@ -220,7 +220,8 @@ const MILESTONES = [
 const KEY = "evalsim_progress_v1";
 const ORDER = ["todo","prog","done"];
 const LABEL = {todo:"Not started", prog:"In progress", done:"Done"};
-let state = JSON.parse(localStorage.getItem(KEY) || "{}");
+const PROJECT_STATE = {M0:"done", M1:"done"};
+let state = {...PROJECT_STATE, ...JSON.parse(localStorage.getItem(KEY) || "{}")};
 
 function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
 function render(){
@@ -263,7 +264,7 @@ function updateBar(){
   document.getElementById("barfill").style.width = pctVal + "%";
 }
 document.getElementById("reset").addEventListener("click", () => {
-  if(confirm("Reset all milestone progress?")){ state = {}; save(); render(); }
+  if(confirm("Reset to repository progress?")){ state = {...PROJECT_STATE}; save(); render(); }
 });
 render();
 </script>
