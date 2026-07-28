@@ -1,0 +1,11 @@
+{
+  "name": "evalsim-presentation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Build and validate the standalone EvalSim technical presentation.",
+  "scripts": {
+    "build:site": "node scripts/build-site.mjs",
+    "check:site": "npm run build:site && node scripts/check-site.mjs"
+  }
+}

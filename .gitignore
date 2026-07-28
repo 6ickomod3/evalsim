@@ -29,6 +29,7 @@ outputs/
 cache/
 *.png
 !docs/**/*.png
+!public/og.png
 
 # OS / editor
 .DS_Store

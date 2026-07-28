@@ -9,7 +9,7 @@ simulation quality into a single leaderboard number.
 > baselines (log-replay, constant-velocity, IDM) with deliberately different failure modes
 > and invest the engineering in the system *around* them.
 
-**New here? Read in this order:** this README → the live dashboard
+**New here? Read in this order:** this README → the interactive technical presentation
 [`index.html`](index.html) → the design doc
 [`docs/plans/2026-07-27-evalsim-design.md`](docs/plans/2026-07-27-evalsim-design.md) →
 the [implementation plan](docs/plans/2026-07-27-evalsim-implementation-plan.md).
@@ -20,12 +20,11 @@ the [implementation plan](docs/plans/2026-07-27-evalsim-implementation-plan.md).
 
 ## Design in one paragraph
 
-The platform is built **contract-first** (ports-and-adapters). A frozen `Scenario`
-contract has two producers — a synthetic generator that runs locally (Mac/CPU) and a
-Waymax/WOMD loader that runs once on a GPU cloud session. Everything downstream
-(simulators, rollout engine, metrics, slices, statistics, perturbations, stress-tests,
-reporting) consumes **only** the contract, so ~95% of the project is built and validated
-on a laptop, and the GPU-only work is quarantined to a single bounded stage.
+The platform is built **contract-first** (ports-and-adapters). The validated `Scenario`
+contract currently has a synthetic producer that runs locally (Mac/CPU); W1 will add a
+second Waymax/WOMD producer in a bounded cloud stage. Implemented downstream components
+consume **only** the contract rather than either producer's internal representation, so
+the local evaluation stack and future real-data ingestion remain separated.
 
 ## Progress
 
@@ -51,7 +50,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ runs on Mac/C
 ## Completed work
 
 ### M0 — Package skeleton + data contracts ✅
-The frozen seams every later layer depends on:
+The validated seams every later layer depends on:
 
 - **`Scenario` / `Agent` / `MapPolyline`** (Seam A) — substrate-agnostic scene
   representation with shape/range validation.
@@ -243,13 +242,16 @@ evalsim/
   report/       # scorecards, visualizations, report (M8)
   config/       # YAML run config + CLI (M7)
   viz.py        # static scenario visualization (M1)
-tests/          # contracts, synthetic source, manifests, and visualization
+tests/          # contracts, sources, policies, rollout engine, dynamics, and visualization
 docs/plans/     # design doc + implementation plan
-index.html      # live progress dashboard
+index.html      # interactive, evidence-led technical presentation
+public/og.png   # social preview artwork (not an experiment artifact)
+scripts/        # dependency-free presentation build and structural checks
 ```
 
 ## Résumé framing
 
-**EvalSim — Closed-Loop Simulation-Evaluation Platform** · Waymo Open Motion Dataset ·
-Waymax · JAX · Python. Every claim in the résumé bullets maps to a milestone above; see
-the design doc's "Résumé mapping" section for the full traceability.
+The current implemented stack is **Python · NumPy · PyArrow · Matplotlib**. The planned
+**Waymo Open Motion Dataset · Waymax · JAX** framing becomes an implemented claim only
+after W1. Every claim in the résumé bullets maps to a milestone above; see the design
+doc's "Résumé mapping" section for the full traceability.

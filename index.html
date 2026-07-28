@@ -1,272 +1,1748 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>EvalSim — Closed-Loop Simulation-Evaluation Platform</title>
-<style>
-  :root {
-    --bg: #0b0e14; --panel: #131822; --panel-2: #1a2130; --line: #232c3d;
-    --ink: #e6edf6; --muted: #8b98ad; --dim: #5f6b80;
-    --accent: #5ac8fa; --accent-2: #7c9cff;
-    --done: #3fb950; --prog: #d9a441; --todo: #4a5568;
-    --mac: #5ac8fa; --cloud: #b784f5;
-    --radius: 14px; --shadow: 0 6px 24px rgba(0,0,0,.35);
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: radial-gradient(1200px 700px at 80% -10%, #16203300, #0b0e14 60%), var(--bg);
-    color: var(--ink); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  a { color: var(--accent); text-decoration: none; }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; }
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07110f">
+  <meta name="description" content="EvalSim is a contract-first platform for evaluating traffic simulators. Explore the implemented M0–M2 architecture, three baseline policies, rollout mechanics, test evidence, and honest limitations.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="EvalSim — Closed-loop simulator evaluation">
+  <meta property="og:description" content="M0–M2 complete · 134 tests · 3 deliberately limited baseline policies">
+  <meta property="og:image" content="/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="EvalSim — Closed-loop simulator evaluation">
+  <meta name="twitter:description" content="M0–M2 complete · 134 tests · 3 deliberately limited baseline policies">
+  <meta name="twitter:image" content="/og.png">
+  <title>EvalSim — Closed-loop simulator evaluation</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07110f;
+      --bg-soft: #0b1714;
+      --panel: #0f1d19;
+      --panel-strong: #14251f;
+      --line: #284139;
+      --line-soft: #1b302a;
+      --ink: #f1f4e9;
+      --muted: #a8b9b0;
+      --faint: #7f948a;
+      --mint: #57efb6;
+      --mint-dark: #173e32;
+      --blue: #72a8ff;
+      --orange: #ffae62;
+      --magenta: #e985dc;
+      --amber: #ffd166;
+      --danger: #ff8e83;
+      --radius: 18px;
+      --shadow: 0 24px 80px rgba(0, 0, 0, .28);
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
 
-  header.hero { margin-bottom: 32px; }
-  .eyebrow { color: var(--accent); font-weight: 600; letter-spacing: .14em; text-transform: uppercase; font-size: 12px; }
-  h1 { font-size: 34px; margin: 8px 0 6px; letter-spacing: -.02em; }
-  .stack { color: var(--muted); font-size: 14px; }
-  .stack b { color: var(--ink); font-weight: 600; }
-  .lede { color: var(--muted); max-width: 760px; margin-top: 14px; font-size: 16px; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 88px; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 82% 3%, rgba(87, 239, 182, .10), transparent 28rem),
+        radial-gradient(circle at 8% 28%, rgba(114, 168, 255, .07), transparent 31rem),
+        var(--bg);
+      color: var(--ink);
+      font: 16px/1.6 var(--sans);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    body::before {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      content: "";
+      pointer-events: none;
+      opacity: .24;
+      background-image:
+        linear-gradient(rgba(87, 239, 182, .035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(87, 239, 182, .035) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: linear-gradient(to bottom, black, transparent 72%);
+    }
+    a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    code, pre { font-family: var(--mono); }
+    code { color: #c9f9e5; }
+    img, canvas { max-width: 100%; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1, h2, h3 { line-height: 1.08; text-wrap: balance; }
+    p { text-wrap: pretty; }
 
-  .grid { display: grid; gap: 18px; }
-  .cards-2 { grid-template-columns: 1fr 1fr; }
-  @media (max-width: 760px){ .cards-2 { grid-template-columns: 1fr; } }
+    .skip-link {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+      transform: translateY(-160%);
+      border-radius: 8px;
+      padding: 10px 14px;
+      background: var(--mint);
+      color: #04110d;
+      font-weight: 800;
+    }
+    .skip-link:focus { transform: translateY(0); }
+    :focus-visible {
+      outline: 3px solid var(--amber);
+      outline-offset: 4px;
+    }
 
-  section { margin-top: 40px; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--dim); margin: 0 0 16px; }
+    .shell {
+      width: min(1180px, calc(100% - 40px));
+      margin-inline: auto;
+    }
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      border-bottom: 1px solid rgba(87, 239, 182, .13);
+      background: rgba(7, 17, 15, .86);
+      backdrop-filter: blur(18px);
+    }
+    .nav {
+      min-height: 70px;
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      text-decoration: none;
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: .08em;
+    }
+    .brand-mark {
+      display: grid;
+      width: 31px;
+      height: 31px;
+      place-items: center;
+      border: 1px solid var(--mint);
+      border-radius: 50%;
+      color: var(--mint);
+      box-shadow: inset 0 0 0 5px var(--mint-dark);
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      margin-left: auto;
+      list-style: none;
+      padding: 0;
+    }
+    .nav-links a {
+      color: var(--muted);
+      font-size: 14px;
+      text-decoration: none;
+    }
+    .nav-links a:hover { color: var(--ink); }
+    .nav-links .source-link {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0 16px;
+      color: var(--ink);
+    }
+    .nav-links .source-link:hover {
+      border-color: var(--mint);
+      color: var(--mint);
+    }
 
-  .panel { background: linear-gradient(180deg, var(--panel), #10141d); border: 1px solid var(--line);
-    border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow); }
-  .panel h3 { margin: 0 0 8px; font-size: 16px; }
-  .panel p { margin: 0; color: var(--muted); font-size: 14px; }
+    main { overflow: hidden; }
+    .hero {
+      min-height: min(760px, calc(100vh - 70px));
+      display: grid;
+      grid-template-columns: minmax(0, 1.18fr) minmax(350px, .82fr);
+      align-items: center;
+      gap: clamp(40px, 7vw, 94px);
+      padding: 92px 0 68px;
+    }
+    .kicker {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 21px;
+      color: var(--mint);
+      font: 700 12px/1.4 var(--mono);
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+    .kicker::before {
+      width: 30px;
+      height: 1px;
+      content: "";
+      background: currentColor;
+    }
+    .hero h1 {
+      max-width: 800px;
+      margin-bottom: 27px;
+      font-size: clamp(48px, 7vw, 88px);
+      letter-spacing: -.055em;
+    }
+    .hero h1 em {
+      color: var(--mint);
+      font-style: normal;
+    }
+    .hero-copy {
+      max-width: 710px;
+      margin-bottom: 31px;
+      color: var(--muted);
+      font-size: clamp(18px, 2vw, 21px);
+      line-height: 1.58;
+    }
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+    .button {
+      min-height: 48px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0 19px;
+      background: transparent;
+      color: var(--ink);
+      font-weight: 750;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+    }
+    .button:hover { transform: translateY(-2px); border-color: var(--mint); }
+    .button.primary {
+      border-color: var(--mint);
+      background: var(--mint);
+      color: #05140f;
+    }
+    .button.primary:hover { background: #75f5c7; }
+    .button svg { width: 16px; height: 16px; }
 
-  .quote { border-left: 3px solid var(--accent); padding: 6px 0 6px 16px; color: var(--ink);
-    font-size: 16px; margin: 4px 0 0; }
+    .hero-visual {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 26px;
+      background:
+        linear-gradient(155deg, rgba(87, 239, 182, .08), transparent 44%),
+        var(--panel);
+      box-shadow: var(--shadow);
+      transform: rotate(1.2deg);
+    }
+    .hero-visual::after {
+      position: absolute;
+      inset: 11px;
+      z-index: -1;
+      content: "";
+      border: 1px dashed rgba(87, 239, 182, .22);
+      border-radius: 24px;
+      transform: translate(19px, 19px);
+    }
+    .visual-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 42px;
+      color: var(--faint);
+      font: 700 11px/1.4 var(--mono);
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+    .status-live {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--mint);
+    }
+    .status-live::before {
+      width: 7px;
+      height: 7px;
+      content: "";
+      border-radius: 50%;
+      background: var(--mint);
+      box-shadow: 0 0 0 5px rgba(87, 239, 182, .09);
+    }
+    .trajectory-stage {
+      position: relative;
+      height: 245px;
+      overflow: hidden;
+      border-radius: 14px;
+      background:
+        linear-gradient(180deg, transparent 47%, rgba(255,255,255,.06) 48%, rgba(255,255,255,.06) 52%, transparent 53%),
+        repeating-linear-gradient(90deg, transparent 0 58px, rgba(255,255,255,.12) 59px 78px, transparent 79px 116px);
+      background-size: auto, auto 2px;
+      background-position: 0, 0 51%;
+      background-repeat: no-repeat;
+    }
+    .lane {
+      position: absolute;
+      left: -16%;
+      width: 132%;
+      height: 2px;
+      background: rgba(168, 185, 176, .28);
+    }
+    .lane.top { top: 25%; transform: rotate(8deg); transform-origin: 20% 50%; }
+    .lane.bottom { bottom: 22%; transform: rotate(-2deg); }
+    .trace {
+      position: absolute;
+      height: 3px;
+      border-radius: 99px;
+      transform-origin: left center;
+    }
+    .trace.logged {
+      top: 35%;
+      left: 8%;
+      width: 82%;
+      border-top: 3px dashed var(--magenta);
+      transform: rotate(7deg);
+    }
+    .trace.world {
+      top: 56%;
+      left: 8%;
+      width: 77%;
+      background: var(--orange);
+      transform: rotate(18deg);
+    }
+    .trace.ego {
+      top: 72%;
+      left: 17%;
+      width: 68%;
+      background: var(--blue);
+      transform: rotate(-2deg);
+    }
+    .trace::after {
+      position: absolute;
+      top: 50%;
+      right: 0;
+      width: 10px;
+      height: 10px;
+      content: "";
+      border: 2px solid currentColor;
+      border-radius: 50%;
+      background: var(--panel);
+      transform: translate(50%, -50%);
+    }
+    .trace.logged { color: var(--magenta); }
+    .trace.world { color: var(--orange); }
+    .trace.ego { color: var(--blue); }
+    .trace-label {
+      position: absolute;
+      padding: 4px 7px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(7,17,15,.8);
+      font: 700 10px/1.2 var(--mono);
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .trace-label.ref { top: 19%; right: 6%; color: var(--magenta); }
+    .trace-label.sim { top: 47%; right: 8%; color: var(--orange); }
+    .trace-label.ego-label { bottom: 5%; right: 7%; color: var(--blue); }
+    .visual-foot {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .visual-foot span {
+      border-top: 1px solid var(--line);
+      padding-top: 11px;
+      color: var(--muted);
+      font: 700 11px/1.35 var(--mono);
+      text-transform: uppercase;
+    }
 
-  /* progress bar */
-  .prog-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom: 12px; }
-  .prog-pct { font-size: 28px; font-weight: 700; letter-spacing:-.02em; }
-  .prog-sub { color: var(--muted); font-size: 13px; }
-  .bar { height: 10px; background: var(--panel-2); border-radius: 999px; overflow: hidden; border:1px solid var(--line); }
-  .bar > i { display:block; height:100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); width:0; transition: width .5s ease; }
-  .legend { display:flex; gap:18px; margin-top:14px; flex-wrap:wrap; color: var(--muted); font-size:13px; }
-  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:7px; vertical-align: middle; }
-  .dot.done{background:var(--done)} .dot.prog{background:var(--prog)} .dot.todo{background:var(--todo)}
-  .dot.mac{background:var(--mac)} .dot.cloud{background:var(--cloud)}
+    .evidence-ribbon {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      border-block: 1px solid var(--line);
+    }
+    .stat {
+      min-height: 126px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border-left: 1px solid var(--line);
+      padding: 22px;
+    }
+    .stat:last-child { border-right: 1px solid var(--line); }
+    .stat strong {
+      color: var(--ink);
+      font: 800 clamp(25px, 3vw, 36px)/1 var(--mono);
+      letter-spacing: -.04em;
+    }
+    .stat span {
+      margin-top: 8px;
+      color: var(--faint);
+      font-size: 12px;
+      line-height: 1.35;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+    }
 
-  /* pipeline */
-  .pipe { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  .node { background: var(--panel-2); border:1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
-  .node small { color: var(--dim); display:block; font-size:11px; }
-  .arrow { color: var(--dim); }
+    .section {
+      padding: clamp(82px, 11vw, 145px) 0;
+    }
+    .section + .section { border-top: 1px solid var(--line-soft); }
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, .8fr) minmax(300px, .45fr);
+      gap: 42px;
+      align-items: end;
+      margin-bottom: 52px;
+    }
+    .section-index {
+      display: block;
+      margin-bottom: 15px;
+      color: var(--mint);
+      font: 800 12px/1.3 var(--mono);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .section h2 {
+      max-width: 790px;
+      margin-bottom: 0;
+      font-size: clamp(35px, 5vw, 62px);
+      letter-spacing: -.045em;
+    }
+    .section-head > p {
+      margin-bottom: 2px;
+      color: var(--muted);
+      font-size: 17px;
+    }
 
-  /* milestone table */
-  .ms { display:grid; grid-template-columns: 64px 1fr auto; gap: 0; border:1px solid var(--line); border-radius: var(--radius); overflow:hidden; }
-  .ms .row { display:contents; }
-  .ms .cell { padding: 14px 16px; border-top:1px solid var(--line); display:flex; align-items:center; }
-  .ms .row:first-child .cell { border-top: none; }
-  .ms .id { font-weight:700; color: var(--accent-2); font-variant-numeric: tabular-nums; }
-  .ms .body { flex-direction:column; align-items:flex-start; gap:3px; }
-  .ms .body .t { font-weight:600; }
-  .ms .body .d { color: var(--muted); font-size:13px; }
-  .ms .tags { gap:8px; }
-  .tag { font-size:11px; padding:3px 8px; border-radius: 999px; border:1px solid var(--line); color: var(--muted); white-space:nowrap; }
-  .tag.mac { color: var(--mac); border-color: #274b63; }
-  .tag.cloud { color: var(--cloud); border-color: #4a3a63; }
-  .status-btn { cursor:pointer; user-select:none; border:1px solid var(--line); background: var(--panel-2);
-    color: var(--ink); border-radius: 999px; padding: 5px 12px; font-size:12px; font-weight:600; min-width: 104px; text-align:center; transition: all .15s; }
-  .status-btn:hover { border-color: var(--accent); }
-  .status-btn[data-s="done"]{ color: var(--done); border-color:#1f5c2b; background: #12241733; }
-  .status-btn[data-s="prog"]{ color: var(--prog); border-color:#5c4a1f; background: #24201233; }
-  .status-btn[data-s="todo"]{ color: var(--dim); }
-  .row.milestone .cell { background: transparent; }
-  .row.milestone.done .cell { background: #0e1b1180; }
-  .row.milestone.prog .cell { background: #1c180d55; }
-  .stopline { grid-column: 1 / -1; padding: 8px 16px; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
-    color: var(--accent); background: #0f1622; border-top:1px solid var(--line); }
+    .tension-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .tension-card {
+      min-height: 270px;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 27px;
+      background: linear-gradient(155deg, rgba(255,255,255,.022), transparent 60%), var(--panel);
+    }
+    .tension-card .operator {
+      margin-bottom: 42px;
+      color: var(--mint);
+      font: 800 28px/1 var(--mono);
+    }
+    .tension-card h3 {
+      margin-bottom: 12px;
+      font-size: 22px;
+      letter-spacing: -.025em;
+    }
+    .tension-card p {
+      margin: auto 0 0;
+      color: var(--muted);
+    }
 
-  .hint { color: var(--dim); font-size:12px; margin-top:10px; }
-  .kv { display:grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size:14px; }
-  .kv .k { color: var(--muted); }
-  footer { margin-top: 56px; color: var(--dim); font-size: 12px; border-top:1px solid var(--line); padding-top:18px; }
-  .reset { cursor:pointer; color: var(--dim); font-size:12px; border:1px solid var(--line); background:transparent; padding:4px 10px; border-radius:8px; }
-  .reset:hover { color: var(--ink); border-color: var(--accent); }
-</style>
+    .lab {
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      padding: clamp(20px, 4vw, 42px);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+    .lab-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      justify-content: space-between;
+      gap: 25px;
+      margin-bottom: 30px;
+    }
+    .lab-toolbar fieldset {
+      display: flex;
+      gap: 8px;
+      margin: 0;
+      border: 0;
+      padding: 0;
+    }
+    .lab-toolbar legend {
+      display: block;
+      width: 100%;
+      margin-bottom: 8px;
+      color: var(--faint);
+      font: 700 11px/1.3 var(--mono);
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+    .scenario-button {
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0 15px;
+      background: transparent;
+      cursor: pointer;
+    }
+    .scenario-button[aria-pressed="true"] {
+      border-color: var(--mint);
+      background: var(--mint-dark);
+      color: var(--mint);
+    }
+    .time-control {
+      width: min(100%, 360px);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 7px 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .time-control output {
+      color: var(--ink);
+      font-family: var(--mono);
+    }
+    .time-control input {
+      grid-column: 1 / -1;
+      width: 100%;
+      accent-color: var(--mint);
+      cursor: pointer;
+    }
+    .policy-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 13px;
+    }
+    .policy-card {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--bg-soft);
+    }
+    .policy-card header {
+      min-height: 112px;
+      padding: 20px 20px 17px;
+    }
+    .policy-number {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--faint);
+      font: 700 11px/1.3 var(--mono);
+      letter-spacing: .08em;
+    }
+    .policy-card h3 {
+      margin-bottom: 7px;
+      font-size: 20px;
+    }
+    .policy-card header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .policy-canvas {
+      display: block;
+      width: 100%;
+      height: 235px;
+      border-block: 1px solid var(--line-soft);
+      background: #0a1412;
+    }
+    .policy-facts {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px 12px;
+      margin: 0;
+      padding: 18px 20px 20px;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .policy-facts dt {
+      color: var(--faint);
+      font-family: var(--mono);
+      text-transform: uppercase;
+    }
+    .policy-facts dd { margin: 0; color: var(--ink); }
+    .schematic-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .schematic-note::before {
+      flex: 0 0 auto;
+      content: "i";
+      width: 19px;
+      height: 19px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--faint);
+      border-radius: 50%;
+      color: var(--ink);
+      font: 800 11px/1 var(--mono);
+    }
+    .comparison-wrap {
+      margin-top: 27px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+    .comparison {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .comparison th,
+    .comparison td {
+      border-bottom: 1px solid var(--line-soft);
+      padding: 15px 17px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .comparison tr:last-child th,
+    .comparison tr:last-child td { border-bottom: 0; }
+    .comparison thead th {
+      background: rgba(87, 239, 182, .045);
+      color: var(--ink);
+      font-family: var(--mono);
+    }
+    .comparison tbody th {
+      width: 18%;
+      color: var(--faint);
+      font-weight: 650;
+    }
+    .comparison td { color: var(--muted); }
+    .comparison td strong { color: var(--ink); }
+
+    .rollout-flow {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 9px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      counter-reset: rollout;
+    }
+    .rollout-flow li {
+      position: relative;
+      min-height: 190px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 19px 16px;
+      background: var(--panel);
+      counter-increment: rollout;
+    }
+    .rollout-flow li::before {
+      display: block;
+      margin-bottom: 35px;
+      color: var(--mint);
+      content: "0" counter(rollout);
+      font: 800 12px/1 var(--mono);
+    }
+    .rollout-flow li:not(:last-child)::after {
+      position: absolute;
+      top: 31px;
+      right: -9px;
+      z-index: 2;
+      width: 17px;
+      height: 17px;
+      display: grid;
+      place-items: center;
+      content: "›";
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: var(--bg);
+      color: var(--mint);
+      line-height: 1;
+    }
+    .rollout-flow strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+    .rollout-flow span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .contract-callout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, .72fr);
+      gap: 17px;
+      margin-top: 18px;
+    }
+    .callout,
+    .code-card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+    }
+    .callout { padding: 25px; }
+    .callout h3 { margin-bottom: 11px; font-size: 21px; }
+    .callout p { margin: 0; color: var(--muted); }
+    .actor-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-top: 23px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .actor-legend span { display: inline-flex; align-items: center; gap: 8px; }
+    .legend-line { width: 24px; height: 3px; background: currentColor; }
+    .legend-line.logged { color: var(--magenta); border-top: 2px dashed currentColor; background: none; }
+    .legend-line.ego { color: var(--blue); }
+    .legend-line.world { color: var(--orange); }
+    .code-card { overflow: hidden; }
+    .code-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 48px;
+      border-bottom: 1px solid var(--line);
+      padding: 0 15px;
+      color: var(--faint);
+      font: 700 11px/1.3 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .copy-button {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 10px;
+      background: transparent;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .copy-button:hover { color: var(--mint); border-color: var(--mint); }
+    pre {
+      margin: 0;
+      overflow: auto;
+      padding: 22px;
+      color: #d5e8dd;
+      font-size: 12px;
+      line-height: 1.7;
+      tab-size: 2;
+    }
+    .token-key { color: var(--blue); }
+    .token-value { color: var(--orange); }
+
+    .proof-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 13px;
+    }
+    .proof-card {
+      min-height: 215px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      padding: 21px;
+      background: var(--panel);
+    }
+    .proof-card .proof-id {
+      display: block;
+      margin-bottom: 34px;
+      color: var(--mint);
+      font: 800 11px/1 var(--mono);
+      letter-spacing: .08em;
+    }
+    .proof-card h3 { margin-bottom: 10px; font-size: 17px; }
+    .proof-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .review-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      overflow: hidden;
+      background: var(--panel-strong);
+    }
+    .review-strip > div {
+      min-height: 110px;
+      border-left: 1px solid var(--line);
+      padding: 20px;
+    }
+    .review-strip > div:first-child { border-left: 0; }
+    .review-strip strong {
+      display: block;
+      margin-bottom: 7px;
+      font: 800 24px/1 var(--mono);
+    }
+    .review-strip span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .trust-panel {
+      display: grid;
+      grid-template-columns: .52fr 1fr;
+      gap: 40px;
+      border: 1px solid rgba(255, 142, 131, .42);
+      border-radius: 24px;
+      padding: clamp(26px, 5vw, 52px);
+      background:
+        linear-gradient(135deg, rgba(255,142,131,.07), transparent 45%),
+        var(--panel);
+    }
+    .trust-panel .trust-label {
+      color: var(--danger);
+      font: 800 12px/1.3 var(--mono);
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+    .trust-panel h2 {
+      margin-top: 15px;
+      font-size: clamp(34px, 4vw, 52px);
+    }
+    .trust-list {
+      display: grid;
+      gap: 0;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .trust-list li {
+      border-top: 1px solid var(--line);
+      padding: 16px 0;
+      color: var(--muted);
+    }
+    .trust-list li:first-child { border-top: 0; padding-top: 0; }
+    .trust-list strong { color: var(--ink); }
+    .next-question {
+      grid-column: 1 / -1;
+      border-top: 1px solid var(--line);
+      margin-top: 6px;
+      padding-top: 24px;
+      color: var(--ink);
+      font-size: 18px;
+    }
+    .next-question span {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--mint);
+      font: 800 11px/1.3 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .1em;
+    }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px;
+    }
+    .arch-node {
+      position: relative;
+      min-height: 180px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      padding: 18px;
+      background: var(--panel);
+    }
+    .arch-node::after {
+      position: absolute;
+      top: 31px;
+      right: -11px;
+      z-index: 2;
+      content: "→";
+      color: var(--faint);
+    }
+    .arch-node:last-child::after { display: none; }
+    .arch-status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      margin-bottom: 36px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0 8px;
+      color: var(--faint);
+      font: 800 9px/1 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+    }
+    .arch-node.done { border-color: rgba(87, 239, 182, .42); }
+    .arch-node.done .arch-status {
+      border-color: rgba(87, 239, 182, .42);
+      color: var(--mint);
+    }
+    .arch-node.next { border-color: rgba(255, 209, 102, .55); }
+    .arch-node.next .arch-status {
+      border-color: rgba(255, 209, 102, .55);
+      color: var(--amber);
+    }
+    .arch-node.planned {
+      border-style: dashed;
+      opacity: .65;
+    }
+    .arch-node h3 { margin-bottom: 9px; font-size: 15px; }
+    .arch-node p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .producer-note {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 17px;
+    }
+    .producer-note span {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 11px;
+      color: var(--muted);
+      font: 700 11px/1.2 var(--mono);
+    }
+    .producer-note .implemented { color: var(--mint); border-color: rgba(87, 239, 182, .35); }
+    .producer-note .planned { color: var(--amber); border-style: dashed; border-color: rgba(255, 209, 102, .45); }
+
+    .roadmap {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+    }
+    .roadmap-column {
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      padding: 25px;
+      background: var(--panel);
+    }
+    .roadmap-column h3 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 23px;
+      font-size: 19px;
+    }
+    .roadmap-column h3 span {
+      color: var(--faint);
+      font: 700 10px/1 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .roadmap-list { display: grid; gap: 0; margin: 0; }
+    .roadmap-item {
+      display: grid;
+      grid-template-columns: 33px 1fr;
+      gap: 9px;
+      border-top: 1px solid var(--line-soft);
+      padding: 15px 0;
+    }
+    .roadmap-item:first-child { border-top: 0; padding-top: 0; }
+    .roadmap-item dt {
+      color: var(--mint);
+      font: 800 12px/1.4 var(--mono);
+    }
+    .roadmap-column.next .roadmap-item dt { color: var(--amber); }
+    .roadmap-column.future .roadmap-item dt { color: var(--faint); }
+    .roadmap-item dd { margin: 0; }
+    .roadmap-item strong {
+      display: block;
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .roadmap-item span {
+      display: block;
+      margin-top: 4px;
+      color: var(--faint);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .reproduce {
+      display: grid;
+      grid-template-columns: .8fr 1.2fr;
+      gap: 17px;
+      margin-top: 18px;
+    }
+    .reproduce-copy {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 28px;
+      background: var(--panel);
+    }
+    .reproduce-copy h3 { margin-bottom: 12px; font-size: 24px; }
+    .reproduce-copy p { margin: 0; color: var(--muted); }
+    .data-note {
+      margin-top: 17px;
+      border-left: 2px solid var(--amber);
+      padding-left: 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 34px 0 48px;
+    }
+    .footer-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      color: var(--faint);
+      font-size: 13px;
+    }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 19px; }
+    .footer-links a:hover { color: var(--mint); }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 1020px) {
+      .hero { grid-template-columns: 1fr .72fr; gap: 36px; }
+      .evidence-ribbon { grid-template-columns: repeat(3, 1fr); }
+      .stat:nth-child(4) { border-left: 0; }
+      .policy-grid { grid-template-columns: 1fr; }
+      .policy-card {
+        display: grid;
+        grid-template-columns: minmax(190px, .55fr) minmax(330px, 1fr) minmax(210px, .6fr);
+      }
+      .policy-card header { min-height: 235px; }
+      .policy-canvas { border: 0; border-inline: 1px solid var(--line-soft); }
+      .policy-facts { align-content: center; }
+      .rollout-flow { grid-template-columns: repeat(3, 1fr); }
+      .rollout-flow li:nth-child(3)::after { display: none; }
+      .proof-grid { grid-template-columns: repeat(2, 1fr); }
+      .architecture { grid-template-columns: repeat(3, 1fr); }
+      .arch-node:nth-child(3)::after { display: none; }
+    }
+
+    @media (max-width: 900px) {
+      .policy-card { display: block; }
+      .policy-card header { min-height: auto; }
+      .policy-canvas { border-inline: 0; border-block: 1px solid var(--line-soft); }
+    }
+
+    @media (max-width: 780px) {
+      .shell { width: min(100% - 28px, 680px); }
+      .nav { min-height: 62px; }
+      .nav-links li:not(:last-child) { display: none; }
+      .nav-links .source-link { min-height: 40px; }
+      .hero {
+        min-height: auto;
+        grid-template-columns: 1fr;
+        padding: 72px 0 58px;
+      }
+      .hero-visual { max-width: 520px; transform: none; }
+      .hero-visual::after { display: none; }
+      .evidence-ribbon { grid-template-columns: repeat(2, 1fr); }
+      .stat { border-bottom: 1px solid var(--line); }
+      .stat:nth-child(odd) { border-left: 1px solid var(--line); }
+      .stat:nth-child(even) { border-right: 1px solid var(--line); }
+      .stat:last-child { grid-column: 1 / -1; }
+      .section-head { grid-template-columns: 1fr; gap: 20px; }
+      .tension-grid { grid-template-columns: 1fr; }
+      .tension-card { min-height: 225px; }
+      .rollout-flow { grid-template-columns: repeat(2, 1fr); }
+      .rollout-flow li:nth-child(3)::after { display: grid; }
+      .rollout-flow li:nth-child(even)::after { display: none; }
+      .contract-callout,
+      .trust-panel,
+      .reproduce { grid-template-columns: 1fr; }
+      .next-question { grid-column: 1; }
+      .architecture { grid-template-columns: repeat(2, 1fr); }
+      .arch-node:nth-child(3)::after { display: block; }
+      .arch-node:nth-child(even)::after { display: none; }
+      .roadmap { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 520px) {
+      .hero h1 { font-size: clamp(43px, 13vw, 62px); }
+      .hero-actions .button { width: 100%; }
+      .hero-visual { padding: 19px; }
+      .trajectory-stage { height: 210px; }
+      .visual-foot { grid-template-columns: 1fr; }
+      .evidence-ribbon { grid-template-columns: 1fr; }
+      .stat,
+      .stat:nth-child(odd),
+      .stat:nth-child(even),
+      .stat:last-child {
+        grid-column: 1;
+        border-inline: 1px solid var(--line);
+      }
+      .lab { padding: 16px; }
+      .lab-toolbar fieldset { width: 100%; }
+      .scenario-button { flex: 1; padding-inline: 10px; }
+      .rollout-flow,
+      .proof-grid,
+      .review-strip,
+      .architecture { grid-template-columns: 1fr; }
+      .rollout-flow li::after,
+      .rollout-flow li:nth-child(3)::after,
+      .arch-node::after,
+      .arch-node:nth-child(3)::after { display: none; }
+      .review-strip > div {
+        border-top: 1px solid var(--line);
+        border-left: 0;
+      }
+      .review-strip > div:first-child { border-top: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
+  </style>
 </head>
 <body>
-<div class="wrap">
+  <a class="skip-link" href="#main">Skip to content</a>
 
-  <header class="hero">
-    <div class="eyebrow">Interview Project · 2026</div>
-    <h1>EvalSim</h1>
-    <div class="stack">Closed-Loop Simulation-Evaluation Platform &nbsp;·&nbsp;
-      <b>Waymo Open Motion Dataset</b> · <b>Waymax</b> · <b>JAX</b> · <b>Python</b></div>
-    <p class="lede">An evaluation platform that decides whether a traffic simulator is realistic, reactive,
-      diverse, physically feasible, and <em>useful</em> for closed-loop autonomous-driving testing — instead of
-      collapsing simulation quality into one leaderboard number.</p>
+  <header class="site-header">
+    <nav class="nav shell" aria-label="Primary navigation">
+      <a class="brand" href="#top" aria-label="EvalSim home">
+        <span class="brand-mark" aria-hidden="true">E</span>
+        EVAL//SIM
+      </a>
+      <ul class="nav-links">
+        <li><a href="#why">Why</a></li>
+        <li><a href="#policy-lab">Policy lab</a></li>
+        <li><a href="#evidence">Evidence</a></li>
+        <li><a href="#roadmap">Roadmap</a></li>
+        <li><a class="source-link" href="https://github.com/6ickomod3/evalsim" rel="noreferrer">View source ↗</a></li>
+      </ul>
+    </nav>
   </header>
 
-  <!-- WHAT ARE WE DOING -->
-  <section>
-    <h2>What are we doing here?</h2>
-    <div class="panel">
-      <p class="quote">The contribution is the <b>evaluation methodology</b>, not the simulator. We use simple
-      baselines (log-replay, constant-velocity, IDM) with deliberately different failure modes, and invest all
-      the engineering in the system <em>around</em> them.</p>
-    </div>
-    <div class="grid cards-2" style="margin-top:18px;">
-      <div class="panel">
-        <h3>The core problem</h3>
-        <p>A simulator can ace one metric while being unusable for closed-loop eval. Log-replay matches real
-        trajectories but can't react when the ego deviates. A rule-based agent reacts but turns unrealistically
-        defensive. A stochastic model looks diverse by being noisy and infeasible. EvalSim reveals these
-        differences instead of hiding them.</p>
+  <main id="main">
+    <section class="shell hero" id="top" aria-labelledby="hero-title">
+      <div>
+        <p class="kicker">M0 → M2 implemented and tested</p>
+        <h1 id="hero-title">A simulator can match the log—and still <em>fail the test.</em></h1>
+        <p class="hero-copy">EvalSim is a contract-first platform for discovering how traffic simulators differ: what they replay, what they react to, where their motion breaks, and whether their outputs are useful for closed-loop evaluation.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#policy-lab">Explore the policy lab ↓</a>
+          <a class="button" href="https://github.com/6ickomod3/evalsim/blob/main/README.md" rel="noreferrer">Read the technical README ↗</a>
+        </div>
       </div>
-      <div class="panel">
-        <h3>The key design move</h3>
-        <p><b>Contract-first, substrate-agnostic.</b> A frozen <code>Scenario</code> contract has two producers:
-        a <span style="color:var(--mac)">synthetic generator (Mac)</span> and a
-        <span style="color:var(--cloud)">Waymax/WOMD loader (Cloud)</span>. Everything downstream reads only the
-        contract — so ~95% is built &amp; validated on a Mac CPU, and the Waymax stage is quarantined to one
-        short cloud session.</p>
-      </div>
-    </div>
-  </section>
 
-  <!-- PIPELINE -->
-  <section>
-    <h2>Architecture (data flow)</h2>
-    <div class="panel">
-      <div class="pipe">
-        <div class="node">Producers<small>synthetic · WOMD</small></div><span class="arrow">→</span>
-        <div class="node">Scenario Contract<small>frozen schema</small></div><span class="arrow">→</span>
-        <div class="node">Simulator Adapters<small>replay · CV · IDM</small></div><span class="arrow">→</span>
-        <div class="node">Rollout Engine<small>+ ego perturb.</small></div><span class="arrow">→</span>
-        <div class="node">Metric Registry<small>kinematic · interaction · map</small></div><span class="arrow">→</span>
-        <div class="node">Result Store<small>Parquet · DuckDB</small></div><span class="arrow">→</span>
-        <div class="node">Statistics<small>scenario bootstrap</small></div><span class="arrow">→</span>
-        <div class="node">Reports<small>scorecards · viz</small></div>
-      </div>
-    </div>
-  </section>
+      <aside class="hero-visual" aria-label="Schematic trajectory divergence">
+        <div class="visual-head">
+          <span>Evaluation surface / 01</span>
+          <span class="status-live">Tested</span>
+        </div>
+        <div class="trajectory-stage" aria-hidden="true">
+          <span class="lane top"></span>
+          <span class="lane bottom"></span>
+          <span class="trace logged"></span>
+          <span class="trace world"></span>
+          <span class="trace ego"></span>
+          <span class="trace-label ref">logged reference</span>
+          <span class="trace-label sim">simulated world</span>
+          <span class="trace-label ego-label">exogenous ego</span>
+        </div>
+        <div class="visual-foot">
+          <span>Not one score</span>
+          <span>Typed seams</span>
+          <span>Visible failures</span>
+        </div>
+      </aside>
+    </section>
 
-  <!-- PROGRESS -->
-  <section>
-    <h2>Progress</h2>
-    <div class="panel">
-      <div class="prog-head">
-        <div><span class="prog-pct" id="pct">0%</span> <span class="prog-sub" id="counts">— / — milestones</span></div>
-        <button class="reset" id="reset">Reset tracker</button>
-      </div>
-      <div class="bar"><i id="barfill"></i></div>
-      <div class="legend">
-        <span><span class="dot done"></span>Done</span>
-        <span><span class="dot prog"></span>In progress</span>
-        <span><span class="dot todo"></span>Not started</span>
-        <span style="margin-left:auto"><span class="dot mac"></span>Runs on Mac</span>
-        <span><span class="dot cloud"></span>Runs on Cloud</span>
-      </div>
-      <div class="hint">Click a status pill to cycle Not started → In progress → Done. Saved in your browser.</div>
+    <div class="shell evidence-ribbon" aria-label="Current project evidence">
+      <div class="stat"><strong>3</strong><span>milestones complete</span></div>
+      <div class="stat"><strong>134</strong><span>regression tests pass</span></div>
+      <div class="stat"><strong>5</strong><span>synthetic families</span></div>
+      <div class="stat"><strong>50 × 3</strong><span>scenario-policy acceptance</span></div>
+      <div class="stat"><strong>CPU</strong><span>current local substrate</span></div>
     </div>
-  </section>
 
-  <!-- MILESTONES -->
-  <section>
-    <h2>Milestones</h2>
-    <div class="ms" id="ms"></div>
-  </section>
-
-  <!-- RESUME MAPPING -->
-  <section>
-    <h2>Résumé mapping (every claim → a milestone)</h2>
-    <div class="panel">
-      <div class="kv">
-        <div class="k">Reproducible platform</div><div>M0 · M7</div>
-        <div class="k">log-replay / const-velocity / IDM</div><div>M2</div>
-        <div class="k">kinematic realism / interaction / map adherence</div><div>M3</div>
-        <div class="k">behavioral slices</div><div>M4</div>
-        <div class="k">scenario-level confidence intervals</div><div>M4</div>
-        <div class="k">counterfactual ego-perturbation + reactivity</div><div>M5</div>
-        <div class="k">metric stress-test (mode collapse, dispersion, infeasibility)</div><div>M6</div>
-        <div class="k">hand-designed realism metrics</div><div>M3</div>
-        <div class="k"><b>learned</b> realism metrics</div><div>S1</div>
-        <div class="k">header: WOMD · Waymax · JAX</div><div>W1 (Google Cloud)</div>
+    <section class="section shell" id="why" aria-labelledby="why-title">
+      <div class="section-head">
+        <div>
+          <span class="section-index">01 / Evaluation tension</span>
+          <h2 id="why-title">Realism is not a scalar.</h2>
+        </div>
+        <p>The project starts with deliberately limited policies so their different failure modes remain legible. These are evaluation hypotheses that M3 will turn into measured dimensions.</p>
       </div>
-    </div>
-  </section>
+      <div class="tension-grid">
+        <article class="tension-card">
+          <span class="operator" aria-hidden="true">≠</span>
+          <h3>Logged similarity is not reactivity.</h3>
+          <p>Perfect trajectory replay can reproduce a recording exactly while ignoring every counterfactual change made by the ego vehicle.</p>
+        </article>
+        <article class="tension-card">
+          <span class="operator" aria-hidden="true">≠</span>
+          <h3>Low collision is not useful motion.</h3>
+          <p>An overly defensive agent may avoid contact by freezing or yielding unnaturally. Safety counts alone cannot explain whether behavior is plausible.</p>
+        </article>
+        <article class="tension-card">
+          <span class="operator" aria-hidden="true">≠</span>
+          <h3>Diversity is not feasibility.</h3>
+          <p>A model can produce varied futures by adding noise—even when those futures leave the road or violate basic kinematics.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section shell" id="policy-lab" aria-labelledby="lab-title">
+      <div class="section-head">
+        <div>
+          <span class="section-index">02 / M2 policy lab</span>
+          <h2 id="lab-title">Same contract. Three different truths.</h2>
+        </div>
+        <p>All three policies pass through one typed rollout engine. Change the scenario and scrub time to expose what each baseline can—and cannot—do.</p>
+      </div>
+
+      <div class="lab">
+        <noscript>
+          <style>
+            .lab-toolbar, .policy-canvas, .copy-button { display: none !important; }
+            .policy-card header { min-height: auto !important; }
+          </style>
+          <p class="schematic-note">JavaScript is disabled, so the trajectory controls and copy actions are hidden. The complete static policy comparison remains available below.</p>
+        </noscript>
+        <div class="lab-toolbar">
+          <fieldset>
+            <legend>Scenario lens</legend>
+            <button class="scenario-button" type="button" data-scenario="merge" aria-pressed="true">Merge geometry</button>
+            <button class="scenario-button" type="button" data-scenario="following" aria-pressed="false">Following response</button>
+          </fieldset>
+          <label class="time-control" for="rollout-time">
+            <span>Rollout time</span>
+            <output id="rollout-output" for="rollout-time">62%</output>
+            <input id="rollout-time" type="range" min="0" max="100" value="62" step="1">
+          </label>
+        </div>
+
+        <div class="policy-grid">
+          <article class="policy-card">
+            <header>
+              <span class="policy-number">POLICY / 01</span>
+              <h3>Log replay</h3>
+              <p>Absolute recorded-state override</p>
+            </header>
+            <canvas class="policy-canvas" data-policy="replay" width="420" height="235" role="img" aria-label="Schematic log-replay trajectory"></canvas>
+            <dl class="policy-facts">
+              <dt>Strength</dt><dd>Exact recorded future</dd>
+              <dt>Failure</dt><dd>Nonreactive by construction</dd>
+              <dt>Proof</dt><dd>All-field replay across 50 scenes</dd>
+            </dl>
+          </article>
+
+          <article class="policy-card">
+            <header>
+              <span class="policy-number">POLICY / 02</span>
+              <h3>Constant velocity</h3>
+              <p>Causal world-frame extrapolation</p>
+            </header>
+            <canvas class="policy-canvas" data-policy="cv" width="420" height="235" role="img" aria-label="Schematic constant-velocity trajectory"></canvas>
+            <dl class="policy-facts">
+              <dt>Strength</dt><dd>Simple causal baseline</dd>
+              <dt>Failure</dt><dd>No map or interaction response</dd>
+              <dt>Proof</dt><dd>Separates from replay on merge</dd>
+            </dl>
+          </article>
+
+          <article class="policy-card">
+            <header>
+              <span class="policy-number">POLICY / 03</span>
+              <h3>IDM</h3>
+              <p>Longitudinal vehicle interaction</p>
+            </header>
+            <canvas class="policy-canvas" data-policy="idm" width="420" height="235" role="img" aria-label="Schematic IDM trajectory"></canvas>
+            <dl class="policy-facts">
+              <dt>Strength</dt><dd>Responds to geometric leaders</dd>
+              <dt>Failure</dt><dd>Zero yaw; CV nonvehicle fallback</dd>
+              <dt>Proof</dt><dd>Separates from CV on following</dd>
+            </dl>
+          </article>
+        </div>
+        <p class="schematic-note">The trajectories above are explanatory schematics derived from implemented policy semantics—not measured M3 metric results or a ranking of policy quality.</p>
+
+        <div class="comparison-wrap">
+          <table class="comparison">
+            <caption class="sr-only">Static comparison of the three M2 simulator policies</caption>
+            <thead>
+              <tr>
+                <th scope="col">Behavior</th>
+                <th scope="col">Log replay</th>
+                <th scope="col">Constant velocity</th>
+                <th scope="col">IDM</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Next-state source</th>
+                <td><strong>Recorded absolute state</strong></td>
+                <td><strong>Current simulated state</strong> + actual Δt</td>
+                <td><strong>Current simulated agents</strong> + longitudinal model</td>
+              </tr>
+              <tr>
+                <th scope="row">Causality / response</th>
+                <td>Noncausal future access; no response</td>
+                <td>Causal; no interaction response</td>
+                <td>Causal; longitudinal vehicle response</td>
+              </tr>
+              <tr>
+                <th scope="row">Lateral behavior</th>
+                <td>Replays recorded heading and path</td>
+                <td>Zero control; holds world velocity</td>
+                <td>Zero yaw rate; no map following</td>
+              </tr>
+              <tr>
+                <th scope="row">Agent handling</th>
+                <td>All valid logged agents</td>
+                <td>Vehicles, cyclists, pedestrians</td>
+                <td>Vehicles use IDM; others fall back to CV</td>
+              </tr>
+              <tr>
+                <th scope="row">Known limitation</th>
+                <td>Cannot react to ego deviation</td>
+                <td>Can drift through curved geometry</td>
+                <td>Leader gating is geometric and motion stays longitudinal</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section shell" id="mechanics" aria-labelledby="mechanics-title">
+      <div class="section-head">
+        <div>
+          <span class="section-index">03 / One rollout transition</span>
+          <h2 id="mechanics-title">The engine owns the physics boundary.</h2>
+        </div>
+        <p>Policies propose typed state overrides or controls. The engine owns time, identity, lifecycle, feasibility integration, and the evidence trail.</p>
+      </div>
+
+      <ol class="rollout-flow">
+        <li><strong>Copy history</strong><span>Preserve all observations through <code>current_index</code>.</span></li>
+        <li><strong>Observe now</strong><span>Build immutable current-step frames; CV and IDM are tested against poisoned future world kinematics.</span></li>
+        <li><strong>Policy step</strong><span>Return typed controls or explicit absolute-state overrides.</span></li>
+        <li><strong>Integrate</strong><span>Apply actual Δt and audited acceleration, speed, braking, and yaw clamps.</span></li>
+        <li><strong>Update together</strong><span>Synchronously advance world agents; preserve births and re-entries.</span></li>
+        <li><strong>Record proof</strong><span>Emit rollout state plus complete engine and policy provenance.</span></li>
+      </ol>
+
+      <div class="contract-callout">
+        <article class="callout">
+          <h3>One contract, two kinds of actor control</h3>
+          <p>In M2, the ego remains exogenous and follows its logged trajectory. Policies simulate world agents from the current state. M5 can replace ego motion through a typed perturbation without changing the world-policy seam.</p>
+          <div class="actor-legend" aria-label="Trajectory legend">
+            <span><i class="legend-line logged" aria-hidden="true"></i> logged reference</span>
+            <span><i class="legend-line ego" aria-hidden="true"></i> exogenous ego</span>
+            <span><i class="legend-line world" aria-hidden="true"></i> simulated world</span>
+          </div>
+        </article>
+        <div class="code-card">
+          <div class="code-head">
+            <span>Rollout provenance / shape</span>
+            <button class="copy-button" type="button" data-copy="provenance">Copy</button>
+          </div>
+          <pre id="provenance"><code>{
+  <span class="token-key">"engine"</span>: { ... },
+  <span class="token-key">"dynamics"</span>: {
+    <span class="token-key">"limits"</span>: { ... },
+    <span class="token-key">"clamp_counts"</span>: { ... }
+  },
+  <span class="token-key">"policy"</span>: { ... },
+  <span class="token-key">"ego_control"</span>: <span class="token-value">"logged"</span>,
+  <span class="token-key">"rollout_start_index"</span>: <span class="token-value">0</span>,
+  <span class="token-key">"agent_control_modes"</span>: { ... }
+}</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="section shell" id="evidence" aria-labelledby="evidence-title">
+      <div class="section-head">
+        <div>
+          <span class="section-index">04 / Evidence</span>
+          <h2 id="evidence-title">Tests target the seams, not the screenshots.</h2>
+        </div>
+        <p>The suite uses analytic oracles, poisoned inputs, lifecycle probes, malformed policies, batch acceptance, and exact serialization round-trips.</p>
+      </div>
+
+      <div class="proof-grid">
+        <article class="proof-card"><span class="proof-id">EVIDENCE / A</span><h3>Future-log poisoning</h3><p>CV and IDM receive altered future world kinematics without changing their rollouts, showing that these two policies do not consume those future values.</p></article>
+        <article class="proof-card"><span class="proof-id">EVIDENCE / B</span><h3>Analytic dynamics</h3><p>Irregular Δt, speed caps, timed stops, no-reverse behavior, and clamp counts are checked against explicit oracles.</p></article>
+        <article class="proof-card"><span class="proof-id">EVIDENCE / C</span><h3>Lifecycle identity</h3><p>Births, gaps, re-entries, validity masks, synchronous updates, and agent identity remain engine-owned.</p></article>
+        <article class="proof-card"><span class="proof-id">EVIDENCE / D</span><h3>Adversarial boundaries</h3><p>Malformed policy steps, input mutation, retained buffers, invalid ego indices, and reusable instances are rejected or isolated.</p></article>
+        <article class="proof-card"><span class="proof-id">EVIDENCE / E</span><h3>Exact replay</h3><p>Log replay reproduces valid recorded agent fields exactly across the 50-scenario synthetic evaluation set.</p></article>
+        <article class="proof-card"><span class="proof-id">EVIDENCE / F</span><h3>IDM equation</h3><p>Canonical acceleration, leader selection, bumper gaps, monotonicity, fallback behavior, and clamps have direct checks.</p></article>
+        <article class="proof-card"><span class="proof-id">EVIDENCE / G</span><h3>Batch acceptance</h3><p>50 scenarios × 3 policies execute through the same engine and each result survives an exact Parquet round-trip.</p></article>
+        <article class="proof-card"><span class="proof-id">EVIDENCE / H</span><h3>Defensive contracts</h3><p>Scenario, rollout, policy, metric, and manifest boundaries validate shapes, ranges, and provenance; engine-owned copies isolate policy mutation.</p></article>
+      </div>
+
+      <div class="review-strip" aria-label="Current validation evidence">
+        <div><strong>134 / 134</strong><span>repository regression tests passing</span></div>
+        <div><strong>150</strong><span>literal rollout and exact Parquet acceptance cases</span></div>
+        <div><strong>66</strong><span>M2-focused policy, engine, dynamics, and adversarial tests</span></div>
+      </div>
+    </section>
+
+    <section class="section shell" id="limits" aria-labelledby="limits-title">
+      <div class="trust-panel">
+        <div>
+          <span class="trust-label">Current truth boundary</span>
+          <h2 id="limits-title">What we do not know—yet.</h2>
+        </div>
+        <ul class="trust-list">
+          <li><strong>No M3 scorecards.</strong> Collision, off-road, kinematic realism, and aggregate policy comparisons have not been implemented or measured.</li>
+          <li><strong>No M5 counterfactual result.</strong> M2 keeps ego on its logged trajectory; ego perturbation and reactivity metrics remain planned.</li>
+          <li><strong>No W1 real-data claim.</strong> WOMD ingestion and Waymax/JAX cloud validation are planned, not represented as completed work.</li>
+          <li><strong>Limited nonlinear world-agent coverage.</strong> Current simulated curvature is mainly in merge; the left-turn family’s turning actor is the logged ego.</li>
+        </ul>
+        <p class="next-question"><span>Next falsifiable question / M3</span>Can independent kinematic, interaction, and map-adherence metrics expose CV’s geometric drift and IDM’s longitudinal response without hiding those differences inside a composite score? Counterfactual nonreactivity remains an M5 question.</p>
+      </div>
+    </section>
+
+    <section class="section shell" id="architecture" aria-labelledby="architecture-title">
+      <div class="section-head">
+        <div>
+          <span class="section-index">05 / Architecture</span>
+          <h2 id="architecture-title">Built solid. Planned dashed.</h2>
+        </div>
+        <p>Downstream layers consume stable contracts rather than WOMD or Waymax internals, keeping local development and future cloud ingestion separated.</p>
+      </div>
+
+      <div class="architecture" aria-label="EvalSim architecture from source to reports">
+        <article class="arch-node done"><span class="arch-status">Implemented · M1</span><h3>Scenario source</h3><p>Five deterministic synthetic families into one validated contract.</p></article>
+        <article class="arch-node done"><span class="arch-status">Implemented · M0</span><h3>Contracts</h3><p>Scenario, rollout, simulator, metric, serialization, and manifest seams.</p></article>
+        <article class="arch-node done"><span class="arch-status">Implemented · M2</span><h3>Simulation</h3><p>Replay, CV, IDM, typed policy steps, engine dynamics, and provenance.</p></article>
+        <article class="arch-node next"><span class="arch-status">Next · M3</span><h3>Metrics</h3><p>Kinematic, interaction, and map-adherence dimensions with no composite score.</p></article>
+        <article class="arch-node planned"><span class="arch-status">Planned · M4–M6</span><h3>Evaluation</h3><p>Slices, scenario bootstrap, counterfactual response, and metric stress tests.</p></article>
+        <article class="arch-node planned"><span class="arch-status">Planned · M8</span><h3>Reports</h3><p>Scorecards, curated failures, comparisons, and reproducible benchmark views.</p></article>
+      </div>
+      <div class="producer-note" aria-label="Source implementation status">
+        <span class="implemented">Synthetic producer · implemented locally</span>
+        <span class="planned">WOMD / Waymax producer · planned W1 cloud stage</span>
+      </div>
+    </section>
+
+    <section class="section shell" id="roadmap" aria-labelledby="roadmap-title">
+      <div class="section-head">
+        <div>
+          <span class="section-index">06 / Roadmap</span>
+          <h2 id="roadmap-title">A claim ledger, not a completion meter.</h2>
+        </div>
+        <p>Every statement is separated into implemented, next, or planned work. The repository README remains the detailed source of truth.</p>
+      </div>
+
+      <div class="roadmap">
+        <article class="roadmap-column">
+          <h3>Implemented <span>tested now</span></h3>
+          <dl class="roadmap-list">
+            <div class="roadmap-item"><dt>M0</dt><dd><strong>Contracts + serialization</strong><span>Typed seams, Parquet, manifests</span></dd></div>
+            <div class="roadmap-item"><dt>M1</dt><dd><strong>Synthetic scenarios</strong><span>Five families, deterministic generation, visualization</span></dd></div>
+            <div class="roadmap-item"><dt>M2</dt><dd><strong>Policies + rollout engine</strong><span>Replay, CV, IDM, lifecycle, dynamics, provenance</span></dd></div>
+          </dl>
+        </article>
+        <article class="roadmap-column next">
+          <h3>Next <span>evaluation MVP</span></h3>
+          <dl class="roadmap-list">
+            <div class="roadmap-item"><dt>M3</dt><dd><strong>Metric registry</strong><span>Kinematics, interaction, map adherence</span></dd></div>
+            <div class="roadmap-item"><dt>M4</dt><dd><strong>Slices + statistics</strong><span>Scorecards, paired diffs, scenario bootstrap</span></dd></div>
+            <div class="roadmap-item"><dt>M5</dt><dd><strong>Ego perturbation</strong><span>Counterfactual braking, acceleration, timing, reactivity</span></dd></div>
+          </dl>
+        </article>
+        <article class="roadmap-column future">
+          <h3>Planned <span>extensions</span></h3>
+          <dl class="roadmap-list">
+            <div class="roadmap-item"><dt>M6</dt><dd><strong>Metric stress tests</strong><span>Mode collapse, dispersion, infeasibility</span></dd></div>
+            <div class="roadmap-item"><dt>S1</dt><dd><strong>Learned discriminator</strong><span>Leakage-safe real-versus-sim comparison</span></dd></div>
+            <div class="roadmap-item"><dt>W1</dt><dd><strong>WOMD ingestion</strong><span>Waymax adapter and bounded cloud validation</span></dd></div>
+            <div class="roadmap-item"><dt>M7–8</dt><dd><strong>Reproduction + report</strong><span>Config, caching, benchmark, final visual evidence</span></dd></div>
+          </dl>
+        </article>
+      </div>
+
+      <div class="reproduce">
+        <article class="reproduce-copy">
+          <h3>Run the implemented core.</h3>
+          <p>The current M0–M2 path runs locally through the repository’s <code>uv</code>-managed environment.</p>
+          <p class="data-note">WOMD data is intentionally excluded from Git. W1 users download the TFRecord shards separately into the documented local-only path.</p>
+        </article>
+        <div class="code-card">
+          <div class="code-head">
+            <span>Terminal / local verification</span>
+            <button class="copy-button" type="button" data-copy="commands">Copy</button>
+          </div>
+          <pre id="commands"><code>uv sync --extra dev
+uv run pytest
+
+# Expected at M2:
+# 134 passed</code></pre>
+        </div>
+      </div>
+    </section>
+  </main>
 
   <footer>
-    EvalSim · design + plan in <code>docs/plans/</code> · dashboard state stored locally in your browser ·
-    updated 2026-07-27
+    <div class="shell footer-row">
+      <span>EvalSim · M0–M2 · updated 2026-07-28</span>
+      <div class="footer-links">
+        <a href="https://github.com/6ickomod3/evalsim" rel="noreferrer">Source</a>
+        <a href="https://github.com/6ickomod3/evalsim/blob/main/README.md" rel="noreferrer">README</a>
+        <a href="https://github.com/6ickomod3/evalsim/tree/main/docs/plans" rel="noreferrer">Design docs</a>
+      </div>
+    </div>
   </footer>
-</div>
 
-<script>
-const MILESTONES = [
-  {id:"M0", t:"Repo skeleton + contracts", d:"Scenario/Rollout/Metric seams, Parquet round-trip, run manifest", run:"mac"},
-  {id:"M1", t:"Synthetic source + visualization", d:"Parametric scenarios into the contract + matplotlib viewer", run:"mac"},
-  {id:"M2", t:"Simulator adapters + rollout engine", d:"log-replay · constant-velocity · IDM + NumPy closed-loop engine", run:"mac"},
-  {id:"M3", t:"Metric registry + core metrics", d:"kinematic · interaction · map-adherence + per-scenario Parquet store", run:"mac"},
-  {id:"M4", t:"Scenario slicing + statistics", d:"slice registry, scorecards, scenario-cluster bootstrap, paired diffs", run:"mac", stop:"MVP complete"},
-  {id:"M5", t:"Counterfactual ego-perturbation + reactivity", d:"braking / accel / timing perturbations + reactivity metrics", run:"mac"},
-  {id:"M6", t:"Metric stress-test suite", d:"frozen / mode-collapse / over-dispersion / infeasible → detection matrix", run:"mac"},
-  {id:"S1", t:"Learned real-vs-sim discriminator", d:"leakage-safe splits, AUC, disagreement vs hand-designed metrics", run:"mac", stop:"Strong version complete"},
-  {id:"M7", t:"Config, caching, reproducibility", d:"YAML runs, deterministic cache keys, one-command benchmark", run:"mac"},
-  {id:"M8", t:"Report, visualizations, tests", d:"README + technical report + curated failure viz + ~30 tests", run:"mac"},
-  {id:"W1", t:"WaymaxSource — WOMD ingestion", d:"WOMD → Scenario contract → Parquet; smoke-test then re-run platform on real data", run:"cloud", stop:"Résumé header made true"},
-  {id:"W2", t:"Rollout dynamics cross-check (optional)", d:"validate NumPy engine vs Waymax reference dynamics", run:"cloud"},
-];
-const KEY = "evalsim_progress_v1";
-const ORDER = ["todo","prog","done"];
-const LABEL = {todo:"Not started", prog:"In progress", done:"Done"};
-const PROJECT_STATE = {M0:"done", M1:"done", M2:"done"};
-let state = {...PROJECT_STATE, ...JSON.parse(localStorage.getItem(KEY) || "{}")};
+  <script>
+    (() => {
+      const colors = {
+        bg: "#0a1412",
+        road: "#5b7168",
+        lane: "#c1cec7",
+        grid: "#183029",
+        logged: "#e985dc",
+        ego: "#72a8ff",
+        world: "#ffae62",
+        ink: "#f1f4e9",
+        muted: "#8da299",
+        now: "#57efb6"
+      };
+      const canvases = [...document.querySelectorAll(".policy-canvas")];
+      const timeInput = document.querySelector("#rollout-time");
+      const timeOutput = document.querySelector("#rollout-output");
+      const scenarioButtons = [...document.querySelectorAll(".scenario-button")];
+      let scenario = "merge";
 
-function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
-function render(){
-  const host = document.getElementById("ms");
-  host.innerHTML = "";
-  MILESTONES.forEach(m => {
-    const s = state[m.id] || "todo";
-    const row = document.createElement("div");
-    row.className = "row milestone " + s;
-    row.innerHTML = `
-      <div class="cell id">${m.id}</div>
-      <div class="cell body"><div class="t">${m.t}</div><div class="d">${m.d}</div></div>
-      <div class="cell tags">
-        <span class="tag ${m.run}">${m.run === "mac" ? "Mac · CPU" : "Google Cloud"}</span>
-        <span class="status-btn" data-s="${s}" data-id="${m.id}">${LABEL[s]}</span>
-      </div>`;
-    host.appendChild(row);
-    if(m.stop){
-      const sl = document.createElement("div");
-      sl.className = "stopline";
-      sl.textContent = "▲ Stop-line — " + m.stop;
-      host.appendChild(sl);
-    }
-  });
-  host.querySelectorAll(".status-btn").forEach(b => b.addEventListener("click", () => {
-    const id = b.dataset.id;
-    const cur = state[id] || "todo";
-    state[id] = ORDER[(ORDER.indexOf(cur)+1) % ORDER.length];
-    save(); render(); updateBar();
-  }));
-  updateBar();
-}
-function updateBar(){
-  const total = MILESTONES.length;
-  const done = MILESTONES.filter(m => (state[m.id]||"todo") === "done").length;
-  const prog = MILESTONES.filter(m => (state[m.id]||"todo") === "prog").length;
-  const pctVal = Math.round((done + prog*0.5) / total * 100);
-  document.getElementById("pct").textContent = pctVal + "%";
-  document.getElementById("counts").textContent = `${done} done · ${prog} in progress · ${total-done-prog} to go`;
-  document.getElementById("barfill").style.width = pctVal + "%";
-}
-document.getElementById("reset").addEventListener("click", () => {
-  if(confirm("Reset to repository progress?")){ state = {...PROJECT_STATE}; save(); render(); }
-});
-render();
-</script>
+      function cubic(a, b, c, d, t) {
+        const u = 1 - t;
+        return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d;
+      }
+
+      function mergeReference(t, width, height) {
+        return {
+          x: cubic(width * .09, width * .35, width * .39, width * .88, t),
+          y: cubic(height * .26, height * .28, height * .70, height * .73, t)
+        };
+      }
+
+      function mergeTangent(t, width, height, slow = false) {
+        const distance = slow ? t * (.86 - .18 * t) : t;
+        return {
+          x: width * (.09 + .79 * distance),
+          y: height * (.26 + (.06 / .78) * .79 * distance)
+        };
+      }
+
+      function line(ctx, points, color, width = 2, dash = []) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.setLineDash(dash);
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        points.forEach((point, index) => {
+          if (index === 0) ctx.moveTo(point.x, point.y);
+          else ctx.lineTo(point.x, point.y);
+        });
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function label(ctx, text, x, y, color = colors.muted, align = "left") {
+        ctx.save();
+        ctx.fillStyle = color;
+        ctx.font = "700 10px SFMono-Regular, Consolas, monospace";
+        ctx.textAlign = align;
+        ctx.fillText(text.toUpperCase(), x, y);
+        ctx.restore();
+      }
+
+      function car(ctx, x, y, angle, color, name) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.fillStyle = color;
+        ctx.strokeStyle = colors.bg;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(-11, -6, 22, 12, 4);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+        label(ctx, name, x, Math.max(14, y - 13), color, "center");
+      }
+
+      function drawRoadMerge(ctx, width, height) {
+        ctx.fillStyle = colors.bg;
+        ctx.fillRect(0, 0, width, height);
+        for (let x = 0; x < width; x += 30) line(ctx, [{x, y: 0}, {x, y: height}], colors.grid, 1);
+        for (let y = 0; y < height; y += 30) line(ctx, [{x: 0, y}, {x: width, y}], colors.grid, 1);
+        line(ctx, [{x: 0, y: height * .61}, {x: width, y: height * .61}], colors.road, 2);
+        line(ctx, [{x: 0, y: height * .86}, {x: width, y: height * .86}], colors.road, 2);
+        line(ctx, [{x: 0, y: height * .735}, {x: width, y: height * .735}], colors.lane, 1, [12, 14]);
+        const upper = [];
+        for (let i = 0; i <= 24; i += 1) {
+          const p = mergeReference(i / 24, width, height);
+          upper.push({x: p.x, y: p.y - height * .11});
+        }
+        line(ctx, upper, colors.road, 2);
+      }
+
+      function drawMerge(ctx, width, height, policy, t) {
+        drawRoadMerge(ctx, width, height);
+        const reference = [];
+        const actual = [];
+        for (let i = 0; i <= 40; i += 1) {
+          const s = i / 40;
+          reference.push(mergeReference(s, width, height));
+          actual.push(policy === "replay" ? mergeReference(s, width, height) : mergeTangent(s, width, height, policy === "idm"));
+        }
+        line(ctx, reference, colors.logged, 2, [6, 6]);
+        line(ctx, actual.slice(0, Math.max(2, Math.floor(t * 40) + 1)), colors.world, 3);
+        const pointAt = (value) => policy === "replay"
+          ? mergeReference(value, width, height)
+          : mergeTangent(value, width, height, policy === "idm");
+        const actor = pointAt(t);
+        const before = pointAt(Math.max(0, t - .015));
+        const after = pointAt(Math.min(1, t + .015));
+        const ego = {x: width * (.35 + .44 * t), y: height * .735};
+        car(ctx, ego.x, ego.y, 0, colors.ego, "ego / logged");
+        car(ctx, actor.x, actor.y, Math.atan2(after.y - before.y, after.x - before.x), colors.world, "world / sim");
+        label(ctx, "logged future", width - 12, height * .17, colors.logged, "right");
+        label(ctx, policy === "replay" ? "absolute override" : policy === "cv" ? "straight tangent" : "zero yaw + speed response", 12, height - 12, colors.ink);
+      }
+
+      function drawRoadFollowing(ctx, width, height) {
+        ctx.fillStyle = colors.bg;
+        ctx.fillRect(0, 0, width, height);
+        for (let x = 0; x < width; x += 30) line(ctx, [{x, y: 0}, {x, y: height}], colors.grid, 1);
+        for (let y = 0; y < height; y += 30) line(ctx, [{x: 0, y}, {x: width, y}], colors.grid, 1);
+        line(ctx, [{x: 0, y: height * .31}, {x: width, y: height * .31}], colors.road, 2);
+        line(ctx, [{x: 0, y: height * .76}, {x: width, y: height * .76}], colors.road, 2);
+        line(ctx, [{x: 0, y: height * .535}, {x: width, y: height * .535}], colors.lane, 1, [12, 14]);
+      }
+
+      function followingPositions(policy, t, width, height) {
+        const scale = width - 80;
+        const egoX = 70 + scale * (.29 + .40 * t);
+        let worldProgress = .08 + .40 * t;
+        if (policy === "cv") worldProgress = .08 + .58 * t;
+        if (policy === "idm") worldProgress = .08 + .56 * t - .17 * t * t;
+        return {
+          ego: {x: egoX, y: height * .535},
+          world: {x: 70 + scale * worldProgress, y: height * .535}
+        };
+      }
+
+      function drawFollowing(ctx, width, height, policy, t) {
+        drawRoadFollowing(ctx, width, height);
+        const ref = [];
+        const actual = [];
+        for (let i = 0; i <= 40; i += 1) {
+          const s = i / 40;
+          ref.push(followingPositions("replay", s, width, height).world);
+          actual.push(followingPositions(policy, s, width, height).world);
+        }
+        line(ctx, ref, colors.logged, 2, [6, 6]);
+        line(ctx, actual.slice(0, Math.max(2, Math.floor(t * 40) + 1)), colors.world, 3);
+        const positions = followingPositions(policy, t, width, height);
+        car(ctx, positions.ego.x, positions.ego.y, 0, colors.ego, "leader / ego");
+        car(ctx, positions.world.x, positions.world.y, 0, colors.world, "follower / sim");
+        const gap = Math.max(0, positions.ego.x - positions.world.x - 24);
+        line(ctx, [
+          {x: positions.world.x + 13, y: height * .69},
+          {x: positions.ego.x - 13, y: height * .69}
+        ], colors.now, 1, [3, 4]);
+        label(ctx, `gap ${Math.round(gap)} px`, (positions.ego.x + positions.world.x) / 2, height * .77, colors.now, "center");
+        label(ctx, policy === "replay" ? "recorded gap" : policy === "cv" ? "no leader response" : "longitudinal deceleration", 12, height - 12, colors.ink);
+      }
+
+      function draw(canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const ratio = Math.min(window.devicePixelRatio || 1, 2);
+        const width = Math.max(280, rect.width);
+        const height = 235;
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+        const ctx = canvas.getContext("2d");
+        ctx.scale(ratio, ratio);
+        const t = Number(timeInput.value) / 100;
+        const policyName = {
+          replay: "log replay",
+          cv: "constant velocity",
+          idm: "IDM"
+        }[canvas.dataset.policy];
+        const scenarioDescription = scenario === "merge"
+          ? "merge geometry with a logged reference, exogenous ego, and simulated world-agent path"
+          : "following response with a logged reference, exogenous ego leader, simulated follower, and current gap";
+        canvas.setAttribute(
+          "aria-label",
+          `Schematic ${policyName} ${scenarioDescription} at ${timeInput.value} percent rollout time`
+        );
+        if (scenario === "merge") drawMerge(ctx, width, height, canvas.dataset.policy, t);
+        else drawFollowing(ctx, width, height, canvas.dataset.policy, t);
+      }
+
+      function drawAll() {
+        timeOutput.value = `${timeInput.value}%`;
+        canvases.forEach(draw);
+      }
+
+      scenarioButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          scenario = button.dataset.scenario;
+          scenarioButtons.forEach((candidate) => {
+            candidate.setAttribute("aria-pressed", String(candidate === button));
+          });
+          drawAll();
+        });
+      });
+      timeInput.addEventListener("input", drawAll);
+
+      let resizeFrame = 0;
+      window.addEventListener("resize", () => {
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(drawAll);
+      });
+
+      document.querySelectorAll(".copy-button").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const target = document.querySelector(`#${button.dataset.copy}`);
+          if (!target || !navigator.clipboard) return;
+          const original = button.textContent;
+          try {
+            await navigator.clipboard.writeText(target.innerText);
+            button.textContent = "Copied";
+            window.setTimeout(() => { button.textContent = original; }, 1400);
+          } catch {
+            button.textContent = "Select text";
+          }
+        });
+      });
+
+      drawAll();
+    })();
+  </script>
 </body>
 </html>
