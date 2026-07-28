@@ -37,14 +37,32 @@
 - Preserve the contract-first architecture: downstream components consume the
   `Scenario`, `Rollout`, `SimulatorPolicy`, and `Metric` contracts rather than depending
   directly on WOMD or Waymax representations.
+- For each milestone, define hypotheses and acceptance gates before implementation,
+  verify them with targeted and end-to-end tests, obtain an adversarial review for
+  leakage/semantic errors/overclaiming, and update the README, presentation, roadmap,
+  claim ledger, and limitations before marking it complete.
+- From M3 onward, retain synthetic scenarios as analytic oracles but require a real-WOMD
+  acceptance path for every core evaluation feature. Use Waymax repeatedly as a
+  data/execution/reference adapter while keeping it behind the project contracts.
+
+## Interview-material safety
+
+- Store raw job descriptions, résumés, recruiter notes, interview scheduling details,
+  self-assessments, and other personal inputs under `private/interview/`.
+- Treat everything under `private/interview/` as local-only and sensitive. Never stage,
+  commit, push, upload, deploy, or quote personal details into public project artifacts.
+- Put only sanitized, project-relevant derivatives—competency matrices, revised
+  milestones, learning plans, and claim-to-evidence ledgers—under `docs/interview/`.
+- Before committing interview documentation, verify that it contains no contact details,
+  private correspondence, scheduling information, or other personally identifying data.
 
 ## Rollout semantics
 
 - `Scenario.metadata["current_index"]` is the last observed/current frame. The rollout
   engine copies history through that frame and simulates subsequent transitions. The
-  synthetic source defaults to index 0; W1 adapters must set the real history boundary.
+  synthetic source defaults to index 0; M3 adapters must set the real history boundary.
 - Ego is exogenous: M2 copies the logged ego trajectory while policies simulate world
-  agents. M5 may replace the ego trajectory through a typed perturbation/controller,
+  agents. M6 may replace the ego trajectory through a typed perturbation/controller,
   while world policies continue to observe the current ego state.
 - The rollout engine owns timestamps, validity masks, lifecycle births/re-entries, and
   feasibility integration. Policies synchronously return typed controls or explicit

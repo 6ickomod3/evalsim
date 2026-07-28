@@ -14,7 +14,8 @@ simulation quality into a single leaderboard number.
 **New here? Read in this order:** this README → the interactive technical presentation
 [`index.html`](index.html) → the design doc
 [`docs/plans/2026-07-27-evalsim-design.md`](docs/plans/2026-07-27-evalsim-design.md) →
-the [implementation plan](docs/plans/2026-07-27-evalsim-implementation-plan.md).
+the canonical
+[Waymo-aligned roadmap](docs/plans/2026-07-28-waymo-aligned-roadmap.md).
 
 > 📌 **This README is kept up to date as work progresses.** The
 > [Progress](#progress) table and [Completed work](#completed-work) changelog below always
@@ -23,31 +24,32 @@ the [implementation plan](docs/plans/2026-07-27-evalsim-implementation-plan.md).
 ## Design in one paragraph
 
 The platform is built **contract-first** (ports-and-adapters). The validated `Scenario`
-contract currently has a synthetic producer that runs locally (Mac/CPU); W1 will add a
-second Waymax/WOMD producer in a bounded cloud stage. Implemented downstream components
-consume **only** the contract rather than either producer's internal representation, so
-the local evaluation stack and future real-data ingestion remain separated.
+contract currently has a synthetic producer that runs locally. M3 now adds a second
+WOMD producer through Waymax/JAX on the local Mac/CPU, and M4 makes Waymax a recurring
+reference rollout and semantic-parity path. Downstream components continue to consume
+**only** project contracts. Synthetic scenes remain analytic oracles while every core
+feature from M3 onward also gets a real-WOMD acceptance path.
 
 ## Progress
 
-Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ runs on Mac/CPU · ☁️ runs on Cloud/GPU
+Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · ☁️ optional cloud/accelerator
 
 | # | Milestone | Status | Where |
 |---|-----------|:------:|:-----:|
 | M0 | Repo skeleton + data contracts | ✅ | 🖥️ |
 | M1 | Synthetic scenario source + visualization | ✅ | 🖥️ |
 | M2 | Simulator adapters + rollout engine | ✅ | 🖥️ |
-| M3 | Metric registry + core metrics | ⬜ | 🖥️ |
-| M4 | Scenario slicing + statistics *(MVP)* | ⬜ | 🖥️ |
-| M5 | Counterfactual ego-perturbation + reactivity | ⬜ | 🖥️ |
-| M6 | Metric stress-test suite | ⬜ | 🖥️ |
-| S1 | Learned real-vs-sim discriminator *(Strong)* | ⬜ | 🖥️ |
-| M7 | Config, caching, reproducibility | ⬜ | 🖥️ |
-| M8 | Report, visualizations, tests | ⬜ | 🖥️ |
-| W1 | WaymaxSource — WOMD ingestion | ⬜ | ☁️ |
-| W2 | Rollout dynamics cross-check *(optional)* | ⬜ | ☁️ |
+| M3 | Local WOMD → Waymax/JAX → EvalSim vertical slice | ⬜ | 🖥️ |
+| M4 | Deterministic WOMD cohort + Waymax parity | ⬜ | 🖥️ |
+| M5 | Real-WOMD metrics + statistical scorecards | ⬜ | 🖥️ |
+| M6 | Counterfactual closed-loop reactivity | ⬜ | 🖥️ |
+| M7 | Evaluator red-team + metric governance | ⬜ | 🖥️ |
+| M8 | JAX/Flax learned realism discriminator | ⬜ | 🖥️/☁️ |
+| M9 | Semantic-video and real camera/VLM bridge | ⬜ | 🖥️/☁️ |
+| M10 | Scalable, resumable evaluation pipeline | ⬜ | 🖥️/☁️ |
+| M11 | Decision package + staff-caliber communication | ⬜ | 🖥️ |
 
-**Tests:** 134 passing · **Last updated:** 2026-07-28 (M2)
+**Tests:** 134 passing · **Last updated:** 2026-07-28 (roadmap revised; M2 remains the implementation boundary)
 
 ## Completed work
 
@@ -117,7 +119,7 @@ Experimental scope is intentionally honest: with logged ego control, the current
 synthetic set gives simulated world-agent curvature mainly in the merge family; the turn
 family's 90° actor is the logged ego. M2 proves CV-vs-replay separation on merge and
 IDM-vs-CV separation on following, but broader nonlinear world-agent coverage should be
-added (with a synthetic source-version bump) before M3 scorecards claim five-family
+added (with a synthetic source-version bump) before M5 scorecards claim five-family
 differentiation.
 
 ## Setup
@@ -154,7 +156,7 @@ figure.savefig("outputs/synthetic_example.png", dpi=150)
 
 ## Run the M2 baselines
 
-Policies simulate non-ego/world agents; ego follows its logged trajectory. A future W1
+Policies simulate non-ego/world agents; ego follows its logged trajectory. An M3
 scenario must set `metadata["current_index"]` to its last observed history frame.
 
 ```python
@@ -178,7 +180,8 @@ TFRecords and converted Parquet files are too large for source control and are c
 by the repository's `.gitignore` rules. Do not commit them, push them to GitHub, or add
 them with Git LFS.
 
-To run the WOMD/Waymax stage, request access to and download **Motion Dataset v1.3.1**
+To run M3 and later Waymo-backed milestones, request access to and download
+**Motion Dataset v1.3.1**
 from the [official Waymo Open Dataset download page](https://waymo.com/open/download/).
 Use the uncompressed TFExample validation shards and place them under:
 
@@ -222,8 +225,8 @@ data/
             validation_tfexample.tfrecord-00009-of-00150
 ```
 
-At least one shard is sufficient for a smoke test; use all 10 shards to reproduce the
-project's reference WOMD subset. Dataset access and use remain subject to the
+One shard is sufficient for the M3 smoke test; M4 uses all 10 fixed shards to construct
+the project's deterministic reference cohort. Dataset access and use remain subject to the
 [Waymo Open Dataset terms](https://waymo.com/open/terms/). Small manifests and checksums
 may be committed for reproducibility, but the dataset files themselves must remain
 local.
@@ -233,19 +236,20 @@ local.
 ```
 evalsim/
   contracts/    # Seam A/B: Scenario, Rollout, SimulatorPolicy, Metric, RunManifest
-  sources/      # scenario producers (synthetic — M1; Waymax/WOMD — W1)
-  simulators/   # log-replay, constant-velocity, IDM (M2), corruptions (M6)
-  rollout/      # closed-loop rollout engine (M2) + ego perturbations (M5)
-  metrics/      # metric registry + implementations (M3)
-  slices/       # scenario-slice registry (M4)
-  stats/        # scenario-cluster bootstrap + aggregation (M4)
-  perturb/      # counterfactual ego-perturbation suite (M5)
-  stress/       # metric stress-test corruptions + detection matrix (M6)
-  report/       # scorecards, visualizations, report (M8)
-  config/       # YAML run config + CLI (M7)
+  sources/      # scenario producers (synthetic — M1; Waymax/WOMD — M3)
+  simulators/   # EvalSim policies (M2) + Waymax reference adapters (M4)
+  rollout/      # rollout engine (M2) + counterfactual ego control (M6)
+  metrics/      # metric registry + implementations (M5)
+  slices/       # real-WOMD scenario slicing (M5)
+  stats/        # paired scenario statistics and aggregation (M5)
+  perturb/      # counterfactual ego interventions (M6)
+  stress/       # evaluator corruptions, calibration, and governance (M7)
+  report/       # scorecards and decision artifacts (M5/M11)
+  config/       # reproducible CLI, caching, and resume (M10)
   viz.py        # static scenario visualization (M1)
 tests/          # contracts, sources, policies, rollout engine, dynamics, and visualization
-docs/plans/     # design doc + implementation plan
+docs/plans/     # historical M0–M2 design + canonical Waymo-aligned roadmap
+docs/interview/ # sanitized role matrix, claim ledger, and study plan
 index.html      # interactive, evidence-led technical presentation
 public/og.png   # social preview artwork (not an experiment artifact)
 scripts/        # dependency-free presentation build and structural checks
@@ -253,7 +257,10 @@ scripts/        # dependency-free presentation build and structural checks
 
 ## Résumé framing
 
-The current implemented stack is **Python · NumPy · PyArrow · Matplotlib**. The planned
-**Waymo Open Motion Dataset · Waymax · JAX** framing becomes an implemented claim only
-after W1. Every claim in the résumé bullets maps to a milestone above; see the design
-doc's "Résumé mapping" section for the full traceability.
+The current implemented stack is **Python · NumPy · PyArrow · Matplotlib**. Downloaded
+data does not yet make **Waymo Open Motion Dataset · Waymax · JAX** an implemented
+claim. M3 makes the integration minimally true; M4 makes the Waymax/JAX usage
+substantive. Metrics, slices, confidence intervals, counterfactuals, stress tests,
+learned evaluators, scale, and video/VLM work each remain unavailable as claims until
+their evidence gate passes. See the
+[claim-to-evidence ledger](docs/interview/claim-evidence-ledger.md).

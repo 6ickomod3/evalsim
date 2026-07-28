@@ -1188,7 +1188,7 @@
           <span class="section-index">01 / Evaluation tension</span>
           <h2 id="why-title">Realism is not a scalar.</h2>
         </div>
-        <p>The project starts with deliberately limited policies so their different failure modes remain legible. These are evaluation hypotheses that M3 will turn into measured dimensions.</p>
+        <p>The project starts with deliberately limited policies so their different failure modes remain legible. M3 now brings those hypotheses onto a real WOMD and Waymax/JAX substrate before M5 turns them into measured dimensions.</p>
       </div>
       <div class="tension-grid">
         <article class="tension-card">
@@ -1282,7 +1282,7 @@
             </dl>
           </article>
         </div>
-        <p class="schematic-note">The trajectories above are explanatory schematics derived from implemented policy semantics—not measured M3 metric results or a ranking of policy quality.</p>
+        <p class="schematic-note">The trajectories above are explanatory schematics derived from implemented policy semantics—not measured M5 metric results or a ranking of policy quality.</p>
 
         <div class="comparison-wrap">
           <table class="comparison">
@@ -1353,7 +1353,7 @@
       <div class="contract-callout">
         <article class="callout">
           <h3>One contract, two kinds of actor control</h3>
-          <p>In M2, the ego remains exogenous and follows its logged trajectory. Policies simulate world agents from the current state. M5 can replace ego motion through a typed perturbation without changing the world-policy seam.</p>
+          <p>In M2, the ego remains exogenous and follows its logged trajectory. Policies simulate world agents from the current state. M6 can replace ego motion through a typed perturbation without changing the world-policy seam.</p>
           <div class="actor-legend" aria-label="Trajectory legend">
             <span><i class="legend-line logged" aria-hidden="true"></i> logged reference</span>
             <span><i class="legend-line ego" aria-hidden="true"></i> exogenous ego</span>
@@ -1414,12 +1414,12 @@
           <h2 id="limits-title">What we do not know—yet.</h2>
         </div>
         <ul class="trust-list">
-          <li><strong>No M3 scorecards.</strong> Collision, off-road, kinematic realism, and aggregate policy comparisons have not been implemented or measured.</li>
-          <li><strong>No M5 counterfactual result.</strong> M2 keeps ego on its logged trajectory; ego perturbation and reactivity metrics remain planned.</li>
-          <li><strong>No W1 real-data claim.</strong> WOMD ingestion and Waymax/JAX cloud validation are planned, not represented as completed work.</li>
+          <li><strong>No M3 real-data path.</strong> Local WOMD ingestion and substantive Waymax/JAX execution are the next milestone, not completed work.</li>
+          <li><strong>No M5 scorecards.</strong> Collision, off-road, kinematic realism, uncertainty, and policy comparisons have not been implemented or measured.</li>
+          <li><strong>No M6 counterfactual result.</strong> M2 keeps ego on its logged trajectory; ego perturbation and reactivity metrics remain planned.</li>
           <li><strong>Limited nonlinear world-agent coverage.</strong> Current simulated curvature is mainly in merge; the left-turn family’s turning actor is the logged ego.</li>
         </ul>
-        <p class="next-question"><span>Next falsifiable question / M3</span>Can independent kinematic, interaction, and map-adherence metrics expose CV’s geometric drift and IDM’s longitudinal response without hiding those differences inside a composite score? Counterfactual nonreactivity remains an M5 question.</p>
+        <p class="next-question"><span>Next falsifiable question / M3</span>Can one real WOMD scenario move through Waymax/JAX into the EvalSim contract and round-trip locally without losing its time boundary, agent validity, identity, or map frame?</p>
       </div>
     </section>
 
@@ -1429,20 +1429,20 @@
           <span class="section-index">05 / Architecture</span>
           <h2 id="architecture-title">Built solid. Planned dashed.</h2>
         </div>
-        <p>Downstream layers consume stable contracts rather than WOMD or Waymax internals, keeping local development and future cloud ingestion separated.</p>
+        <p>Downstream layers consume stable contracts rather than WOMD or Waymax internals. Synthetic scenes remain analytic oracles; Waymax becomes a recurring real-data, rollout, and parity reference.</p>
       </div>
 
       <div class="architecture" aria-label="EvalSim architecture from source to reports">
         <article class="arch-node done"><span class="arch-status">Implemented · M1</span><h3>Scenario source</h3><p>Five deterministic synthetic families into one validated contract.</p></article>
         <article class="arch-node done"><span class="arch-status">Implemented · M0</span><h3>Contracts</h3><p>Scenario, rollout, simulator, metric, serialization, and manifest seams.</p></article>
         <article class="arch-node done"><span class="arch-status">Implemented · M2</span><h3>Simulation</h3><p>Replay, CV, IDM, typed policy steps, engine dynamics, and provenance.</p></article>
-        <article class="arch-node next"><span class="arch-status">Next · M3</span><h3>Metrics</h3><p>Kinematic, interaction, and map-adherence dimensions with no composite score.</p></article>
-        <article class="arch-node planned"><span class="arch-status">Planned · M4–M6</span><h3>Evaluation</h3><p>Slices, scenario bootstrap, counterfactual response, and metric stress tests.</p></article>
-        <article class="arch-node planned"><span class="arch-status">Planned · M8</span><h3>Reports</h3><p>Scorecards, curated failures, comparisons, and reproducible benchmark views.</p></article>
+        <article class="arch-node next"><span class="arch-status">Next · M3</span><h3>Waymo substrate</h3><p>Local WOMD decode, Waymax/JAX adapter, schema mapping, and contract acceptance.</p></article>
+        <article class="arch-node planned"><span class="arch-status">Planned · M4–M9</span><h3>Evaluation</h3><p>Waymax parity, metrics, causal response, evaluator red-team, learned and multimodal evaluators.</p></article>
+        <article class="arch-node planned"><span class="arch-status">Planned · M10–M11</span><h3>Decision system</h3><p>Resumable execution, measured scale, release reasoning, and interview-ready evidence.</p></article>
       </div>
       <div class="producer-note" aria-label="Source implementation status">
         <span class="implemented">Synthetic producer · implemented locally</span>
-        <span class="planned">WOMD / Waymax producer · planned W1 cloud stage</span>
+        <span class="planned">WOMD / Waymax / JAX path · next M3 on local CPU</span>
       </div>
     </section>
 
@@ -1465,20 +1465,20 @@
           </dl>
         </article>
         <article class="roadmap-column next">
-          <h3>Next <span>evaluation MVP</span></h3>
+          <h3>Next <span>real Waymo foundation</span></h3>
           <dl class="roadmap-list">
-            <div class="roadmap-item"><dt>M3</dt><dd><strong>Metric registry</strong><span>Kinematics, interaction, map adherence</span></dd></div>
-            <div class="roadmap-item"><dt>M4</dt><dd><strong>Slices + statistics</strong><span>Scorecards, paired diffs, scenario bootstrap</span></dd></div>
-            <div class="roadmap-item"><dt>M5</dt><dd><strong>Ego perturbation</strong><span>Counterfactual braking, acceleration, timing, reactivity</span></dd></div>
+            <div class="roadmap-item"><dt>M3</dt><dd><strong>Local Waymo vertical slice</strong><span>WOMD → Waymax/JAX → EvalSim contract</span></dd></div>
+            <div class="roadmap-item"><dt>M4</dt><dd><strong>Cohort + parity</strong><span>Fixed ten shards, Waymax rollout and semantic cross-checks</span></dd></div>
+            <div class="roadmap-item"><dt>M5</dt><dd><strong>Metrics + statistics</strong><span>Real-WOMD scorecards, paired effects, scenario bootstrap</span></dd></div>
           </dl>
         </article>
         <article class="roadmap-column future">
-          <h3>Planned <span>extensions</span></h3>
+          <h3>Planned <span>role evidence</span></h3>
           <dl class="roadmap-list">
-            <div class="roadmap-item"><dt>M6</dt><dd><strong>Metric stress tests</strong><span>Mode collapse, dispersion, infeasibility</span></dd></div>
-            <div class="roadmap-item"><dt>S1</dt><dd><strong>Learned discriminator</strong><span>Leakage-safe real-versus-sim comparison</span></dd></div>
-            <div class="roadmap-item"><dt>W1</dt><dd><strong>WOMD ingestion</strong><span>Waymax adapter and bounded cloud validation</span></dd></div>
-            <div class="roadmap-item"><dt>M7–8</dt><dd><strong>Reproduction + report</strong><span>Config, caching, benchmark, final visual evidence</span></dd></div>
+            <div class="roadmap-item"><dt>M6–7</dt><dd><strong>Causal + adversarial evaluation</strong><span>Counterfactual reactivity, severity curves, metric governance</span></dd></div>
+            <div class="roadmap-item"><dt>M8</dt><dd><strong>Learned discriminator</strong><span>Flax, leakage audits, calibration, generator holdout</span></dd></div>
+            <div class="roadmap-item"><dt>M9</dt><dd><strong>Video / VLM bridge</strong><span>Semantic BEV first; real camera evidence before camera claims</span></dd></div>
+            <div class="roadmap-item"><dt>M10–11</dt><dd><strong>Scale + decisions</strong><span>Resume/retry, measured cost, governance, communication</span></dd></div>
           </dl>
         </article>
       </div>
@@ -1487,7 +1487,7 @@
         <article class="reproduce-copy">
           <h3>Run the implemented core.</h3>
           <p>The current M0–M2 path runs locally through the repository’s <code>uv</code>-managed environment.</p>
-          <p class="data-note">WOMD data is intentionally excluded from Git. W1 users download the TFRecord shards separately into the documented local-only path.</p>
+          <p class="data-note">WOMD data is intentionally excluded from Git. M3 users download TFRecord shards separately into the documented local-only path.</p>
         </article>
         <div class="code-card">
           <div class="code-head">

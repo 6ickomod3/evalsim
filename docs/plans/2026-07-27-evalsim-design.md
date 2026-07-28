@@ -1,8 +1,14 @@
 # EvalSim — Design Document
 
 **Date:** 2026-07-27
-**Status:** Validated — ready for implementation
+**Status:** Historical baseline for M0–M2
 **Owner:** jdai
+
+> The contract-first architecture and completed M0–M2 decisions remain valid. The
+> hardware assumptions, Waymax scope, testing strategy for real fixtures, and milestone
+> sequence from M3 onward are superseded by the
+> [Waymo-aligned roadmap](2026-07-28-waymo-aligned-roadmap.md). In particular, WOMD,
+> Waymax, and JAX now begin in M3 on the local CPU rather than a late cloud-only stage.
 
 ---
 

@@ -4,6 +4,11 @@
 **Companion to:** `2026-07-27-evalsim-design.md`
 **Sequence:** M0 → M1 → M2 → M3 → M4 → M5 → M6 → S1 → M7 → M8 → W1 → W2
 
+> **Historical plan:** M0–M2 were implemented from this document. Do not execute its
+> unfinished milestones. M3 onward is superseded by the
+> [Waymo-aligned roadmap](2026-07-28-waymo-aligned-roadmap.md), which moves real
+> WOMD/Waymax/JAX work to M3 and replaces the remaining sequence.
+
 Legend — **Runs:** `Mac` (local, CPU) or `Cloud` (Google Colab/Vertex/GCE GPU).
 Stop-lines: **MVP** after M4 · **Strong** after M6+S1 · **Header-true** after W1.
 
