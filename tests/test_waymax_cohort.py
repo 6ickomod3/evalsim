@@ -38,6 +38,12 @@ from evalsim.sources.waymax_cohort import (
 
 _SHARD_DIGEST = "a" * 64
 _CONFIG_FINGERPRINT = "b" * 64
+_SELECTOR_V2_CONFIG_FINGERPRINT = (
+    "c14a247294726ea84ec328cf7acca134208f9192088099e89eeb9bf0006801ef"
+)
+_SELECTOR_V3_CONFIG_FINGERPRINT = (
+    "0d91228261c9da99cd88f3c069e0d6db9a905c144f6b2d2ad075709002c68b93"
+)
 
 
 def _canonical_text(value) -> str:
@@ -433,17 +439,68 @@ def test_source_float_identity_int32_boundaries_are_supported(value) -> None:
 @pytest.mark.parametrize(
     ("name", "index"),
     (
-        ("state/is_sdc", 1),
         ("state/all/valid", (1, 10)),
         ("roadgraph_samples/valid", (1, 0)),
     ),
 )
-def test_source_mask_encodings_must_be_binary(name, index) -> None:
+@pytest.mark.parametrize("value", (-1, 2))
+def test_source_mask_encodings_must_be_binary(name, index, value) -> None:
     audit = _audit()
-    audit[name][index] = 2
+    audit[name][index] = value
     with pytest.raises(CohortInvariantError) as error:
         source_rejection_code(audit)
     assert error.value.code == "audit_nonbinary_encoding"
+
+
+@pytest.mark.parametrize("value", (-2, 2))
+def test_source_sdc_encoding_rejects_values_outside_ternary_domain(
+    value,
+) -> None:
+    audit = _audit()
+    audit["state/is_sdc"][2] = value
+
+    with pytest.raises(CohortInvariantError) as error:
+        source_rejection_code(audit)
+    assert error.value.code == "audit_is_sdc_encoding"
+
+
+def test_source_sdc_minus_one_is_fatal_on_a_retained_slot() -> None:
+    audit = _audit()
+    audit["state/is_sdc"][1] = -1
+
+    with pytest.raises(CohortInvariantError) as error:
+        source_rejection_code(audit)
+    assert error.value.code == "active_sdc_padding"
+
+
+def test_source_sdc_one_is_fatal_on_a_never_valid_slot() -> None:
+    audit = _audit()
+    audit["state/is_sdc"][2] = 1
+
+    with pytest.raises(CohortInvariantError) as error:
+        source_rejection_code(audit)
+    assert error.value.code == "inactive_sdc_marker"
+
+
+@pytest.mark.parametrize("value", (0, -1))
+def test_source_sdc_never_valid_zero_or_minus_one_is_false_without_mutation(
+    value,
+) -> None:
+    audit = _audit()
+    audit["state/is_sdc"][2] = value
+    before = _copy_audit(audit)
+
+    assert source_rejection_code(audit) is None
+    for name in audit:
+        np.testing.assert_array_equal(audit[name], before[name])
+
+
+def test_source_sdc_semantic_true_is_exactly_raw_one() -> None:
+    audit = _audit()
+    audit["state/is_sdc"][0] = 0
+    audit["state/is_sdc"][1] = 1
+
+    assert source_rejection_code(audit) is None
 
 
 @pytest.mark.parametrize(
@@ -536,28 +593,46 @@ def test_source_config_shapes_require_exact_128_and_30000(mutate) -> None:
         source_rejection_code(audit)
 
 
-def test_ranking_message_uses_zero_delimiters_and_uint64_big_endian() -> None:
-    message = ranking_message(
-        M4_COHORT_DOMAIN,
-        "00003",
-        256,
-        "invented-α",
-    )
-    assert message == (
-        M4_COHORT_DOMAIN.encode("ascii")
-        + b"\x00"
+def test_ranking_messages_and_v2_vectors_are_unchanged_in_v3() -> None:
+    vectors = {
+        M4_COHORT_DOMAIN: (
+            "edaac9ea4b0e5e50b630f38dd833004169e0141b7714b626241d796f1d112a57"
+        ),
+        M4_REDISTRIBUTION_DOMAIN: (
+            "6bd8f51d12c07ac2ee0c6700c85f000c5a680596835ae3362beef1e302e8a31b"
+        ),
+        M4_IDM_SUBSET_DOMAIN: (
+            "7c71e29d856b308e7040b911b1cbe4bbcfb34ab3c9da8579c154a98b89ae3dc9"
+        ),
+        M4_VMAP_DOMAIN: (
+            "d43a1a9b9eb5187c5fa985cac70fa2cd86ce9625456fadaaee6fc1121761d8d4"
+        ),
+    }
+    common_suffix = (
+        b"\x00"
         + b"00003"
         + b"\x00"
         + b"\x00\x00\x00\x00\x00\x00\x01\x00"
         + b"\x00"
         + "invented-α".encode("utf-8")
     )
-    assert rank_record(
-        M4_COHORT_DOMAIN,
-        "00003",
-        256,
-        "invented-α",
-    ) == hashlib.sha256(message).hexdigest()
+
+    assert tuple(vectors) == (
+        "evalsim-m4-cohort-v1",
+        "evalsim-m4-redistribution-v1",
+        "evalsim-m4-idm-subset-v1",
+        "evalsim-m4-vmap-v1",
+    )
+    for domain, digest in vectors.items():
+        message = ranking_message(domain, "00003", 256, "invented-α")
+        assert message == domain.encode("ascii") + common_suffix
+        assert rank_record(
+            domain,
+            "00003",
+            256,
+            "invented-α",
+        ) == digest
+        assert hashlib.sha256(message).hexdigest() == digest
 
 
 @pytest.mark.parametrize(
@@ -910,10 +985,24 @@ def test_manifest_rejects_noncanonical_schema_and_duplicate_json_keys() -> None:
         '{"events":[],"events":[],"schema_version":"1",'
         '"selection":{},"selector_config_fingerprint":"'
         + M4_SELECTOR_CONFIG_FINGERPRINT
-        + '","selector_version":"2","shard_counts":[]}'
+        + f'","selector_version":"{M4_SELECTOR_VERSION}","shard_counts":[]}}'
     )
     with pytest.raises(CohortInvariantError, match="duplicate JSON object key"):
         WaymaxCohortManifest.from_json(duplicate)
+
+
+def test_manifest_rejects_v2_selector_identity() -> None:
+    events, counts = _events_with_counts(dict(M4_INITIAL_QUOTAS))
+    manifest = WaymaxCohortManifest.build(events=events, shard_counts=counts)
+    payload = manifest.to_dict()
+    payload["selector_config_fingerprint"] = _SELECTOR_V2_CONFIG_FINGERPRINT
+    payload["selector_version"] = "2"
+    for event in payload["events"]:
+        event["selector_version"] = "2"
+
+    with pytest.raises(CohortInvariantError) as error:
+        WaymaxCohortManifest.from_json(_canonical_text(payload))
+    assert error.value.code == "scan_event_version_drift"
 
 
 def test_manifest_requires_exact_ordinal_sequence_and_unique_identity() -> None:
@@ -942,8 +1031,10 @@ def test_manifest_requires_exact_ordinal_sequence_and_unique_identity() -> None:
 def test_selector_payload_fingerprint_freezes_every_rule_and_is_defensive() -> None:
     payload = selector_config_payload()
     assert selector_config_fingerprint() == M4_SELECTOR_CONFIG_FINGERPRINT
-    assert M4_SELECTOR_VERSION == "2"
-    assert payload["selector_version"] == "2"
+    assert M4_SELECTOR_CONFIG_FINGERPRINT == _SELECTOR_V3_CONFIG_FINGERPRINT
+    assert M4_SELECTOR_CONFIG_FINGERPRINT != _SELECTOR_V2_CONFIG_FINGERPRINT
+    assert M4_SELECTOR_VERSION == "3"
+    assert payload["selector_version"] == "3"
     assert payload["source_predicate"]["audit_boundary"] == (
         "after_pinned_waymax_tensorflow_preprocess_"
         "before_jax_waymax_factory"
@@ -986,11 +1077,22 @@ def test_selector_payload_fingerprint_freezes_every_rule_and_is_defensive() -> N
         ],
     }
     assert normalization["state/type"] == normalization["state/id"]
+    assert normalization["state/is_sdc"] == {
+        "semantic_dtype": "bool",
+        "gates": [
+            "int64_exactly_minus_one_zero_or_one",
+            "minus_one_only_on_never_valid_object_slots",
+            "one_only_on_retained_object_slots",
+            "semantic_true_exactly_equals_one",
+        ],
+        "retained_object_source": (
+            "strict_binary_state/all/valid_any_frames_0_through_90"
+        ),
+    }
     binary_normalization = {
         "semantic_dtype": "bool",
         "gates": ["binary_int64_exactly_zero_or_one"],
     }
-    assert normalization["state/is_sdc"] == binary_normalization
     assert normalization["state/all/valid"] == binary_normalization
     assert normalization["roadgraph_samples/valid"] == binary_normalization
     assert normalization["state/all/timestamp_micros"] == {

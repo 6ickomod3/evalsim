@@ -46,7 +46,7 @@ def _invented_pre_jax_example() -> dict[str, np.ndarray]:
         ),
         "state/type": np.asarray([1.0, 4.0, -1.0], dtype=np.float32),
         "state/tracks_to_predict": np.asarray([1, 0, -1], dtype=np.int64),
-        "state/is_sdc": np.asarray([1, 0, 0], dtype=np.int64),
+        "state/is_sdc": np.asarray([1, 0, -1], dtype=np.int64),
         "state/objects_of_interest": np.asarray([0, 1, 0], dtype=np.int64),
         "state/all/x": float_values.copy(),
         "state/all/y": (float_values + np.float32(0.25)).astype(np.float32),
@@ -172,6 +172,9 @@ def test_pinned_waymax_factory_preserves_pre_jax_discrete_semantics() -> None:
         np.asarray(metadata.is_sdc),
         raw["state/is_sdc"] == 1,
     )
+    assert not raw["state/all/valid"][2].any()
+    assert raw["state/is_sdc"][2] == -1
+    assert not np.asarray(metadata.is_sdc)[2]
     np.testing.assert_array_equal(
         np.asarray(metadata.objects_of_interest),
         raw["state/objects_of_interest"] == 1,
@@ -255,6 +258,10 @@ def test_pinned_waymax_factory_preserves_pre_jax_discrete_semantics() -> None:
     assert state.sdc_paths is None
 
     # The pinned factory must treat the pre-JAX mapping as read-only input.
+    np.testing.assert_array_equal(
+        raw["state/is_sdc"],
+        np.asarray([1, 0, -1], dtype=np.int64),
+    )
     assert tuple(raw) == tuple(snapshot)
     for key, expected in snapshot.items():
         assert raw[key].dtype == expected.dtype

@@ -1,8 +1,8 @@
 # M4 implementation plan — deterministic WOMD cohort and Waymax parity
 
 **Date:** 2026-07-28
-**Status:** ⚠️ First bound attempt stopped before event emission; selector-v2
-correction and clean-commit rerun pending
+**Status:** ⚠️ Bound attempts failed during pre-selection representation validation;
+selector-v3 padding correction and clean-commit rerun pending
 **Milestone:** M4 — exact ten-shard cohort → Waymax reference execution → EvalSim
 rollout contract
 
@@ -636,13 +636,13 @@ and the worktree is clean.
 ### Execution deviation and selector-v2 correction — 2026-07-28
 
 The first bound local acceptance ran from clean, pushed commit
-`1e294ee82427e8b622ceb28df351053975728cb6`. It stopped before event emission
-with fatal code `audit_shape_or_dtype_drift`; `event_emitted` remained zero and
-`clean_eof` was false. The command created only the ignored
-`execution-provenance.json`; it emitted no scan event or manifest and performed
-no cohort selection, policy/reference execution, benchmark, or comparative
-evaluation. This failed attempt is not M4 acceptance evidence, and no public M4
-claim was unlocked.
+`1e294ee82427e8b622ceb28df351053975728cb6`. It failed during
+source-representation validation with fatal code `audit_shape_or_dtype_drift`.
+The command created only ignored execution provenance; no completed manifest,
+cohort selection, policy/reference execution, benchmark, metric, or comparative
+result was produced. Per-record progress and failure location remain local-only.
+This failed attempt is not M4 acceptance evidence, and no public M4 claim was
+unlocked.
 
 Source review identified an implementation error at the audit boundary. M4 was
 taking source-audit arrays from the jitted Waymax postprocess result. With JAX
@@ -651,12 +651,12 @@ audit as narrowed `int32` arrays. The selector was therefore validating a
 post-JAX representation rather than the pre-registered pre-JAX source arrays.
 
 A separate process deviation occurred during follow-up diagnosis. Because the
-agents shared one working tree, one single-record structural diagnostic
-unknowingly imported an agent's uncommitted source-predicate revision. This
-violated the clean-commit payload gate, so the diagnostic is excluded from all
-acceptance evidence. It exposed no native identity, locator, field value,
-coordinate, trajectory, policy output, metric value, or comparative result.
-Payload work stopped immediately and the clean-commit gate was reclosed.
+agents shared one working tree, one structural diagnostic unknowingly imported
+an agent's uncommitted source-predicate revision. This violated the clean-commit
+payload gate, so the diagnostic is excluded from all acceptance evidence. It
+exposed no native identity, locator, field value, coordinate, trajectory, policy
+output, metric value, or comparative result. Payload work stopped immediately
+and the clean-commit gate was reclosed.
 
 Before rerun, the selector contract is corrected from version 1 to version 2.
 Selector v2 captures and freezes the native identity and audit arrays from the
@@ -668,16 +668,16 @@ payload does not affect eligibility. Waymax state construction continues through
 the same pinned postprocess.
 
 This is a representation-boundary defect correction, not an outcome-based
-selector amendment. The failed bound run emitted no event, and neither check
-produced cohort membership, policy output, metric output, or comparative
-results that could be used to tune selection. The four rejection predicates
-and their priority, supported-map rule, ranking byte encodings and domain
-strings, quotas, redistribution, fallback floor, and execution scopes remain
-unchanged. Because the audited representation and normalization are part of
-the selector contract, selector v2 receives a new configuration fingerprint
-and executable-source fingerprint. The dataset configuration and ranking
-domains remain unchanged; commit `1e294ee` is superseded as the executable
-snapshot for the next acceptance attempt.
+selector amendment. Neither check produced an eligibility verdict, cohort
+membership, policy output, metric output, or comparative result that could be
+used to tune selection. The four rejection predicates and their priority,
+supported-map rule, ranking byte encodings and domain strings, quotas,
+redistribution, fallback floor, and execution scopes remain unchanged. Because
+the audited representation and normalization are part of the selector contract,
+selector v2 receives a new configuration fingerprint and executable-source
+fingerprint. The dataset configuration and ranking domains remain unchanged;
+commit `1e294ee` is superseded as the executable snapshot for the next
+acceptance attempt.
 
 The payload gate remains closed until selector-v2 code, tests, this correction,
 and the corrected crosswalk pass the locked synthetic/core suites and
@@ -688,3 +688,78 @@ directory, and perform both complete scans of exactly shards `00000`–`00009`
 through clean EOF. It must not resume or reuse the failed attempt, and the
 failed ignored output is retained rather than deleted. Any later executable or
 selector-fingerprint change requires another fresh full rerun.
+
+### Selector-v2 bound attempt and selector-v3 padding correction — 2026-07-28
+
+The selector-v2 correction received independent implementation-readiness
+acceptance—not M4 acceptance—and passed 363 tests in the locked Waymo-extra
+environment and 306 tests with 19 expected skips in a verified core-only
+environment. It was committed and pushed as
+`9b830554fef6a6743e6ca9681b9e9554d37401c5`. Local `HEAD`, `origin/main`, and
+the clean worktree matched before its bound acceptance attempt.
+
+That attempt failed during source-representation validation with fatal code
+`audit_nonbinary_encoding`. It produced only ignored execution provenance; no
+completed manifest, cohort selection, policy/reference execution, benchmark,
+metric, or comparative result was produced. Per-record progress and failure
+location remain local-only. The attempt is excluded from M4 acceptance evidence,
+and no public result claim was unlocked.
+
+Independent review of the pinned decoder and factory contracts established that
+fixed-size `state/is_sdc` padding permits the schema-level sentinel `-1` on
+never-valid object slots. Selector v2 treated that field like validity masks and
+required only `0/1`, while the pinned Waymax factory uses exact equality to `1`.
+This describes the upstream representation contract, not a per-record observation
+or result. Selector v3 therefore:
+
+- accepts only exact int64 values in `{-1, 0, 1}` for `state/is_sdc`;
+- requires every `-1` marker to belong to a never-valid object slot;
+- normalizes only exact `1` to semantic true, matching the pinned Waymax factory; and
+- keeps `state/all/valid` and `roadgraph_samples/valid` strictly binary `0/1`.
+
+This is another source-representation defect correction made before any eligibility
+verdict or result. It does not change the four rejection predicates or their
+priority, map rule, ranking bytes/domains, quotas, redistribution, fallback floor,
+cohort target, or execution scopes. Selector version and selector/executable
+fingerprints change; the dataset configuration, manifest schema, adapter schema,
+and ranking domains do not.
+
+The payload gate is closed again until the selector-v3 plan, code, tests, and
+crosswalk pass locked synthetic/core suites and independent adversarial review; are
+committed and pushed from a clean tree; and local `HEAD` is verified equal to
+`origin/main`. The next attempt must start fresh in a new ignored output directory,
+must not reuse either prior failed attempt, and must repeat both complete exact
+ten-shard scans through clean EOF. Both prior ignored failure-artifact directories
+and their provenance files remain retained locally, unchanged, and excluded from
+acceptance evidence; the next attempt must neither overwrite nor reuse them. Any
+executable, selector-fingerprint, or reviewed-tree change requires another clean
+commit, adversarial review, and fresh full rerun.
+
+**Privacy redaction note — 2026-07-28:** An earlier tracked draft included per-record
+progress details for the failed attempts. Those details and failure locations are
+now kept only in local ignored provenance. This redaction changes no substantive
+outcome, selector rule, acceptance gate, or execution history.
+
+### Selector-v3 implementation-readiness record
+
+Two independent pre-implementation reviews accepted the narrow SDC-padding rule and
+its privacy/methodology record. The implementation then:
+
+- enforces exact pre-JAX int64 `state/is_sdc` values in `{-1, 0, 1}`;
+- permits `-1` only on never-valid slots and `1` only on retained slots;
+- normalizes semantic SDC as exact equality to `1`;
+- keeps state and roadgraph validity masks strictly binary;
+- rejects selector-v2 manifests and freezes a distinct selector-v3 fingerprint; and
+- preserves all four ranking-domain digest vectors and rejection priorities.
+
+Independent code and release reviews returned **ACCEPTED — no unresolved blocker**.
+The exact working snapshot passed 372 tests with one expected local-data skip in the
+locked Waymo-extra environment and 315 tests with 19 expected optional-runtime skips
+in a verified core-only environment. A fresh wheel/sdist audit preserved byte-identical
+notices, lazy core imports, and the installed M4 help command, and found no data,
+outputs, private material, TFRecords, Parquet, caches, or vendored Waymax.
+
+No WOMD payload was accessed during selector-v3 implementation, testing, packaging,
+or review. These are implementation-readiness facts, not M4 acceptance evidence. The
+payload gate remains closed until this exact final snapshot is committed, pushed,
+clean, and verified equal to `origin/main`.

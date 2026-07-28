@@ -30,7 +30,7 @@ from .waymax import (
     WOMD_DATASET_VERSION,
 )
 
-M4_SELECTOR_VERSION = "2"
+M4_SELECTOR_VERSION = "3"
 M4_MANIFEST_SCHEMA_VERSION = "1"
 
 M4_SHARD_SUFFIXES = tuple(f"{index:05d}" for index in range(10))
@@ -180,7 +180,15 @@ def selector_config_payload() -> dict[str, Any]:
                 },
                 "state/is_sdc": {
                     "semantic_dtype": "bool",
-                    "gates": ["binary_int64_exactly_zero_or_one"],
+                    "gates": [
+                        "int64_exactly_minus_one_zero_or_one",
+                        "minus_one_only_on_never_valid_object_slots",
+                        "one_only_on_retained_object_slots",
+                        "semantic_true_exactly_equals_one",
+                    ],
+                    "retained_object_source": (
+                        "strict_binary_state/all/valid_any_frames_0_through_90"
+                    ),
                 },
                 "state/all/valid": {
                     "semantic_dtype": "bool",
@@ -1127,7 +1135,7 @@ def _validated_audit_arrays(
         if array.shape != expected_shape or array.dtype != expected_dtype:
             _fail(
                 "audit_shape_or_dtype_drift",
-                f"{name} must have exact raw shape {expected_shape} "
+                f"{name} must have exact pre-JAX shape {expected_shape} "
                 f"and dtype {expected_dtype.name}",
             )
         arrays[name] = array
@@ -1140,12 +1148,13 @@ def _validated_audit_arrays(
         arrays["state/type"],
         "state/type",
     )
-    for name in (
-        "state/is_sdc",
-        "state/all/valid",
-        "roadgraph_samples/valid",
-    ):
+    for name in ("state/all/valid", "roadgraph_samples/valid"):
         arrays[name] = _binary_int64_to_bool(arrays[name], name)
+    retained = np.any(arrays["state/all/valid"], axis=1)
+    arrays["state/is_sdc"] = _sdc_int64_to_bool(
+        arrays["state/is_sdc"],
+        retained,
+    )
     arrays["roadgraph_samples/type"] = _lossless_int64_to_int32(
         arrays["roadgraph_samples/type"],
         "roadgraph_samples/type",
@@ -1172,17 +1181,11 @@ def _validated_audit_arrays(
         "state/all/timestamp_micros",
     )
 
-    retained = np.any(valid, axis=1)
     retained_ids = arrays["state/id"][retained]
     if np.unique(retained_ids).size != retained_ids.size:
         _fail(
             "duplicate_native_object_id",
             "retained source object IDs must be unique",
-        )
-    if np.any(arrays["state/is_sdc"][~retained]):
-        _fail(
-            "inactive_sdc_marker",
-            "an SDC marker may not refer to a never-valid object slot",
         )
     for name in _VALID_MOTION_FIELDS:
         if not np.all(np.isfinite(arrays[name][valid])):
@@ -1594,6 +1597,29 @@ def _binary_int64_to_bool(
             f"{name} must contain only binary int64 0/1 encodings",
         )
     return array.astype(np.bool_)
+
+
+def _sdc_int64_to_bool(
+    array: np.ndarray,
+    retained: np.ndarray,
+) -> np.ndarray:
+    if np.any((array != -1) & (array != 0) & (array != 1)):
+        _fail(
+            "audit_is_sdc_encoding",
+            "state/is_sdc must contain only int64 -1/0/1 encodings",
+        )
+    if np.any((array == -1) & retained):
+        _fail(
+            "active_sdc_padding",
+            "a retained object slot may not use the -1 SDC padding sentinel",
+        )
+    semantic = array == 1
+    if np.any(semantic & ~retained):
+        _fail(
+            "inactive_sdc_marker",
+            "an SDC marker may not refer to a never-valid object slot",
+        )
+    return semantic
 
 
 def _validate_shard_suffix(shard_suffix: str) -> None:

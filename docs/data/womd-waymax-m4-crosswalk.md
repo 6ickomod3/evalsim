@@ -1,7 +1,7 @@
 # WOMD / Waymax M4 execution crosswalk
 
-**Status:** Selector-v2 representation correction pending clean-commit rerun; M4
-metric parity is not run here
+**Status:** Selector-v3 padding correction pending clean-commit rerun; M4 metric
+parity is not run here
 **Dataset profile:** WOMD v1.3.1 TFExample validation, 10 past + 1 current +
 80 future frames
 **Waymax revision:** `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`
@@ -47,7 +47,7 @@ driving, geography, or any broader population.
 
 ## Selector and source boundary
 
-### Selector-v2 representation correction
+### Selector-v2/v3 representation corrections
 
 The first bound attempt exposed an implementation mismatch between the
 pre-registered source boundary and the arrays used by the selector. Selector
@@ -57,6 +57,15 @@ semantic normalization. The four eligibility predicates, their priority, and
 all ranking rules remain unchanged. This correction is a representation
 contract repair, not WOMD selection, metric, or comparative evidence; all M4
 result claims remain locked pending a fresh clean-commit run.
+
+Independent review of the pinned decoder and factory contracts established that
+fixed-size `state/is_sdc` padding permits the schema-level sentinel `-1` on
+never-valid object slots. This describes the upstream representation contract,
+not a per-record observation or result. Selector v3 admits only exact int64
+`{-1, 0, 1}` for that field, requires `-1` exclusively on never-valid slots, and
+maps only exact `1` to semantic true as the pinned Waymax factory does. Validity
+masks remain strictly binary. Eligibility predicates and ranking are still
+unchanged, and this correction unlocks no M4 result claim.
 
 ### Population
 
