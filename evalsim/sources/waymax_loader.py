@@ -15,12 +15,14 @@ import json
 import math
 import platform
 import re
+import stat as stat_module
+import threading
 from collections import Counter, OrderedDict
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import Any, TypeVar
 
 import numpy as np
 
@@ -32,9 +34,11 @@ DEFAULT_WOMD_VALIDATION_DIR = Path(
 WOMD_TOTAL_VALIDATION_SHARDS = 150
 WOMD_M3_SHARD_INDEX = 0
 WOMD_M3_SEARCH_LIMIT = 32
+WOMD_M4_SHARD_INDICES = tuple(range(10))
 LOCAL_WAYMO_ENV_FLAG = "EVALSIM_RUN_WAYMO_LOCAL"
 
 _SCENARIO_ID_PATTERN = re.compile(r"[0-9a-fA-F]+")
+_LOWER_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 _AUDIT_KEYS = (
     "state/id",
     "state/type",
@@ -81,6 +85,25 @@ _DATASET_CONFIG_FIELD_NAMES = frozenset(
     .difference({"womd_split", "womd_version"})
     .union({"path"})
 )
+_EventT = TypeVar("_EventT")
+
+
+@dataclass(frozen=True, slots=True)
+class _FileIdentity:
+    device: int
+    inode: int
+    size: int
+    mtime_ns: int
+
+
+@dataclass(frozen=True, slots=True)
+class _ShardDigestCacheEntry:
+    identity: _FileIdentity
+    sha256: str
+
+
+_SHARD_DIGEST_CACHE: dict[Path, _ShardDigestCacheEntry] = {}
+_SHARD_DIGEST_CACHE_LOCK = threading.Lock()
 
 
 class WaymaxDependencyError(ImportError):
@@ -106,6 +129,189 @@ class WaymaxRecord:
     record_ordinal: int
     shard_sha256: str
     dataset_config_fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
+class M4ShardLocator:
+    """An exact, privacy-sensitive local locator within M4's ten-shard scope."""
+
+    shard_suffix: str
+    record_ordinal: int
+
+    def __post_init__(self) -> None:
+        suffix = self.shard_suffix
+        if (
+            not isinstance(suffix, str)
+            or len(suffix) != 5
+            or not suffix.isascii()
+            or not suffix.isdecimal()
+            or int(suffix) not in WOMD_M4_SHARD_INDICES
+            or suffix != f"{int(suffix):05d}"
+        ):
+            raise ValueError(
+                "shard_suffix must be a canonical M4 suffix from 00000 through 00009"
+            )
+        ordinal = self.record_ordinal
+        if (
+            isinstance(ordinal, bool)
+            or not isinstance(ordinal, (int, np.integer))
+            or int(ordinal) < 0
+        ):
+            raise ValueError("record_ordinal must be a non-negative integer")
+        object.__setattr__(self, "record_ordinal", int(ordinal))
+
+    @property
+    def shard_index(self) -> int:
+        return int(self.shard_suffix)
+
+
+@dataclass(frozen=True, slots=True)
+class M4ReloadExpectation:
+    """One selected locator and the provenance it must reproduce on reload."""
+
+    locator: M4ShardLocator
+    expected_scenario_id: str
+    expected_shard_sha256: str
+    expected_dataset_config_fingerprint: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.locator, M4ShardLocator):
+            raise TypeError("locator must be an M4ShardLocator")
+        if (
+            not isinstance(self.expected_scenario_id, str)
+            or _SCENARIO_ID_PATTERN.fullmatch(self.expected_scenario_id) is None
+        ):
+            raise ValueError(
+                "expected_scenario_id must be a non-empty hexadecimal string"
+            )
+        for name in (
+            "expected_shard_sha256",
+            "expected_dataset_config_fingerprint",
+        ):
+            value = getattr(self, name)
+            if (
+                not isinstance(value, str)
+                or _LOWER_SHA256_PATTERN.fullmatch(value) is None
+            ):
+                raise ValueError(f"{name} must be lowercase SHA-256 hex")
+
+
+@dataclass(frozen=True, slots=True)
+class M4StreamRecord:
+    """One decoded record and its stable exact locator for pure classification."""
+
+    locator: M4ShardLocator
+    record: WaymaxRecord
+
+    def __post_init__(self) -> None:
+        if (
+            self.record.shard_suffix != self.locator.shard_suffix
+            or self.record.record_ordinal != self.locator.record_ordinal
+        ):
+            raise WaymaxDataError(
+                "stream_locator_mismatch",
+                "the decoded record provenance differs from its stream locator",
+            )
+
+
+class M4StreamCounters:
+    """Independently advanced counters for one exact M4 shard stream.
+
+    The loader advances ``raw_seen`` immediately after the raw TFRecord iterator
+    yields bytes and ``decode_attempted`` immediately before decoding those bytes.
+    It advances ``event_emitted`` only after the caller's pure event factory returns.
+    Public attributes are read-only so callers cannot repair accounting drift.
+    """
+
+    __slots__ = (
+        "_clean_eof",
+        "_decode_attempted",
+        "_event_emitted",
+        "_raw_seen",
+        "_shard_suffix",
+    )
+
+    def __init__(self, shard_suffix: str) -> None:
+        M4ShardLocator(shard_suffix=shard_suffix, record_ordinal=0)
+        self._shard_suffix = shard_suffix
+        self._raw_seen = 0
+        self._decode_attempted = 0
+        self._event_emitted = 0
+        self._clean_eof = False
+
+    @property
+    def shard_suffix(self) -> str:
+        return self._shard_suffix
+
+    @property
+    def raw_seen(self) -> int:
+        return self._raw_seen
+
+    @property
+    def decode_attempted(self) -> int:
+        return self._decode_attempted
+
+    @property
+    def event_emitted(self) -> int:
+        return self._event_emitted
+
+    @property
+    def clean_eof(self) -> bool:
+        return self._clean_eof
+
+    def _note_raw_seen(self, locator: M4ShardLocator) -> None:
+        self._require_locator(locator, expected_ordinal=self._raw_seen)
+        if self._clean_eof:
+            raise WaymaxDataError(
+                "stream_after_eof",
+                "raw accounting cannot advance after clean EOF",
+            )
+        self._raw_seen += 1
+
+    def _note_decode_attempted(self, locator: M4ShardLocator) -> None:
+        self._require_locator(locator, expected_ordinal=self._decode_attempted)
+        if self._raw_seen != self._decode_attempted + 1:
+            raise WaymaxDataError(
+                "stream_accounting_drift",
+                "decode accounting did not immediately follow one raw record",
+            )
+        self._decode_attempted += 1
+
+    def _note_event_emitted(self, locator: M4ShardLocator) -> None:
+        self._require_locator(locator, expected_ordinal=self._event_emitted)
+        if self._decode_attempted != self._event_emitted + 1:
+            raise WaymaxDataError(
+                "stream_accounting_drift",
+                "event accounting did not immediately follow one decode",
+            )
+        self._event_emitted += 1
+
+    def _note_clean_eof(self) -> None:
+        if not (
+            self._raw_seen
+            == self._decode_attempted
+            == self._event_emitted
+        ):
+            raise WaymaxDataError(
+                "stream_accounting_drift",
+                "clean EOF requires equal raw, decode, and event counts",
+            )
+        self._clean_eof = True
+
+    def _require_locator(
+        self,
+        locator: M4ShardLocator,
+        *,
+        expected_ordinal: int,
+    ) -> None:
+        if (
+            locator.shard_suffix != self._shard_suffix
+            or locator.record_ordinal != expected_ordinal
+        ):
+            raise WaymaxDataError(
+                "stream_ordinal_drift",
+                "stream records must use contiguous ordinals within one exact shard",
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +386,21 @@ def resolve_validation_shard(
     return matches[0]
 
 
+def resolve_m4_validation_shards(
+    data_dir: str | Path = DEFAULT_WOMD_VALIDATION_DIR,
+) -> tuple[Path, ...]:
+    """Resolve only M4 suffixes ``00000`` through ``00009`` in canonical order.
+
+    This deliberately delegates to the existing exact resolver ten times. It never
+    expands the input with a glob, Waymax ``@N`` notation, or files such as ``00010``.
+    """
+
+    return tuple(
+        resolve_validation_shard(data_dir, shard_index=shard_index)
+        for shard_index in WOMD_M4_SHARD_INDICES
+    )
+
+
 def file_sha256(path: str | Path, *, chunk_bytes: int = 8 * 1024 * 1024) -> str:
     """Hash a shard read-only for local provenance."""
 
@@ -194,6 +415,89 @@ def file_sha256(path: str | Path, *, chunk_bytes: int = 8 * 1024 * 1024) -> str:
         while chunk := handle.read(chunk_bytes):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _file_identity(path: Path) -> _FileIdentity:
+    try:
+        stat = path.stat()
+    except OSError as exc:
+        raise WaymaxDataError(
+            "shard_stat_failed",
+            "the exact shard could not be inspected read-only",
+        ) from exc
+    if not stat_module.S_ISREG(stat.st_mode):
+        raise WaymaxDataError("shard_missing", "the exact shard path is not a file")
+    return _FileIdentity(
+        device=int(stat.st_dev),
+        inode=int(stat.st_ino),
+        size=int(stat.st_size),
+        mtime_ns=int(stat.st_mtime_ns),
+    )
+
+
+def _guarded_shard_digest(
+    path: str | Path,
+) -> tuple[Path, _FileIdentity, str]:
+    """Return a process-local cached digest guarded by file identity twice."""
+
+    lexical = Path(path)
+    if lexical.is_symlink():
+        raise WaymaxDataError(
+            "shard_symlink_forbidden",
+            "M4 exact shard files may not be symbolic links",
+        )
+    try:
+        resolved = lexical.resolve(strict=True)
+    except OSError as exc:
+        raise WaymaxDataError(
+            "shard_missing",
+            "the exact shard path could not be resolved",
+        ) from exc
+    with _SHARD_DIGEST_CACHE_LOCK:
+        before = _file_identity(resolved)
+        cached = _SHARD_DIGEST_CACHE.get(resolved)
+        if cached is not None and cached.identity == before:
+            after = _file_identity(resolved)
+            if after != before:
+                raise WaymaxDataError(
+                    "shard_changed",
+                    "the exact shard identity changed while reusing its digest",
+                )
+            return resolved, after, cached.sha256
+
+        digest = file_sha256(resolved)
+        after = _file_identity(resolved)
+        if after != before:
+            raise WaymaxDataError(
+                "shard_changed",
+                "the exact shard identity changed while computing its digest",
+            )
+        entry = _ShardDigestCacheEntry(identity=after, sha256=digest)
+        _SHARD_DIGEST_CACHE[resolved] = entry
+    return resolved, after, digest
+
+
+def m4_shard_sha256(path: str | Path) -> str:
+    """Return the safely cached SHA-256 for one immutable local shard."""
+
+    candidate = Path(path)
+    _m4_shard_suffix_from_path(candidate)
+    return _guarded_shard_digest(candidate)[2]
+
+
+def clear_shard_digest_cache() -> None:
+    """Clear only the process-local digest memoization (primarily for tests)."""
+
+    with _SHARD_DIGEST_CACHE_LOCK:
+        _SHARD_DIGEST_CACHE.clear()
+
+
+def _assert_file_identity(path: Path, expected: _FileIdentity) -> None:
+    if _file_identity(path) != expected:
+        raise WaymaxDataError(
+            "shard_changed",
+            "the exact shard identity changed during record streaming",
+        )
 
 
 def _dataset_config_payload(dataset_config: Any) -> dict[str, Any]:
@@ -404,6 +708,363 @@ def _freeze_audit(audit: Mapping[str, Any]) -> Mapping[str, np.ndarray]:
         array.setflags(write=False)
         frozen[key] = array
     return MappingProxyType(frozen)
+
+
+def _m4_shard_suffix_from_path(path: Path) -> str:
+    if path.is_symlink():
+        raise WaymaxDataError(
+            "shard_symlink_forbidden",
+            "M4 exact shard files may not be symbolic links",
+        )
+    if not path.is_file():
+        raise WaymaxDataError("shard_missing", "the exact shard path is not a file")
+    matched_suffix = re.search(r"tfrecord-(\d{5})-of-(\d{5})$", path.name)
+    if matched_suffix is None:
+        raise WaymaxDataError(
+            "shard_name_invalid",
+            "the local filename does not end in a WOMD TFRecord shard suffix",
+        )
+    if int(matched_suffix.group(2)) != WOMD_TOTAL_VALIDATION_SHARDS:
+        raise WaymaxDataError(
+            "shard_total_invalid",
+            "the shard suffix does not identify the 150-file validation split",
+        )
+    suffix = matched_suffix.group(1)
+    if int(suffix) not in WOMD_M4_SHARD_INDICES:
+        raise WaymaxDataError(
+            "m4_shard_out_of_scope",
+            "M4 record streaming is restricted to suffixes 00000 through 00009",
+        )
+    return suffix
+
+
+def _verified_m4_scan_event(stream_record: M4StreamRecord) -> Any:
+    """Construct the only permitted event after frozen source/adapter gates."""
+
+    from .waymax import (
+        DEFAULT_WAYMAX_TEMPORAL_PROFILE,
+        scenario_from_waymax_state,
+    )
+    from .waymax_cohort import (
+        ScanEvent,
+        source_rejection_code,
+    )
+
+    record = stream_record.record
+    rejection = source_rejection_code(record.audit)
+    event_kwargs = {
+        "shard_suffix": stream_record.locator.shard_suffix,
+        "record_ordinal": stream_record.locator.record_ordinal,
+        "native_scenario_id": record.scenario_id,
+        "shard_sha256": record.shard_sha256,
+        "dataset_config_fingerprint": record.dataset_config_fingerprint,
+    }
+    if rejection is not None:
+        return ScanEvent.rejected_event(
+            **event_kwargs,
+            rejection_code=rejection,
+        )
+
+    scenario = scenario_from_waymax_state(
+        record.state,
+        scenario_id=record.scenario_id,
+        temporal_profile=DEFAULT_WAYMAX_TEMPORAL_PROFILE,
+        provenance={
+            "dataset_config_fingerprint": record.dataset_config_fingerprint,
+            "record_ordinal": record.record_ordinal,
+            "shard_sha256": record.shard_sha256,
+            "shard_suffix": record.shard_suffix,
+        },
+    )
+    validate_record_parity(record, scenario)
+    return ScanEvent.eligible_event(**event_kwargs)
+
+
+@dataclass(frozen=True, slots=True)
+class _M4RuntimeDecoder:
+    tf: Any
+    preprocess: Callable[[bytes], Mapping[str, Any]]
+    postprocess: Callable[
+        [Mapping[str, Any]],
+        tuple[Any, Mapping[str, Any], Any],
+    ]
+    dataset_config_fingerprint: str
+
+    def decode(
+        self,
+        serialized: bytes,
+        *,
+        locator: M4ShardLocator,
+        shard_sha256: str,
+    ) -> WaymaxRecord:
+        parsed = self.preprocess(serialized)
+        numpy_parsed = self.tf.nest.map_structure(
+            lambda value: (
+                value.numpy()
+                if hasattr(value, "numpy")
+                else np.asarray(value)
+            ),
+            parsed,
+        )
+        raw_id, audit, state = self.postprocess(numpy_parsed)
+        return WaymaxRecord(
+            scenario_id=_decode_scenario_id(raw_id),
+            state=state,
+            audit=_freeze_audit(audit),
+            shard_suffix=locator.shard_suffix,
+            record_ordinal=locator.record_ordinal,
+            shard_sha256=shard_sha256,
+            dataset_config_fingerprint=self.dataset_config_fingerprint,
+        )
+
+
+def _make_m4_runtime_decoder(shard_path: Path) -> _M4RuntimeDecoder:
+    jax, tf, config, dataloader = _require_waymax_runtime()
+    dataset_config = _make_dataset_config(shard_path, config)
+    return _M4RuntimeDecoder(
+        tf=tf,
+        preprocess=_make_preprocess(dataset_config, tf, dataloader),
+        postprocess=jax.jit(
+            _make_postprocess(dataset_config, dataloader)
+        ),
+        dataset_config_fingerprint=dataset_config_fingerprint(dataset_config),
+    )
+
+
+def _iter_raw_serialized_records(
+    shard_path: Path,
+    tf: Any,
+) -> Iterator[tuple[int, bytes]]:
+    """Yield raw TFRecords in physical order without preprocessing or prefetch."""
+
+    raw_iterator = tf.compat.v1.io.tf_record_iterator(str(shard_path))
+    for ordinal, serialized in enumerate(raw_iterator):
+        if not isinstance(serialized, (bytes, bytearray, memoryview)):
+            raise WaymaxDataError(
+                "raw_record_type",
+                "the TensorFlow record reader did not return serialized bytes",
+            )
+        yield ordinal, bytes(serialized)
+
+
+def iter_m4_waymax_records(
+    shard_path: str | Path,
+    *,
+    counters: M4StreamCounters,
+    event_factory: Callable[[M4StreamRecord], _EventT] | None = None,
+) -> Iterator[Any]:
+    """Classify every raw record in one exact M4 shard through clean EOF.
+
+    The loader itself applies the frozen source predicate and, for every eligible
+    record, the adapter/contract/independent-parity gates before constructing the
+    canonical ``ScanEvent``.  An optional ``event_factory`` is only a contradiction
+    hook: its result must equal that verified event exactly. Conversion, contract,
+    parity, source-invariant, and all other exceptions propagate unchanged.
+    """
+
+    path = Path(shard_path)
+    suffix = _m4_shard_suffix_from_path(path)
+    if counters.shard_suffix != suffix:
+        raise WaymaxDataError(
+            "stream_counter_shard_mismatch",
+            "the counters belong to a different exact shard",
+        )
+    if (
+        counters.raw_seen
+        or counters.decode_attempted
+        or counters.event_emitted
+        or counters.clean_eof
+    ):
+        raise WaymaxDataError(
+            "stream_counters_reused",
+            "each shard scan requires fresh counters",
+        )
+    if event_factory is not None and not callable(event_factory):
+        raise TypeError("event_factory must be callable or None")
+
+    resolved, identity, shard_digest = _guarded_shard_digest(path)
+    resolved_suffix = _m4_shard_suffix_from_path(resolved)
+    if resolved_suffix != suffix:
+        raise WaymaxDataError(
+            "m4_shard_scope_mismatch",
+            "the resolved shard target differs from its exact M4 suffix",
+        )
+    decoder = _make_m4_runtime_decoder(resolved)
+    for ordinal, serialized in _iter_raw_serialized_records(
+        resolved,
+        decoder.tf,
+    ):
+        locator = M4ShardLocator(
+            shard_suffix=suffix,
+            record_ordinal=ordinal,
+        )
+        counters._note_raw_seen(locator)
+        counters._note_decode_attempted(locator)
+        record = decoder.decode(
+            serialized,
+            locator=locator,
+            shard_sha256=shard_digest,
+        )
+        stream_record = M4StreamRecord(locator=locator, record=record)
+        verified_event = _verified_m4_scan_event(stream_record)
+        if event_factory is None:
+            event = verified_event
+        else:
+            event = event_factory(stream_record)
+            if event != verified_event:
+                raise WaymaxDataError(
+                    "stream_event_contradiction",
+                    "the event factory contradicted the verified scan event",
+                )
+        counters._note_event_emitted(locator)
+        yield event
+
+    _assert_file_identity(resolved, identity)
+    counters._note_clean_eof()
+
+
+def reload_m4_waymax_records(
+    data_dir: str | Path,
+    expectations: Sequence[M4ReloadExpectation],
+) -> tuple[M4StreamRecord, ...]:
+    """Reload selected locators with one decoder and one stream per shard.
+
+    The result preserves the caller's order. Locators must be unique, while the
+    physical work is grouped by exact shard suffix so the CLI cannot accidentally
+    rebuild Waymax's decoder for every member of the selected cohort.
+    """
+
+    requested = tuple(expectations)
+    for expectation in requested:
+        if not isinstance(expectation, M4ReloadExpectation):
+            raise TypeError(
+                "expectations must contain only M4ReloadExpectation values"
+            )
+    locators = tuple(expectation.locator for expectation in requested)
+    if len(set(locators)) != len(locators):
+        raise WaymaxDataError(
+            "locator_duplicate",
+            "selected reload locators must be unique",
+        )
+    if not requested:
+        return ()
+
+    grouped: dict[str, list[tuple[int, M4ReloadExpectation]]] = {}
+    for result_index, expectation in enumerate(requested):
+        grouped.setdefault(
+            expectation.locator.shard_suffix,
+            [],
+        ).append((result_index, expectation))
+
+    results: list[M4StreamRecord | None] = [None] * len(requested)
+    for suffix in sorted(grouped):
+        shard_path = resolve_validation_shard(
+            data_dir,
+            shard_index=int(suffix),
+        )
+        actual_suffix = _m4_shard_suffix_from_path(shard_path)
+        if actual_suffix != suffix:
+            raise WaymaxDataError(
+                "locator_shard_mismatch",
+                "the exact resolver returned a different shard suffix",
+            )
+
+        resolved, identity, shard_digest = _guarded_shard_digest(shard_path)
+        resolved_suffix = _m4_shard_suffix_from_path(resolved)
+        if resolved_suffix != suffix:
+            raise WaymaxDataError(
+                "m4_shard_scope_mismatch",
+                "the resolved shard target differs from its exact M4 suffix",
+            )
+        decoder = _make_m4_runtime_decoder(resolved)
+        shard_requests = grouped[suffix]
+        for _, expectation in shard_requests:
+            if (
+                shard_digest != expectation.expected_shard_sha256
+                or decoder.dataset_config_fingerprint
+                != expectation.expected_dataset_config_fingerprint
+            ):
+                raise WaymaxDataError(
+                    "locator_provenance_mismatch",
+                    "the reloaded shard or dataset configuration differs from "
+                    "the manifest",
+                )
+
+        by_ordinal = {
+            expectation.locator.record_ordinal: (result_index, expectation)
+            for result_index, expectation in shard_requests
+        }
+        remaining = set(by_ordinal)
+        for ordinal, serialized in _iter_raw_serialized_records(
+            resolved,
+            decoder.tf,
+        ):
+            if ordinal not in remaining:
+                continue
+            result_index, expectation = by_ordinal[ordinal]
+            record = decoder.decode(
+                serialized,
+                locator=expectation.locator,
+                shard_sha256=shard_digest,
+            )
+            stream_record = M4StreamRecord(
+                locator=expectation.locator,
+                record=record,
+            )
+            if record.scenario_id != expectation.expected_scenario_id:
+                raise WaymaxDataError(
+                    "locator_identity_mismatch",
+                    "the reloaded native identity differs from the manifest",
+                )
+            if (
+                record.shard_sha256 != expectation.expected_shard_sha256
+                or record.dataset_config_fingerprint
+                != expectation.expected_dataset_config_fingerprint
+            ):
+                raise WaymaxDataError(
+                    "locator_provenance_mismatch",
+                    "the reloaded record provenance differs from the manifest",
+                )
+            results[result_index] = stream_record
+            remaining.remove(ordinal)
+            if not remaining:
+                break
+
+        _assert_file_identity(resolved, identity)
+        if remaining:
+            raise WaymaxDataError(
+                "locator_ordinal_missing",
+                "the exact shard ended before a requested record ordinal",
+            )
+
+    if any(item is None for item in results):
+        raise AssertionError("grouped M4 reload did not populate every result")
+    return tuple(item for item in results if item is not None)
+
+
+def reload_m4_waymax_record(
+    data_dir: str | Path,
+    locator: M4ShardLocator,
+    *,
+    expected_scenario_id: str,
+    expected_shard_sha256: str,
+    expected_dataset_config_fingerprint: str,
+) -> M4StreamRecord:
+    """Reload one exact locator and fail closed on identity or provenance drift."""
+
+    return reload_m4_waymax_records(
+        data_dir,
+        (
+            M4ReloadExpectation(
+                locator=locator,
+                expected_scenario_id=expected_scenario_id,
+                expected_shard_sha256=expected_shard_sha256,
+                expected_dataset_config_fingerprint=(
+                    expected_dataset_config_fingerprint
+                ),
+            ),
+        ),
+    )[0]
 
 
 def iter_waymax_records(
@@ -907,8 +1568,13 @@ class WaymaxSource:
 __all__ = [
     "DEFAULT_WOMD_VALIDATION_DIR",
     "LOCAL_WAYMO_ENV_FLAG",
+    "M4ReloadExpectation",
+    "M4ShardLocator",
+    "M4StreamCounters",
+    "M4StreamRecord",
     "WOMD_M3_SEARCH_LIMIT",
     "WOMD_M3_SHARD_INDEX",
+    "WOMD_M4_SHARD_INDICES",
     "WOMD_TOTAL_VALIDATION_SHARDS",
     "WaymaxDataError",
     "WaymaxDependencyError",
@@ -916,9 +1582,15 @@ __all__ = [
     "WaymaxRejection",
     "WaymaxSelection",
     "WaymaxSource",
+    "clear_shard_digest_cache",
     "dataset_config_fingerprint",
     "file_sha256",
+    "iter_m4_waymax_records",
     "iter_waymax_records",
+    "m4_shard_sha256",
+    "reload_m4_waymax_record",
+    "reload_m4_waymax_records",
+    "resolve_m4_validation_shards",
     "resolve_validation_shard",
     "runtime_summary",
     "shard_suffix",

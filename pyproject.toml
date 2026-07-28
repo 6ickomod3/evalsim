@@ -29,6 +29,7 @@ waymo = [
 ]
 
 [project.scripts]
+evalsim-waymax-m4 = "evalsim.sources.waymax_m4_cli:main"
 evalsim-waymax-smoke = "evalsim.sources.waymax_cli:main"
 
 [build-system]

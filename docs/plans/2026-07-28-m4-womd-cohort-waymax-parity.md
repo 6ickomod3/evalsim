@@ -1,7 +1,8 @@
 # M4 implementation plan — deterministic WOMD cohort and Waymax parity
 
 **Date:** 2026-07-28
-**Status:** ✅ Pre-registered and adversarially accepted; payload scan not started
+**Status:** ✅ Pre-registered; synthetic implementation adversarially accepted; payload
+scan not started
 **Milestone:** M4 — exact ten-shard cohort → Waymax reference execution → EvalSim
 rollout contract
 
@@ -605,3 +606,29 @@ then returned **ACCEPTED — no unresolved blocker**.
 During execution, append only factual deviations, local aggregate evidence, adversarial
 verdicts, and release verification. Never rewrite the selector or acceptance gates as
 though a post-result choice had been pre-registered.
+
+### Pre-execution implementation record
+
+Before any M4 WOMD payload access, the synthetic-only implementation passed independent
+reviews of four boundaries:
+
+- population selection, classified streaming, exact-shard safety, and grouped selected
+  reload: **ACCEPTED**;
+- compact Waymax exact-log/IDM execution, overlap oracle, conversion, and semantic
+  crosswalk: **ACCEPTED**;
+- the local acceptance command, after an initial blocking review and correction of
+  actor-level IDM evidence, conversion auditing, output publication order, checkout
+  binding, terminal privacy, and contradiction coverage: **ACCEPTED**; and
+- optional-dependency packaging, installed-wheel help, notices, archive contents, and
+  core-only imports: **ACCEPTED**.
+
+The final pre-execution snapshot passed 297 non-local tests in the locked Waymo-extra
+environment. A separate locked core-only environment, with JAX, jaxlib, TensorFlow,
+Flax, and Waymax absent, passed 242 tests with 17 expected optional-runtime skips.
+The dedicated M4 cohort, loader, reference, and CLI suites account for 127 passing
+synthetic tests. Wheel and sdist inspection found the required `NOTICE.md` and no WOMD,
+TFRecord, Parquet, generated output, private input, cache, or vendored Waymax package.
+
+These are implementation-readiness facts, not WOMD execution evidence. The payload
+boundary remains closed until this exact reviewed implementation is committed, pushed,
+and the worktree is clean.
