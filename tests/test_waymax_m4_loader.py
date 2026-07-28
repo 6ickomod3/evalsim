@@ -123,25 +123,37 @@ def _invented_stream_record(
 def test_m4_runtime_decoder_preserves_waymax_numpy_postprocess_boundary() -> None:
     tf = _tensorflow()
     observed: list[type] = []
-    audit = {
-        key: np.zeros(1, dtype=np.float32)
+    raw_audit = {
+        key: np.full(1, index, dtype=np.int64)
+        for index, key in enumerate(loader._AUDIT_KEYS)
+    }
+    narrowed_audit = {
+        key: np.full(1, -1, dtype=np.int32)
         for key in loader._AUDIT_KEYS
     }
+    state = object()
 
     def postprocess(example):
         observed.append(type(example["invented"]))
         assert isinstance(example["invented"], np.ndarray)
+        assert example["state/all/timestamp_micros"].dtype == np.int64
         return (
-            np.frombuffer(b"aa", dtype=np.uint8),
-            audit,
-            object(),
+            np.frombuffer(b"bb", dtype=np.uint8).reshape(1, -1),
+            narrowed_audit,
+            state,
         )
 
     decoder = loader._M4RuntimeDecoder(
         tf=tf,
-        preprocess=lambda _: {
-            "invented": tf.convert_to_tensor([1.0, 2.0])
-        },
+        preprocess=lambda _: dict(
+            raw_audit,
+            invented=tf.convert_to_tensor([1.0, 2.0]),
+            **{
+                "scenario/id": tf.convert_to_tensor(
+                    np.frombuffer(b"aa", dtype=np.uint8).reshape(1, -1)
+                )
+            },
+        ),
         postprocess=postprocess,
         dataset_config_fingerprint="c" * 64,
     )
@@ -153,6 +165,52 @@ def test_m4_runtime_decoder_preserves_waymax_numpy_postprocess_boundary() -> Non
 
     assert observed == [np.ndarray]
     assert record.scenario_id == "aa"
+    assert record.state is state
+    for index, key in enumerate(loader._AUDIT_KEYS):
+        assert record.audit[key].dtype == np.int64
+        assert record.audit[key].tolist() == [index]
+        assert record.audit[key].flags.writeable is False
+
+
+def test_m4_runtime_decoder_freezes_audit_before_postprocess_mutation() -> None:
+    tf = _tensorflow()
+    raw_audit = {
+        key: np.full(1, index, dtype=np.int64)
+        for index, key in enumerate(loader._AUDIT_KEYS)
+    }
+
+    def postprocess(example):
+        for key in loader._AUDIT_KEYS:
+            example[key][...] = -1
+        return (
+            np.frombuffer(b"bb", dtype=np.uint8).reshape(1, -1),
+            {},
+            object(),
+        )
+
+    decoder = loader._M4RuntimeDecoder(
+        tf=tf,
+        preprocess=lambda _: dict(
+            raw_audit,
+            **{
+                "scenario/id": tf.convert_to_tensor(
+                    np.frombuffer(b"aa", dtype=np.uint8).reshape(1, -1)
+                )
+            },
+        ),
+        postprocess=postprocess,
+        dataset_config_fingerprint="c" * 64,
+    )
+
+    record = decoder.decode(
+        b"invented",
+        locator=M4ShardLocator("00000", 0),
+        shard_sha256="d" * 64,
+    )
+
+    assert record.scenario_id == "aa"
+    for index, key in enumerate(loader._AUDIT_KEYS):
+        assert record.audit[key].tolist() == [index]
 
 
 @pytest.fixture(autouse=True)

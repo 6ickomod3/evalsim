@@ -4,6 +4,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 
+import numpy as np
 import pytest
 
 from evalsim.sources.waymax_loader import (
@@ -137,3 +138,38 @@ def test_synthetic_tfexample_preserves_native_scenario_id() -> None:
     preserved = _preserve_parsed_scenario_id(parsed, tf)
 
     assert _decode_scenario_id(preserved["scenario/id"]) == synthetic_id.decode()
+
+
+def test_native_scenario_id_preserves_exact_hex_case() -> None:
+    encoded = np.frombuffer(b"DeAdBeEf", dtype=np.uint8).reshape(1, -1)
+
+    assert _decode_scenario_id(encoded) == "DeAdBeEf"
+
+
+@pytest.mark.parametrize(
+    "encoded",
+    (
+        np.frombuffer(b"aa", dtype=np.uint8),
+        np.frombuffer(b"aa", dtype=np.uint8).reshape(1, 1, 2),
+        np.asarray([[97, 97]], dtype=np.int8),
+        np.asarray([[97.0, 97.0]], dtype=np.float32),
+        np.empty((1, 0), dtype=np.uint8),
+    ),
+)
+def test_native_scenario_id_rejects_noncanonical_encoding(encoded) -> None:
+    with pytest.raises(WaymaxDataError, match="scenario_id_encoding"):
+        _decode_scenario_id(encoded)
+
+
+def test_native_scenario_id_rejects_invalid_utf8() -> None:
+    encoded = np.asarray([[0xFF]], dtype=np.uint8)
+
+    with pytest.raises(WaymaxDataError, match="scenario_id_decode"):
+        _decode_scenario_id(encoded)
+
+
+def test_native_scenario_id_rejects_nonhex_bytes() -> None:
+    encoded = np.frombuffer(b"not-hex", dtype=np.uint8).reshape(1, -1)
+
+    with pytest.raises(WaymaxDataError, match="scenario_id_format"):
+        _decode_scenario_id(encoded)

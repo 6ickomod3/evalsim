@@ -1,8 +1,8 @@
 # M4 implementation plan — deterministic WOMD cohort and Waymax parity
 
 **Date:** 2026-07-28
-**Status:** ✅ Pre-registered; synthetic implementation adversarially accepted; payload
-scan not started
+**Status:** ⚠️ First bound attempt stopped before event emission; selector-v2
+correction and clean-commit rerun pending
 **Milestone:** M4 — exact ten-shard cohort → Waymax reference execution → EvalSim
 rollout contract
 
@@ -632,3 +632,59 @@ TFRecord, Parquet, generated output, private input, cache, or vendored Waymax pa
 These are implementation-readiness facts, not WOMD execution evidence. The payload
 boundary remains closed until this exact reviewed implementation is committed, pushed,
 and the worktree is clean.
+
+### Execution deviation and selector-v2 correction — 2026-07-28
+
+The first bound local acceptance ran from clean, pushed commit
+`1e294ee82427e8b622ceb28df351053975728cb6`. It stopped before event emission
+with fatal code `audit_shape_or_dtype_drift`; `event_emitted` remained zero and
+`clean_eof` was false. The command created only the ignored
+`execution-provenance.json`; it emitted no scan event or manifest and performed
+no cohort selection, policy/reference execution, benchmark, or comparative
+evaluation. This failed attempt is not M4 acceptance evidence, and no public M4
+claim was unlocked.
+
+Source review identified an implementation error at the audit boundary. M4 was
+taking source-audit arrays from the jitted Waymax postprocess result. With JAX
+x64 disabled in the locked environment, decoded `int64` fields could reach the
+audit as narrowed `int32` arrays. The selector was therefore validating a
+post-JAX representation rather than the pre-registered pre-JAX source arrays.
+
+A separate process deviation occurred during follow-up diagnosis. Because the
+agents shared one working tree, one single-record structural diagnostic
+unknowingly imported an agent's uncommitted source-predicate revision. This
+violated the clean-commit payload gate, so the diagnostic is excluded from all
+acceptance evidence. It exposed no native identity, locator, field value,
+coordinate, trajectory, policy output, metric value, or comparative result.
+Payload work stopped immediately and the clean-commit gate was reclosed.
+
+Before rerun, the selector contract is corrected from version 1 to version 2.
+Selector v2 captures and freezes the native identity and audit arrays from the
+eager pre-JAX mapping before Waymax postprocessing, validates the exact pinned
+pre-JAX shapes and dtypes, and applies explicit lossless normalization for
+encoded identities/types, binary masks, and timestamps. Dimension invariants
+apply only to valid frames, matching the original pre-registration; invalid-frame
+payload does not affect eligibility. Waymax state construction continues through
+the same pinned postprocess.
+
+This is a representation-boundary defect correction, not an outcome-based
+selector amendment. The failed bound run emitted no event, and neither check
+produced cohort membership, policy output, metric output, or comparative
+results that could be used to tune selection. The four rejection predicates
+and their priority, supported-map rule, ranking byte encodings and domain
+strings, quotas, redistribution, fallback floor, and execution scopes remain
+unchanged. Because the audited representation and normalization are part of
+the selector contract, selector v2 receives a new configuration fingerprint
+and executable-source fingerprint. The dataset configuration and ranking
+domains remain unchanged; commit `1e294ee` is superseded as the executable
+snapshot for the next acceptance attempt.
+
+The payload gate remains closed until selector-v2 code, tests, this correction,
+and the corrected crosswalk pass the locked synthetic/core suites and
+independent adversarial review; are committed and pushed from a clean tree;
+and local `HEAD` is verified equal to `origin/main`. The rerun must use that
+exact commit and fingerprints, start from record zero in a new ignored output
+directory, and perform both complete scans of exactly shards `00000`–`00009`
+through clean EOF. It must not resume or reuse the failed attempt, and the
+failed ignored output is retained rather than deleted. Any later executable or
+selector-fingerprint change requires another fresh full rerun.

@@ -18,6 +18,7 @@ from evalsim.sources.waymax_cohort import (
     M4_INITIAL_QUOTAS,
     M4_REDISTRIBUTION_DOMAIN,
     M4_SELECTOR_CONFIG_FINGERPRINT,
+    M4_SELECTOR_VERSION,
     M4_SHARD_SUFFIXES,
     M4_TFRECORD_SUFFIXES,
     M4_VMAP_DOMAIN,
@@ -115,7 +116,7 @@ def _events_with_counts(
 def _audit() -> dict[str, np.ndarray]:
     num_objects = 128
     horizon = 91
-    valid = np.zeros((num_objects, horizon), dtype=bool)
+    valid = np.zeros((num_objects, horizon), dtype=np.int64)
     valid[0] = True
     valid[1] = True
     timestamps = np.broadcast_to(
@@ -123,11 +124,11 @@ def _audit() -> dict[str, np.ndarray]:
         (num_objects, horizon),
     ).copy()
     zeros = np.zeros((num_objects, horizon), dtype=np.float32)
-    object_ids = np.full(num_objects, -1, dtype=np.int64)
+    object_ids = np.full(num_objects, -1, dtype=np.float32)
     object_ids[:2] = (101, 202)
-    object_types = np.zeros(num_objects, dtype=np.int32)
+    object_types = np.zeros(num_objects, dtype=np.float32)
     object_types[:2] = 1
-    is_sdc = np.zeros(num_objects, dtype=bool)
+    is_sdc = np.zeros(num_objects, dtype=np.int64)
     is_sdc[0] = True
     roadgraph_xyz = np.zeros((30000, 3), dtype=np.float32)
     roadgraph_xyz[:3] = np.array(
@@ -136,10 +137,10 @@ def _audit() -> dict[str, np.ndarray]:
     )
     roadgraph_direction = np.zeros((30000, 3), dtype=np.float32)
     roadgraph_direction[:2, 0] = 1.0
-    roadgraph_types = np.zeros((30000, 1), dtype=np.int32)
+    roadgraph_types = np.zeros((30000, 1), dtype=np.int64)
     roadgraph_ids = np.full((30000, 1), -1, dtype=np.int64)
     roadgraph_ids[:3] = 77
-    roadgraph_valid = np.zeros((30000, 1), dtype=bool)
+    roadgraph_valid = np.zeros((30000, 1), dtype=np.int64)
     roadgraph_valid[:3] = True
     return {
         "state/id": object_ids,
@@ -147,9 +148,9 @@ def _audit() -> dict[str, np.ndarray]:
         "state/is_sdc": is_sdc,
         "state/which_time": np.concatenate(
             (
-                -np.ones(10, dtype=np.int8),
-                np.zeros(1, dtype=np.int8),
-                np.ones(80, dtype=np.int8),
+                -np.ones(10, dtype=np.float32),
+                np.zeros(1, dtype=np.float32),
+                np.ones(80, dtype=np.float32),
             )
         ),
         "state/all/valid": valid,
@@ -363,6 +364,162 @@ def test_source_contract_drift_is_fatal_not_a_rejection(mutate, code) -> None:
     with pytest.raises(CohortInvariantError) as error:
         source_rejection_code(audit)
     assert error.value.code == code
+
+
+@pytest.mark.parametrize("name", tuple(_audit()))
+def test_source_raw_dtype_drift_is_fatal_for_every_audit_field(name) -> None:
+    audit = _audit()
+    raw = audit[name]
+    drift_dtype = np.float64 if raw.dtype == np.float32 else np.int32
+    audit[name] = raw.astype(drift_dtype)
+    with pytest.raises(CohortInvariantError) as error:
+        source_rejection_code(audit)
+    assert error.value.code == "audit_shape_or_dtype_drift"
+
+
+@pytest.mark.parametrize("name", ("state/id", "state/type"))
+@pytest.mark.parametrize(
+    "value",
+    (
+        np.float32(np.nan),
+        np.float32(np.inf),
+        np.float32(-np.inf),
+        np.float32(202.5),
+    ),
+)
+def test_source_float_identity_and_type_encodings_must_be_finite_integral(
+    name,
+    value,
+) -> None:
+    audit = _audit()
+    audit[name][1] = value
+    with pytest.raises(CohortInvariantError) as error:
+        source_rejection_code(audit)
+    assert error.value.code == "audit_nonintegral_encoding"
+
+
+@pytest.mark.parametrize("name", ("state/id", "state/type"))
+@pytest.mark.parametrize(
+    "value",
+    (
+        np.float32(-(2**31) - 256),
+        np.float32(2**31),
+    ),
+)
+def test_source_float_identity_and_type_encodings_must_fit_int32(
+    name,
+    value,
+) -> None:
+    audit = _audit()
+    audit[name][1] = value
+    with pytest.raises(CohortInvariantError) as error:
+        source_rejection_code(audit)
+    assert error.value.code == "audit_nonintegral_encoding"
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        np.float32(-(2**31)),
+        np.nextafter(np.float32(2**31), np.float32(-np.inf)),
+    ),
+)
+def test_source_float_identity_int32_boundaries_are_supported(value) -> None:
+    audit = _audit()
+    audit["state/id"][1] = value
+    assert source_rejection_code(audit) is None
+
+
+@pytest.mark.parametrize(
+    ("name", "index"),
+    (
+        ("state/is_sdc", 1),
+        ("state/all/valid", (1, 10)),
+        ("roadgraph_samples/valid", (1, 0)),
+    ),
+)
+def test_source_mask_encodings_must_be_binary(name, index) -> None:
+    audit = _audit()
+    audit[name][index] = 2
+    with pytest.raises(CohortInvariantError) as error:
+        source_rejection_code(audit)
+    assert error.value.code == "audit_nonbinary_encoding"
+
+
+@pytest.mark.parametrize(
+    ("name", "index"),
+    (
+        ("roadgraph_samples/type", (0, 0)),
+        ("roadgraph_samples/id", (0, 0)),
+    ),
+)
+@pytest.mark.parametrize("value", (-(2**31) - 1, 2**31))
+def test_source_roadgraph_integer_normalization_must_be_lossless(
+    name,
+    index,
+    value,
+) -> None:
+    audit = _audit()
+    audit[name][index] = value
+    with pytest.raises(CohortInvariantError) as error:
+        source_rejection_code(audit)
+    assert error.value.code == "audit_int32_range"
+
+
+@pytest.mark.parametrize("value", (-(2**31) - 1, 2**31))
+def test_source_timestamp_normalization_must_be_lossless(value) -> None:
+    audit = _audit()
+    audit["state/all/timestamp_micros"][0, 0] = value
+    with pytest.raises(CohortInvariantError) as error:
+        source_rejection_code(audit)
+    assert error.value.code == "audit_int32_range"
+
+
+@pytest.mark.parametrize(
+    ("name", "index"),
+    (
+        ("roadgraph_samples/type", (-1, 0)),
+        ("roadgraph_samples/id", (-1, 0)),
+        ("state/all/timestamp_micros", (-1, 0)),
+    ),
+)
+@pytest.mark.parametrize("value", (-(2**31), 2**31 - 1))
+def test_source_int64_normalization_accepts_signed_int32_boundaries(
+    name,
+    index,
+    value,
+) -> None:
+    audit = _audit()
+    audit[name][index] = value
+
+    assert source_rejection_code(audit) is None
+
+
+def test_source_dimensions_ignore_invalid_frame_lifecycle_payload() -> None:
+    audit = _audit()
+    lifecycle_slot = 2
+    audit["state/id"][lifecycle_slot] = 303.0
+    audit["state/type"][lifecycle_slot] = 2.0
+    audit["state/all/valid"][lifecycle_slot, (10, 12)] = 1
+    audit["state/all/length"][lifecycle_slot] = np.nan
+    audit["state/all/width"][lifecycle_slot] = -123.0
+    audit["state/all/length"][lifecycle_slot, (10, 12)] = 4.5
+    audit["state/all/width"][lifecycle_slot, (10, 12)] = 1.75
+
+    assert source_rejection_code(audit) is None
+
+
+@pytest.mark.parametrize("name", ("state/all/length", "state/all/width"))
+@pytest.mark.parametrize("value", (np.nan, 0.0, -1.0, 9.0))
+def test_source_dimensions_reject_invalid_valid_frame_values(
+    name,
+    value,
+) -> None:
+    audit = _audit()
+    audit[name][1, 20] = value
+    with pytest.raises(CohortInvariantError) as error:
+        source_rejection_code(audit)
+    assert error.value.code == "dimension_not_constant"
 
 
 @pytest.mark.parametrize(
@@ -753,7 +910,7 @@ def test_manifest_rejects_noncanonical_schema_and_duplicate_json_keys() -> None:
         '{"events":[],"events":[],"schema_version":"1",'
         '"selection":{},"selector_config_fingerprint":"'
         + M4_SELECTOR_CONFIG_FINGERPRINT
-        + '","selector_version":"1","shard_counts":[]}'
+        + '","selector_version":"2","shard_counts":[]}'
     )
     with pytest.raises(CohortInvariantError, match="duplicate JSON object key"):
         WaymaxCohortManifest.from_json(duplicate)
@@ -785,8 +942,87 @@ def test_manifest_requires_exact_ordinal_sequence_and_unique_identity() -> None:
 def test_selector_payload_fingerprint_freezes_every_rule_and_is_defensive() -> None:
     payload = selector_config_payload()
     assert selector_config_fingerprint() == M4_SELECTOR_CONFIG_FINGERPRINT
+    assert M4_SELECTOR_VERSION == "2"
+    assert payload["selector_version"] == "2"
+    assert payload["source_predicate"]["audit_boundary"] == (
+        "after_pinned_waymax_tensorflow_preprocess_"
+        "before_jax_waymax_factory"
+    )
     assert payload["source_predicate"]["rejection_priority"] == list(
         SOURCE_REJECTION_CODES
+    )
+    assert payload["source_predicate"]["pre_jax_audit_schema"]["state/id"] == {
+        "shape": [128],
+        "dtype": "float32",
+    }
+    pre_jax_schema = payload["source_predicate"]["pre_jax_audit_schema"]
+    assert {
+        name: pre_jax_schema[name]["dtype"]
+        for name in (
+            "state/is_sdc",
+            "state/all/valid",
+            "state/all/timestamp_micros",
+            "roadgraph_samples/type",
+            "roadgraph_samples/id",
+            "roadgraph_samples/valid",
+        )
+    } == {
+        "state/is_sdc": "int64",
+        "state/all/valid": "int64",
+        "state/all/timestamp_micros": "int64",
+        "roadgraph_samples/type": "int64",
+        "roadgraph_samples/id": "int64",
+        "roadgraph_samples/valid": "int64",
+    }
+    normalization = payload["source_predicate"][
+        "pre_jax_to_semantic_normalization"
+    ]
+    assert normalization["state/id"] == {
+        "semantic_dtype": "int32",
+        "gates": [
+            "finite",
+            "signed_int32_range",
+            "float32_to_int32_to_float32_exact_roundtrip",
+        ],
+    }
+    assert normalization["state/type"] == normalization["state/id"]
+    binary_normalization = {
+        "semantic_dtype": "bool",
+        "gates": ["binary_int64_exactly_zero_or_one"],
+    }
+    assert normalization["state/is_sdc"] == binary_normalization
+    assert normalization["state/all/valid"] == binary_normalization
+    assert normalization["roadgraph_samples/valid"] == binary_normalization
+    assert normalization["state/all/timestamp_micros"] == {
+        "semantic_dtype": "int64",
+        "gates": [
+            "signed_int32_range",
+            "int64_to_int32_to_int64_exact_roundtrip",
+        ],
+        "consensus_dtype": "int64",
+    }
+    integer_normalization = {
+        "semantic_dtype": "int32",
+        "gates": [
+            "signed_int32_range",
+            "int64_to_int32_to_int64_exact_roundtrip",
+        ],
+    }
+    assert normalization["roadgraph_samples/type"] == integer_normalization
+    assert normalization["roadgraph_samples/id"] == integer_normalization
+    assert payload["source_predicate"]["native_scenario_id"] == {
+        "tf_source": {"dtype": "tf.string", "shape": [1]},
+        "decoded": {"dtype": "uint8", "shape": [1, "N"], "N_min": 1},
+        "gates": [
+            "decoded_bytes_exactly_equal_tf_string_payload",
+            "strict_utf8",
+            "nonempty_hex",
+            "preserve_original_case_and_length",
+        ],
+    }
+    assert payload["source_predicate"]["dimensions"]["rule"] == (
+        "finite_positive_exactly_constant_valid_frames_only_"
+        "ignore_invalid_payload"
     )
     assert payload["ranking"]["domains"] == {
         "cohort": M4_COHORT_DOMAIN,

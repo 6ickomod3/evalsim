@@ -678,12 +678,24 @@ def _make_postprocess(dataset_config: Any, dataloader: Any) -> Any:
 
 
 def _decode_scenario_id(value: Any) -> str:
+    encoded = np.asarray(value)
+    if (
+        encoded.dtype != np.uint8
+        or encoded.ndim != 2
+        or encoded.shape[0] != 1
+        or encoded.shape[1] == 0
+    ):
+        raise WaymaxDataError(
+            "scenario_id_encoding",
+            "the native WOMD scenario ID must be exact uint8 shape [1, N] "
+            "with N greater than zero",
+        )
     try:
-        decoded = np.asarray(value, dtype=np.uint8).tobytes().decode(
+        decoded = encoded[0].tobytes().decode(
             "utf-8",
             errors="strict",
         )
-    except (UnicodeDecodeError, ValueError) as exc:
+    except UnicodeDecodeError as exc:
         raise WaymaxDataError(
             "scenario_id_decode",
             "the native WOMD scenario ID is not valid UTF-8 bytes",
@@ -806,11 +818,13 @@ class _M4RuntimeDecoder:
             ),
             parsed,
         )
-        raw_id, audit, state = self.postprocess(numpy_parsed)
+        scenario_id = _decode_scenario_id(numpy_parsed["scenario/id"])
+        audit = _freeze_audit(numpy_parsed)
+        _, _, state = self.postprocess(numpy_parsed)
         return WaymaxRecord(
-            scenario_id=_decode_scenario_id(raw_id),
+            scenario_id=scenario_id,
             state=state,
-            audit=_freeze_audit(audit),
+            audit=audit,
             shard_suffix=locator.shard_suffix,
             record_ordinal=locator.record_ordinal,
             shard_sha256=shard_sha256,

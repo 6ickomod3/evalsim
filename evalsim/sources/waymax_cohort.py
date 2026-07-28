@@ -30,7 +30,7 @@ from .waymax import (
     WOMD_DATASET_VERSION,
 )
 
-M4_SELECTOR_VERSION = "1"
+M4_SELECTOR_VERSION = "2"
 M4_MANIFEST_SCHEMA_VERSION = "1"
 
 M4_SHARD_SUFFIXES = tuple(f"{index:05d}" for index in range(10))
@@ -62,25 +62,32 @@ M4_INITIAL_QUOTAS = MappingProxyType(
     }
 )
 
-_AUDIT_FIELDS = (
-    "state/id",
-    "state/type",
-    "state/is_sdc",
-    "state/which_time",
-    "state/all/valid",
-    "state/all/x",
-    "state/all/y",
-    "state/all/velocity_x",
-    "state/all/velocity_y",
-    "state/all/bbox_yaw",
-    "state/all/timestamp_micros",
-    "state/all/length",
-    "state/all/width",
-    "roadgraph_samples/xyz",
-    "roadgraph_samples/dir",
-    "roadgraph_samples/type",
-    "roadgraph_samples/id",
-    "roadgraph_samples/valid",
+_PRE_JAX_AUDIT_SCHEMA = (
+    ("state/id", (128,), np.dtype(np.float32)),
+    ("state/type", (128,), np.dtype(np.float32)),
+    ("state/is_sdc", (128,), np.dtype(np.int64)),
+    ("state/which_time", (91,), np.dtype(np.float32)),
+    ("state/all/valid", (128, 91), np.dtype(np.int64)),
+    ("state/all/x", (128, 91), np.dtype(np.float32)),
+    ("state/all/y", (128, 91), np.dtype(np.float32)),
+    ("state/all/velocity_x", (128, 91), np.dtype(np.float32)),
+    ("state/all/velocity_y", (128, 91), np.dtype(np.float32)),
+    ("state/all/bbox_yaw", (128, 91), np.dtype(np.float32)),
+    ("state/all/timestamp_micros", (128, 91), np.dtype(np.int64)),
+    ("state/all/length", (128, 91), np.dtype(np.float32)),
+    ("state/all/width", (128, 91), np.dtype(np.float32)),
+    ("roadgraph_samples/xyz", (30000, 3), np.dtype(np.float32)),
+    ("roadgraph_samples/dir", (30000, 3), np.dtype(np.float32)),
+    ("roadgraph_samples/type", (30000, 1), np.dtype(np.int64)),
+    ("roadgraph_samples/id", (30000, 1), np.dtype(np.int64)),
+    ("roadgraph_samples/valid", (30000, 1), np.dtype(np.int64)),
+)
+_AUDIT_FIELDS = tuple(name for name, _, _ in _PRE_JAX_AUDIT_SCHEMA)
+_PRE_JAX_AUDIT_SCHEMA_BY_FIELD = MappingProxyType(
+    {
+        name: (shape, dtype)
+        for name, shape, dtype in _PRE_JAX_AUDIT_SCHEMA
+    }
 )
 _VALID_MOTION_FIELDS = (
     "state/all/x",
@@ -142,7 +149,80 @@ def selector_config_payload() -> dict[str, Any]:
             },
         },
         "source_predicate": {
+            "audit_boundary": (
+                "after_pinned_waymax_tensorflow_preprocess_"
+                "before_jax_waymax_factory"
+            ),
             "audit_fields": list(_AUDIT_FIELDS),
+            "pre_jax_audit_schema": {
+                name: {
+                    "shape": list(shape),
+                    "dtype": dtype.name,
+                }
+                for name, shape, dtype in _PRE_JAX_AUDIT_SCHEMA
+            },
+            "pre_jax_to_semantic_normalization": {
+                "state/id": {
+                    "semantic_dtype": "int32",
+                    "gates": [
+                        "finite",
+                        "signed_int32_range",
+                        "float32_to_int32_to_float32_exact_roundtrip",
+                    ],
+                },
+                "state/type": {
+                    "semantic_dtype": "int32",
+                    "gates": [
+                        "finite",
+                        "signed_int32_range",
+                        "float32_to_int32_to_float32_exact_roundtrip",
+                    ],
+                },
+                "state/is_sdc": {
+                    "semantic_dtype": "bool",
+                    "gates": ["binary_int64_exactly_zero_or_one"],
+                },
+                "state/all/valid": {
+                    "semantic_dtype": "bool",
+                    "gates": ["binary_int64_exactly_zero_or_one"],
+                },
+                "state/all/timestamp_micros": {
+                    "semantic_dtype": "int64",
+                    "gates": [
+                        "signed_int32_range",
+                        "int64_to_int32_to_int64_exact_roundtrip",
+                    ],
+                    "consensus_dtype": "int64",
+                },
+                "roadgraph_samples/type": {
+                    "semantic_dtype": "int32",
+                    "gates": [
+                        "signed_int32_range",
+                        "int64_to_int32_to_int64_exact_roundtrip",
+                    ],
+                },
+                "roadgraph_samples/id": {
+                    "semantic_dtype": "int32",
+                    "gates": [
+                        "signed_int32_range",
+                        "int64_to_int32_to_int64_exact_roundtrip",
+                    ],
+                },
+                "roadgraph_samples/valid": {
+                    "semantic_dtype": "bool",
+                    "gates": ["binary_int64_exactly_zero_or_one"],
+                },
+            },
+            "native_scenario_id": {
+                "tf_source": {"dtype": "tf.string", "shape": [1]},
+                "decoded": {"dtype": "uint8", "shape": [1, "N"], "N_min": 1},
+                "gates": [
+                    "decoded_bytes_exactly_equal_tf_string_payload",
+                    "strict_utf8",
+                    "nonempty_hex",
+                    "preserve_original_case_and_length",
+                ],
+            },
             "rejection_priority": list(SOURCE_REJECTION_CODES),
             "retained_object_rule": "any_valid_frames_0_through_90",
             "sdc_count_scope": "retained_object_slots",
@@ -152,7 +232,10 @@ def selector_config_payload() -> dict[str, Any]:
             "valid_motion_fields": list(_VALID_MOTION_FIELDS),
             "dimensions": {
                 "fields": list(_DIMENSION_FIELDS),
-                "rule": "finite_positive_exactly_constant_all_91_frames",
+                "rule": (
+                    "finite_positive_exactly_constant_valid_frames_only_"
+                    "ignore_invalid_payload"
+                ),
             },
             "timestamps": {
                 "field": "state/all/timestamp_micros",
@@ -1040,35 +1123,42 @@ def _validated_audit_arrays(
                 "audit_array_invalid",
                 f"{name} is not a rectangular eager array",
             ) from exc
-        if array.dtype.hasobject:
-            _fail("audit_dtype_invalid", f"{name} has object dtype")
-        arrays[name] = array
-
-    valid = arrays["state/all/valid"]
-    if valid.dtype != np.bool_ or valid.shape != (128, 91):
-        _fail(
-            "audit_shape_or_dtype_drift",
-            "state/all/valid must be boolean [128, 91]",
-        )
-    num_objects = valid.shape[0]
-    for name in ("state/id", "state/type", "state/is_sdc"):
-        if arrays[name].shape != (num_objects,):
+        expected_shape, expected_dtype = _PRE_JAX_AUDIT_SCHEMA_BY_FIELD[name]
+        if array.shape != expected_shape or array.dtype != expected_dtype:
             _fail(
                 "audit_shape_or_dtype_drift",
-                f"{name} must have shape [objects]",
+                f"{name} must have exact raw shape {expected_shape} "
+                f"and dtype {expected_dtype.name}",
             )
-    if not np.issubdtype(arrays["state/id"].dtype, np.integer):
-        _fail("audit_dtype_invalid", "state/id must have integer dtype")
-    if not np.issubdtype(arrays["state/type"].dtype, np.integer):
-        _fail("audit_dtype_invalid", "state/type must have integer dtype")
-    if arrays["state/is_sdc"].dtype != np.bool_:
-        _fail("audit_dtype_invalid", "state/is_sdc must have boolean dtype")
+        arrays[name] = array
 
+    arrays["state/id"] = _lossless_float32_to_int32(
+        arrays["state/id"],
+        "state/id",
+    )
+    arrays["state/type"] = _lossless_float32_to_int32(
+        arrays["state/type"],
+        "state/type",
+    )
+    for name in (
+        "state/is_sdc",
+        "state/all/valid",
+        "roadgraph_samples/valid",
+    ):
+        arrays[name] = _binary_int64_to_bool(arrays[name], name)
+    arrays["roadgraph_samples/type"] = _lossless_int64_to_int32(
+        arrays["roadgraph_samples/type"],
+        "roadgraph_samples/type",
+    )
+    arrays["roadgraph_samples/id"] = _lossless_int64_to_int32(
+        arrays["roadgraph_samples/id"],
+        "roadgraph_samples/id",
+    )
+
+    valid = arrays["state/all/valid"]
     which_time = arrays["state/which_time"]
-    _require_real_numeric(which_time, "state/which_time")
     if (
-        which_time.shape != (91,)
-        or not np.all(np.isfinite(which_time))
+        not np.all(np.isfinite(which_time))
         or not np.array_equal(which_time, _EXPECTED_WHICH_TIME)
     ):
         _fail(
@@ -1076,25 +1166,11 @@ def _validated_audit_arrays(
             "state/which_time must preserve the exact 10/1/80 boundary",
         )
 
-    for name in (*_VALID_MOTION_FIELDS, *_DIMENSION_FIELDS):
-        array = arrays[name]
-        _require_real_numeric(array, name)
-        if array.shape != valid.shape:
-            _fail(
-                "audit_shape_or_dtype_drift",
-                f"{name} must match state/all/valid",
-            )
     timestamps = arrays["state/all/timestamp_micros"]
-    if not np.issubdtype(timestamps.dtype, np.integer):
-        _fail(
-            "audit_dtype_invalid",
-            "state/all/timestamp_micros must have integer dtype",
-        )
-    if timestamps.shape != valid.shape:
-        _fail(
-            "audit_shape_or_dtype_drift",
-            "state/all/timestamp_micros must match state/all/valid",
-        )
+    _lossless_int64_to_int32(
+        timestamps,
+        "state/all/timestamp_micros",
+    )
 
     retained = np.any(valid, axis=1)
     retained_ids = arrays["state/id"][retained]
@@ -1116,7 +1192,7 @@ def _validated_audit_arrays(
             )
     for name in _DIMENSION_FIELDS:
         for source_index in np.flatnonzero(retained):
-            values = arrays[name][source_index]
+            values = arrays[name][source_index, valid[source_index]]
             if (
                 not np.all(np.isfinite(values))
                 or np.any(values <= 0.0)
@@ -1124,7 +1200,8 @@ def _validated_audit_arrays(
             ):
                 _fail(
                     "dimension_not_constant",
-                    f"{name} must be finite, positive, and exactly constant",
+                    f"{name} must be finite, positive, and exactly constant "
+                    "over valid frames",
                 )
 
     canonical_timestamps = np.empty(91, dtype=np.int64)
@@ -1147,31 +1224,6 @@ def _validated_audit_arrays(
             "source timestamps must be strictly increasing",
         )
 
-    xyz = arrays["roadgraph_samples/xyz"]
-    directions = arrays["roadgraph_samples/dir"]
-    rg_types = arrays["roadgraph_samples/type"]
-    rg_ids = arrays["roadgraph_samples/id"]
-    rg_valid = arrays["roadgraph_samples/valid"]
-    _require_real_numeric(xyz, "roadgraph_samples/xyz")
-    _require_real_numeric(directions, "roadgraph_samples/dir")
-    point_count = xyz.shape[0] if xyz.ndim == 2 else -1
-    if (
-        xyz.shape != (30000, 3)
-        or directions.shape != xyz.shape
-        or rg_types.shape != (point_count, 1)
-        or rg_ids.shape != (point_count, 1)
-        or rg_valid.shape != (point_count, 1)
-    ):
-        _fail(
-            "audit_shape_or_dtype_drift",
-            "roadgraph fields must be [30000, 3] or [30000, 1]",
-        )
-    if not np.issubdtype(rg_types.dtype, np.integer):
-        _fail("audit_dtype_invalid", "roadgraph type must have integer dtype")
-    if not np.issubdtype(rg_ids.dtype, np.integer):
-        _fail("audit_dtype_invalid", "roadgraph id must have integer dtype")
-    if rg_valid.dtype != np.bool_:
-        _fail("audit_dtype_invalid", "roadgraph valid must have boolean dtype")
     return arrays
 
 
@@ -1490,13 +1542,58 @@ def _require_exact_keys(
         )
 
 
-def _require_real_numeric(array: np.ndarray, name: str) -> None:
+def _lossless_float32_to_int32(
+    array: np.ndarray,
+    name: str,
+) -> np.ndarray:
+    values = array.astype(np.float64)
     if (
-        np.issubdtype(array.dtype, np.bool_)
-        or not np.issubdtype(array.dtype, np.number)
-        or np.issubdtype(array.dtype, np.complexfloating)
+        not np.all(np.isfinite(values))
+        or np.any(values != np.trunc(values))
+        or np.any(values < -(2**31))
+        or np.any(values >= 2**31)
     ):
-        _fail("audit_dtype_invalid", f"{name} must have real numeric dtype")
+        _fail(
+            "audit_nonintegral_encoding",
+            f"{name} must contain finite signed-int32 encodings",
+        )
+    normalized = array.astype(np.int32)
+    if not np.array_equal(normalized.astype(np.float32), array):
+        _fail(
+            "audit_nonintegral_encoding",
+            f"{name} failed the exact float32/int32 roundtrip",
+        )
+    return normalized
+
+
+def _lossless_int64_to_int32(
+    array: np.ndarray,
+    name: str,
+) -> np.ndarray:
+    if np.any(array < -(2**31)) or np.any(array >= 2**31):
+        _fail(
+            "audit_int32_range",
+            f"{name} must fit signed int32 losslessly",
+        )
+    normalized = array.astype(np.int32)
+    if not np.array_equal(normalized.astype(np.int64), array):
+        _fail(
+            "audit_int32_range",
+            f"{name} failed the exact int64/int32 roundtrip",
+        )
+    return normalized
+
+
+def _binary_int64_to_bool(
+    array: np.ndarray,
+    name: str,
+) -> np.ndarray:
+    if np.any((array != 0) & (array != 1)):
+        _fail(
+            "audit_nonbinary_encoding",
+            f"{name} must contain only binary int64 0/1 encodings",
+        )
+    return array.astype(np.bool_)
 
 
 def _validate_shard_suffix(shard_suffix: str) -> None:

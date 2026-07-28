@@ -1,6 +1,7 @@
 # WOMD / Waymax M4 execution crosswalk
 
-**Status:** Pre-registered semantic crosswalk; M4 metric parity is not run here
+**Status:** Selector-v2 representation correction pending clean-commit rerun; M4
+metric parity is not run here
 **Dataset profile:** WOMD v1.3.1 TFExample validation, 10 past + 1 current +
 80 future frames
 **Waymax revision:** `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`
@@ -45,6 +46,17 @@ geometry. It is neither a random sample nor representative of WOMD, production
 driving, geography, or any broader population.
 
 ## Selector and source boundary
+
+### Selector-v2 representation correction
+
+The first bound attempt exposed an implementation mismatch between the
+pre-registered source boundary and the arrays used by the selector. Selector
+v2 freezes native identity and audit arrays from the eager pre-JAX decoded
+mapping, validates the pinned pre-JAX schema, and only then performs lossless
+semantic normalization. The four eligibility predicates, their priority, and
+all ranking rules remain unchanged. This correction is a representation
+contract repair, not WOMD selection, metric, or comparative evidence; all M4
+result claims remain locked pending a fresh clean-commit run.
 
 ### Population
 
