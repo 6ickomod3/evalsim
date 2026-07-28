@@ -105,6 +105,10 @@ For every milestone, follow this sequence:
 - `Scenario.metadata["current_index"]` is the last observed/current frame. The rollout
   engine copies history through that frame and simulates subsequent transitions. The
   synthetic source defaults to index 0; M3 adapters must set the real history boundary.
+- At the pinned Waymax revision, `IDMRoutePolicy` projects each controlled agent onto
+  that agent's complete logged future trajectory. Describe it as a privileged
+  logged-trajectory waypoint-following IDM reference, not a causal map-route policy,
+  independent ground truth, or numerical twin of EvalSim IDM.
 - Ego is exogenous: M2 copies the logged ego trajectory while policies simulate world
   agents. M6 may replace the ego trajectory through a typed perturbation/controller,
   while world policies continue to observe the current ego state.

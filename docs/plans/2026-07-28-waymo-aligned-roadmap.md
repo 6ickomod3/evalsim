@@ -124,6 +124,9 @@ artifacts remained local and ignored.
 
 ### M4 — Deterministic WOMD cohort and Waymax parity
 
+**Status:** 🚧 Pre-registered and adversarially accepted on 2026-07-28; no M4 WOMD
+payload scan or comparative result has been run.
+
 **Question:** Does the one-scene adapter scale to an auditable population, and where do
 EvalSim and Waymax semantics agree or diverge?
 
@@ -135,26 +138,32 @@ EvalSim and Waymax semantics agree or diverge?
 - Freeze a parity cohort of 128 eligible scenarios using a declared selection rule
   before comparing policies. If the eligibility scan cannot supply 128, record the rule
   and use the complete eligible population without replacement.
-- Run EvalSim log replay, CV, and IDM plus supported Waymax log-playback/reference
-  dynamics and route-aware IDM paths on the same eligible scenes.
+- Run EvalSim log replay, CV, and IDM plus supported Waymax exact log-playback/reference
+  dynamics on the full cohort. Run Waymax's privileged logged-trajectory
+  waypoint-following IDM on a pre-registered nested subset and horizon that fit the
+  measured local CPU budget.
 - Convert Waymax outputs back to the `Rollout` contract.
 - Exercise real `jax.jit` and `vmap` paths. Measure compilation separately from
   steady-state execution.
 - Write a semantic crosswalk for coordinates, masks, agent control, initialization
-  horizon, overlap/offroad/wrong-way/route definitions, and tolerance choices.
+  horizon, overlap/offroad/wrong-way/route definitions, and tolerance choices. M4
+  documents metric semantics; numerical custom/Waymax metric parity begins in M5.
 
 **Evidence gate**
 
-- Every selected record converts or has a classified rejection; silent drops are zero.
+- Every raw record is counted before preprocessing; only pre-registered source-property
+  exclusions may reject. Every source-eligible record converts and passes independent
+  parity, or M4 fails. Silent drops are zero.
 - Log-replay parity holds on eligible agents and frames.
 - SDC, agent ordering, validity, map frame, and time boundary survive batching.
-- All backend discrepancies are reproduced and explained; Waymax is an independent
-  reference, not unquestioned ground truth.
+- All supported-matrix discrepancies are reproduced and explained. Waymax is a pinned
+  semantic reference that shares the decode path, not independent ground truth.
 - CPU compilation time, warm throughput, peak memory, and exact version provenance are
   recorded locally.
 
-**Claim unlocked after acceptance:** cross-validated EvalSim rollouts against Waymax on
-an auditable WOMD cohort.
+**Claim unlocked after acceptance:** cross-checked exact log-playback mapping and
+rollout-contract semantics against pinned Waymax/JAX on an auditable complete-case
+conditional WOMD cohort.
 
 ### M5 — Real-WOMD metric system and statistical scorecards
 
@@ -206,8 +215,10 @@ separate nonreactivity from unsafe or overly conservative reaction?
   lateral offset, and timing changes.
 - Run paired baseline/counterfactual experiments from identical initial state, seed,
   policy, and horizon.
-- Compare log playback, custom IDM, supported Waymax route-aware IDM, and both rollout
-  backends on the parity cohort where semantics match.
+- Compare log playback, custom IDM, Waymax's privileged logged-trajectory
+  waypoint-following IDM reference, and both rollout backends on the parity cohort
+  where semantics match. Do not describe the Waymax policy as causal, map-route-aware,
+  or independent ground truth.
 - Measure response latency, following acceleration change, TTC/minimum-distance change,
   collisions avoided or introduced, progress loss, and response smoothness.
 

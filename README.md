@@ -40,7 +40,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M1 | Synthetic scenario source + visualization | ✅ | 🖥️ |
 | M2 | Simulator adapters + rollout engine | ✅ | 🖥️ |
 | M3 | Local WOMD → Waymax/JAX → EvalSim vertical slice | ✅ | 🖥️ |
-| M4 | Deterministic WOMD cohort + Waymax parity | ⬜ | 🖥️ |
+| M4 | Deterministic WOMD cohort + Waymax parity | 🚧 | 🖥️ |
 | M5 | Real-WOMD metrics + statistical scorecards | ⬜ | 🖥️ |
 | M6 | Counterfactual closed-loop reactivity | ⬜ | 🖥️ |
 | M7 | Evaluator red-team + metric governance | ⬜ | 🖥️ |
@@ -50,7 +50,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M11 | Decision package + staff-caliber communication | ⬜ | 🖥️ |
 
 **Tests:** 170 passing with the Waymo extra; 152 passing core-only; 1 additional
-opt-in local-WOMD test · **Last updated:** 2026-07-28 (M3 released)
+opt-in local-WOMD test · **Last updated:** 2026-07-28 (M4 pre-registered; no M4 result)
 
 ## Completed work
 
@@ -151,6 +151,15 @@ metrics, statistical comparison, or learned evaluation. See the
 [field mapping](docs/data/womd-waymax-m3-mapping.md), the
 [reviewed M3 plan](docs/plans/2026-07-28-m3-local-waymo-vertical-slice.md), and the
 [third-party notice](NOTICE.md).
+
+### M4 — Deterministic cohort and Waymax parity 🚧
+
+M4 is pre-registered and its plan has passed two adversarial reviews. No M4 WOMD
+eligibility scan or comparative result has been run yet. The accepted plan freezes the
+exact ten-shard boundary, raw-record accounting, complete-case selector, full-cohort
+exact-log parity, two-scene `jit`/`vmap` gate, and a separately scoped
+logged-trajectory waypoint-following Waymax IDM subset before data inspection. See the
+[reviewed M4 plan](docs/plans/2026-07-28-m4-womd-cohort-waymax-parity.md).
 
 ## Setup
 
