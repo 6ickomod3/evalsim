@@ -65,7 +65,7 @@ claimed.
 
 **Tests:** current full repository suite: 862 passed + 1 expected local-data skip;
 fresh clean core-only environment: 779 passed + 25 expected optional/local skips ·
-**Last updated:** 2026-07-29 (M5 official runner accepted in review; real-WOMD/Waymax
+**Last updated:** 2026-07-29 (M5 official runner accepted and pushed; real-WOMD/Waymax
 execution and acceptance pending)
 
 ## Completed work

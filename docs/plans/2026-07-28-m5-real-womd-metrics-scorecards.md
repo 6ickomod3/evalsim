@@ -2,9 +2,9 @@
 
 **Date:** 2026-07-28
 **Status:** Accepted pre-registration, data-free overlap-boundary amendment, data-free
-implementation, and official-runner implementation; the bound real-WOMD acceptance
-remains pending, and no M5 WOMD outcome or native M5 WOMD parity result has been
-computed
+implementation, and official-runner implementation; both implementations are committed
+and pushed, the bound real-WOMD acceptance remains pending, and no M5 WOMD outcome or
+native M5 WOMD parity result has been computed
 **Depends on:** accepted M4 execution snapshot
 `a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`
 **Population:** the unchanged accepted M4 complete-case conditional cohort of
@@ -65,7 +65,9 @@ synthetic-terminal lifecycle cases in `tests/test_m5_synthetic_cli.py`.
 This is official-runner software evidence, not a data execution. The mocked cases do
 not contain an M5 WOMD metric outcome, slice prevalence, effect, interval, parity
 result, ranking, or winner. No official WOMD run was launched or accepted while this
-implementation boundary was reviewed.
+implementation boundary was reviewed. The accepted runner implementation was committed
+and pushed as `c155d0d199b827a56417f288a41ea2437ea65127` before any M5 WOMD
+execution.
 
 No real-WOMD M5 metric result, slice count, policy difference, resampling interval,
 native scenario identity, coordinate, or ignored M4 artifact **content** was inspected
@@ -912,6 +914,6 @@ release-surface audits.
       and 25 expected optional/local skips.
 - [x] Final adversarial official-runner review returned **ACCEPT** with no remaining
       release blocker.
-- [ ] Accepted official-runner implementation committed and pushed before WOMD
-      execution.
+- [x] Accepted official-runner implementation committed and pushed before WOMD
+      execution (`c155d0d199b827a56417f288a41ea2437ea65127`).
 - [ ] Bound real-WOMD M5 execution, native metric parity, and result reviews completed.
