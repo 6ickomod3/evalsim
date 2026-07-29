@@ -63,8 +63,8 @@ cases, 14 runner tests, and final adversarial review. No M5 WOMD/Waymax metric o
 has been computed or accepted, and no policy-quality result, ranking, or winner is
 claimed.
 
-**Tests:** current full repository suite: 869 passed + 1 expected local-data skip;
-fresh clean core-only environment: 779 passed + 25 expected optional/local skips ·
+**Tests:** current full repository suite: 876 passed + 1 expected local-data skip;
+fresh clean core-only environment: 790 passed + 28 expected optional/local skips ·
 **Last updated:** 2026-07-29 (M5 official runner and private-repository live-ref
 amendment accepted and pushed; real-WOMD/Waymax execution and acceptance pending)
 
@@ -239,9 +239,9 @@ and accepted at the software boundary:
   lifecycle, 18 injected failure boundaries, and 34 adversarial lifecycle cases. The
   final independent review returned **ACCEPT**.
 
-The current full repository suite reports **869 passed and 1 expected local-data
+The current full repository suite reports **876 passed and 1 expected local-data
 skip**. A fresh clean core-only environment without JAX, jaxlib, TensorFlow, Flax, or
-Waymax reports **779 passed and 25 expected optional/local skips**. These are
+Waymax reports **790 passed and 28 expected optional/local skips**. These are
 implementation and contract evidence only. The bound M5 real-WOMD/Waymax metric
 execution has not run, so none of the official row domains contains a computed WOMD
 outcome and there is no accepted policy-quality effect, ranking, winner, or
@@ -260,8 +260,8 @@ uv run pytest                          # run the test suite
 ```
 
 A fresh clean core-only environment without JAX, jaxlib, TensorFlow, Flax, or Waymax
-reports **779 passed, 25 expected optional/local skips**. With the licensed Waymo
-runtime configured, the latest full repository verification reports **869 passed and
+reports **790 passed, 28 expected optional/local skips**. With the licensed Waymo
+runtime configured, the latest full repository verification reports **876 passed and
 1 expected local-data skip**. Historical milestone-scoped acceptance counts remain
 recorded in their milestone sections.
 

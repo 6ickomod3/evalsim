@@ -26,6 +26,7 @@ from evalsim.contracts import (
 )
 
 M5_METRIC_VERSION = "1.0.0"
+M5_KINEMATIC_METRIC_VERSION = "1.0.1"
 _FLOAT32_DT = np.float32(0.1)
 _FLOAT32_DT_SQUARED = np.float32(0.1**2)
 _FLOAT32_SPEED_THRESHOLD = np.float32(0.6)
@@ -321,8 +322,6 @@ class _BaseMetric(Metric):
         scenario: Scenario,
     ) -> MetricEligibility:
         _validate_source(scenario)
-        if self.spec.name == "waymax_kinematic_infeasibility_rate":
-            _assert_100ms_cadence(scenario, _current_index(scenario))
         reason = _source_invalid_reason(self.spec.name, scenario)
         if reason is None:
             return MetricEligibility.accepted()
@@ -702,19 +701,6 @@ def kinematic_infeasibility_components(
     return flags, action_valid, accel, curvature
 
 
-def _assert_100ms_cadence(scenario: Scenario, current: int) -> None:
-    timestamps = np.asarray(scenario.timestamps, dtype=np.float64)
-    deltas_micros = np.diff(timestamps[current:]) * 1_000_000.0
-    rounded = np.rint(deltas_micros)
-    if np.any(np.abs(deltas_micros - rounded) > 1e-6):
-        _fail(
-            "cadence_drift",
-            "timestamp deltas must agree with an integral microsecond cadence",
-        )
-    if np.any(rounded.astype(np.int64) != 100_000):
-        _fail("cadence_drift", "kinematic metric requires exact 100000 us cadence")
-
-
 class PositionErrorMetric(_BaseMetric):
     spec = MetricSpec(
         name="position_error_m",
@@ -832,7 +818,7 @@ class OrientedBoxOverlapRateMetric(_BaseMetric):
 class WaymaxKinematicInfeasibilityRateMetric(_BaseMetric):
     spec = MetricSpec(
         name="waymax_kinematic_infeasibility_rate",
-        version=M5_METRIC_VERSION,
+        version=M5_KINEMATIC_METRIC_VERSION,
         value_unit="fraction",
         direction="lower",
         aggregation="rate",
@@ -846,16 +832,19 @@ class WaymaxKinematicInfeasibilityRateMetric(_BaseMetric):
             "vx",
             "vy",
             "type",
-            "fixed_100000_us_source_cadence",
+            "fixed_0.1_s_inverse_dynamics_timebase",
         ),
         known_failure_modes=(
             "inverse bicycle thresholds are weak semantics for non-vehicles",
+            (
+                "fixed 0.1 s Waymax inverse-dynamics diagnostic intentionally "
+                "ignores source timestamp deltas and is not physical-time-normalized"
+            ),
         ),
     )
 
     def _outcome(self, scenario: Scenario, rollout: Rollout) -> _Outcome:
         current = _validate_pair(scenario, rollout)
-        _assert_100ms_cadence(scenario, current)
         flags, valid, _, _ = kinematic_infeasibility_components(scenario, rollout)
         vehicles = _vehicle_indices(scenario)
         total = len(vehicles) * max(0, scenario.num_steps - current - 1)

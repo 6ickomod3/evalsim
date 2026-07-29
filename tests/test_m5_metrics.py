@@ -20,6 +20,7 @@ from evalsim import (
     scenario_to_parquet,
 )
 from evalsim.metrics.m5 import (
+    M5_KINEMATIC_METRIC_VERSION,
     AccelerationErrorMetric,
     ConstantVelocityTTCCapMetric,
     JerkErrorMetric,
@@ -530,11 +531,41 @@ def test_kinematic_exact_and_nextafter_thresholds_are_strict(threshold) -> None:
     np.testing.assert_array_equal(flags, [False, False, True])
 
 
-def test_kinematic_metric_rejects_cadence_drift_as_execution_failure() -> None:
-    timestamps = np.array([0.0, 0.11])
-    scenario, rollout = _pair(timestamps=timestamps)
-    with pytest.raises(ValueError, match="cadence_drift"):
-        WaymaxKinematicInfeasibilityRateMetric().compute(scenario, rollout)
+def test_kinematic_metric_uses_fixed_waymax_step_on_nonuniform_timestamps() -> None:
+    def case(timestamps: np.ndarray) -> tuple[Scenario, Rollout]:
+        return _pair(
+            timestamps=timestamps,
+            source_agents=[
+                _agent(0, timestamps, x=-20.0),
+                _agent(1, timestamps, vx=[0.0, 2.0, 2.0]),
+            ],
+        )
+
+    nominal = case(np.array([0.0, 0.1, 0.2]))
+    nonuniform = case(np.array([0.0, 0.100001, 0.200003]))
+    nominal_components = kinematic_infeasibility_components(*nominal)
+    nonuniform_components = kinematic_infeasibility_components(*nonuniform)
+    for nominal_component, nonuniform_component in zip(
+        nominal_components,
+        nonuniform_components,
+        strict=True,
+    ):
+        np.testing.assert_array_equal(nominal_component, nonuniform_component)
+
+    metric = WaymaxKinematicInfeasibilityRateMetric()
+    nominal_result = _result(metric, *nominal)
+    nonuniform_result = _result(metric, *nonuniform)
+    assert metric.spec.version == M5_KINEMATIC_METRIC_VERSION == "1.0.1"
+    assert (
+        "fixed_0.1_s_inverse_dynamics_timebase"
+        in metric.spec.required_fields
+    )
+    assert any(
+        "not physical-time-normalized" in failure_mode
+        for failure_mode in metric.spec.known_failure_modes
+    )
+    assert nominal_result.value == nonuniform_result.value == 0.5
+    assert nominal_result.distribution == nonuniform_result.distribution
 
 
 @pytest.mark.parametrize(

@@ -1220,6 +1220,98 @@ def test_metric_slice_and_parity_catalog_drift_fail_closed(
         parity_store.write_waymax_parity_summary([parity])
 
 
+def test_metric_store_enforces_kinematic_metric_version(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    accepted_store = M5ResultStore.create(
+        project,
+        "accepted-kinematic-metric-version",
+        expected_rows=ExpectedRowCounts(1, 0, 0, 0),
+        data_free=True,
+    )
+    accepted_row = _metric_row(0)
+    accepted_row.update(
+        {
+            "metric_name": "waymax_kinematic_infeasibility_rate",
+            "metric_version": "1.0.1",
+            "distribution": [0.0],
+            "value": 0.0,
+        }
+    )
+    assert accepted_store.write_metric_results_part([accepted_row]).rows == 1
+
+    stale_store = M5ResultStore.create(
+        project,
+        "stale-kinematic-metric-version",
+        expected_rows=ExpectedRowCounts(1, 0, 0, 0),
+        data_free=True,
+    )
+    stale_row = dict(accepted_row)
+    stale_row["metric_version"] = "1.0.0"
+    with pytest.raises(ValueError, match="canonical M5 catalog"):
+        stale_store.write_metric_results_part([stale_row])
+
+
+def test_parity_store_enforces_anchor_specific_metric_versions(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    expected_versions = {
+        "kinematic_infeasibility": "1.0.1",
+        "log_divergence": "1.0.0",
+        "overlap": "1.0.0",
+    }
+    for metric_name, metric_version in expected_versions.items():
+        store = M5ResultStore.create(
+            project,
+            f"accepted-{metric_name}",
+            expected_rows=ExpectedRowCounts(0, 0, 0, 1),
+            data_free=True,
+        )
+        row = _parity_row()
+        row.update(
+            {
+                "metric_name": metric_name,
+                "metric_version": metric_version,
+                "max_tolerance_excess": (
+                    -1e-6 if metric_name == "log_divergence" else 0.0
+                ),
+            }
+        )
+        assert store.write_waymax_parity_summary([row]).rows == 1
+
+    stale_kinematic = M5ResultStore.create(
+        project,
+        "stale-kinematic-version",
+        expected_rows=ExpectedRowCounts(0, 0, 0, 1),
+        data_free=True,
+    )
+    stale_row = _parity_row()
+    stale_row.update(
+        {
+            "metric_name": "kinematic_infeasibility",
+            "metric_version": "1.0.0",
+        }
+    )
+    with pytest.raises(ValueError, match="frozen anchor version"):
+        stale_kinematic.write_waymax_parity_summary([stale_row])
+
+    drifted_overlap = M5ResultStore.create(
+        project,
+        "drifted-overlap-version",
+        expected_rows=ExpectedRowCounts(0, 0, 0, 1),
+        data_free=True,
+    )
+    overlap_row = _parity_row()
+    overlap_row.update(
+        {
+            "metric_name": "overlap",
+            "metric_version": "1.0.1",
+        }
+    )
+    with pytest.raises(ValueError, match="frozen anchor version"):
+        drifted_overlap.write_waymax_parity_summary([overlap_row])
+
+
 def test_metric_values_must_match_the_registered_reducer() -> None:
     forged_mean = _metric_row(0)
     forged_mean.update(

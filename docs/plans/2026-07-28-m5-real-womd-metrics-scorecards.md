@@ -963,3 +963,86 @@ runner snapshot was committed and pushed as
 `828f01524e5bdcd6bbf1932fdea31c2d242e9bae`; local `HEAD`, `origin/main`, the
 independent remote ref, and the amended live-ref probe all matched that commit. No
 WOMD or M5 output was accessed while closing this gate.
+
+## 15. Outcome-blind cadence-domain amendment
+
+**Status:** design, implementation, and pre-release verification accepted; the
+correction release and fresh WOMD attempt `03` remain pending.
+
+The fresh bound attempt `2026-07-29-official-m5-02` passed all source/Git/M4/output
+preflights, then stopped during the first case's kinematic-metric eligibility check
+with `cadence_drift`. The preserved ignored directory contains a failure marker and
+the pre-metric parity-order receipt, but no metric, slice, scorecard, determinism, or
+native-parity result. No policy value, effect, sign, ranking, slice prevalence,
+scenario identity, or coordinate was inspected.
+
+A separate aggregate-only structural diagnostic confirmed that the exact-cadence
+premise is false within scored contiguous vehicle transitions. M3 and M4 froze exact
+valid-object timestamp consensus, strict monotonicity, and exact source-to-contract
+mapping; they did not require every source interval to equal `100_000` microseconds.
+The failed premise is therefore a new M5 domain assumption, not corrupted data,
+adapter loss, or floating-point reconstruction error.
+
+The pinned Waymax `KinematicsInfeasibilityMetric` uses a configured fixed
+`dt = 0.1 s` and does not consume trajectory timestamps. The M5 custom implementation
+already reproduces that fixed-step inverse-bicycle formula. This amendment therefore
+removes only the extra exact-source-cadence eligibility gate and supersedes the
+cadence-fatal wording in the version `1.0.0` metric section above:
+
+- `waymax_kinematic_infeasibility_rate` becomes version `1.0.1`;
+- its required timebase is named `fixed_0.1_s_inverse_dynamics_timebase`;
+- source cadence never selects, excludes, reweights, rounds, or normalizes a case or
+  transition;
+- the kinematic native-parity anchor carries version `1.0.1`, while overlap and
+  log-divergence anchors remain version `1.0.0`;
+- the result schema stays unchanged because it already stores and validates
+  per-metric versions, but validators must reject stale `1.0.0` kinematic rows mixed
+  into a `1.0.1` run; and
+- the failed attempt remains immutable, and the next candidate uses the new output
+  directory `2026-07-29-official-m5-03`.
+
+All exact timestamp-consensus, strict-monotonicity, source/contract identity,
+rollout-timestamp identity, and source-immutability checks remain fatal. Rollout
+dynamics and acceleration, jerk, yaw-rate, and continuity metrics continue using the
+actual positive source intervals. The cohort, policies, seeds, fixed inverse-bicycle
+formula, thresholds, masks, component population, slices, 12-cell primary family,
+multiplicity adjustment, resampling algorithms, row domains, and claim gates do not
+change.
+
+This metric is a fixed-step Waymax semantic/parity diagnostic. It is not a
+physical-time-normalized feasibility measure. This amendment deliberately does not
+choose a tolerance from observed cadence, alter the adapter timeline, substitute
+per-transition `dt` into the Waymax-equivalent formula, filter the cohort, or drop
+transitions.
+
+Before a fresh run, tests must prove:
+
+1. identical candidate states under nominal and nonuniform monotonic timestamps
+   produce identical fixed-step kinematic components and flags;
+2. threshold and `nextafter` oracles remain unchanged;
+3. actual-time metrics and rollout dynamics remain sensitive to nonuniform
+   timestamps;
+4. coherent nonuniform native timestamps pass exact custom/Waymax kinematic parity,
+   while timestamp consensus, source/contract identity, monotonicity, and mutation
+   contradictions still fail;
+5. kinematic metric and parity rows accept only version `1.0.1`, while unaffected
+   metric versions remain `1.0.0`;
+6. the mocked official lifecycle retains the exact 6,656/1,024/312/144 row domains,
+   determinism, and 12-cell primary family; and
+7. targeted, full-suite, package/site, privacy, and adversarial reviews accept one
+   clean committed and pushed snapshot before attempt `03`.
+
+The implementation removes only the two exact-cadence gates, versions the kinematic
+metric and parity anchor as `1.0.1`, and keeps every other metric/anchor at `1.0.0`.
+Direct negative tests cover native timestamp consensus, source/contract identity,
+strict monotonicity, parity-path source mutation, and stale metric/parity persistence.
+The final pre-release verification passed 876 tests with one expected local-data skip
+in the pinned Waymo environment and 790 tests with 28 expected optional/local skips in
+a fresh core-only environment that contained no JAX, jaxlib, TensorFlow, Flax, or
+Waymax. The wheel/sdist notice and payload audit, installed core-only import/CLI check,
+site build/check, Git/privacy audit, and `git diff --check` also passed.
+
+Three outcome-blind design reviews and three implementation/release reviews returned
+**ACCEPT** after correcting test-coverage and documentation-precision findings. No
+fresh WOMD execution occurred during the correction, and failed attempt `02` remains
+unchanged under the ignored local output boundary.

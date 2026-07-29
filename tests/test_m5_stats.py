@@ -38,11 +38,16 @@ def _spec(
     *,
     slice_name: str = "all",
     contrast=CONSTANT_VELOCITY_MINUS_LOG_REPLAY,
+    metric_version: str | None = None,
 ) -> PairedCellSpec:
+    if metric_version is None:
+        metric_spec = M5_METRIC_SPECS.get(metric_name)
+        metric_version = metric_spec.version if metric_spec is not None else "1.0.0"
     return PairedCellSpec(
         metric_name=metric_name,
         slice_name=slice_name,
         contrast=contrast,
+        metric_version=metric_version,
     )
 
 

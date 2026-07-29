@@ -1,8 +1,8 @@
 # WOMD / Waymax / EvalSim M5 metric crosswalk
 
 **Status:** Accepted pre-registered semantics, data-free overlap-boundary amendment,
-data-free implementation, and official-runner implementation; no M5 WOMD outcome or
-native M5 WOMD parity result computed
+outcome-blind cadence-domain amendment, data-free implementation, and official-runner
+implementation; no M5 WOMD outcome or native M5 WOMD parity result computed
 **Pinned Waymax commit:** `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`
 
 This document separates numerical equivalence, deliberate EvalSim definitions, and
@@ -13,6 +13,14 @@ boxes for which NumPy/libm and XLA make different discrete overlap decisions bec
 their trigonometric results differ at the bit level. This falsifies universal backend
 bit-equivalence before any M5 WOMD outcome access. The counterexample is retained in
 tests; exact observed flags remain mandatory on the frozen parity subset.
+
+Before a fresh official execution, a preserved pre-metric failure falsified the
+additional assumption that every accepted source interval must equal exactly
+`100_000` microseconds. No metric, slice, scorecard, determinism, or native-parity
+result was produced or inspected. The accepted outcome-blind correction removes that
+cadence eligibility gate without changing the cohort, states, masks, thresholds, or
+formula: the pinned Waymax kinematic diagnostic uses a fixed `0.1 s`
+inverse-dynamics timebase and does not consume trajectory timestamps.
 
 ## Accepted data-free and official-runner implementation evidence
 
@@ -43,10 +51,11 @@ The accepted official-runner boundary adds a source-only 16-case selector, exact
 reference execution, one-case-at-a-time native parity evaluation, pre-metric parity
 order receipt, post-evaluation determinism receipt, and exact official result-store
 domains. It passed 14 runner tests, a public mocked 128-case lifecycle, 18 injected
-failure boundaries, 34 adversarial lifecycle cases, the full repository suite with 869
+failure boundaries, 34 adversarial lifecycle cases, the full repository suite with 876
 passing tests and one expected local-data skip, and final adversarial review with
-**ACCEPT**. The mocked lifecycle enforces 6,656 metric rows, 1,024 slice rows, 312
-scorecard rows, and 144 parity-summary rows.
+**ACCEPT**. A fresh core-only verification after the cadence amendment passed 790
+tests with 28 expected optional/local skips. The mocked lifecycle enforces 6,656
+metric rows, 1,024 slice rows, 312 scorecard rows, and 144 parity-summary rows.
 
 No real-WOMD metric effect, slice prevalence, missingness result, or native metric
 parity result is established here: the official lifecycle used mocks and no M5 WOMD
@@ -71,7 +80,7 @@ Pinned sources:
 |---|---|---|---|
 | `log_divergence` | Per-object current XY Euclidean distance; valid iff simulated and logged object are valid | `position_error_m`, then restrict to future non-ego target components for scorecards | Bounded-tolerance continuous parity target |
 | `overlap` | Per-object binary flag for strict oriented-box overlap with any other valid object; output validity is target validity | `oriented_box_overlap_rate`; preserve flags before target/window aggregation | Exact mask and bounded observed discrete parity gate; universal zero-margin bit-equivalence falsified |
-| `kinematic_infeasibility` | Per-object binary inverse-bicycle acceleration/curvature threshold for the transition ending at current frame | `waymax_kinematic_infeasibility_rate`; preserve action mask and flags before aggregation | Exact mask and discrete parity target |
+| `kinematic_infeasibility` | Per-object binary inverse-bicycle acceleration/curvature threshold for the transition ending at current frame, evaluated with fixed `dt = 0.1 s` | `waymax_kinematic_infeasibility_rate` version `1.0.1`; preserve action mask and flags before aggregation | Exact mask and discrete parity target; fixed-step diagnostic, not physical-time-normalized |
 | `offroad` | Any box corner lies on the positive signed side of its nearest eligible 3-D road-edge sample | No custom native-equivalent metric in M5 | Unsupported by current contract |
 | `sdc_wrongway` | Thresholded XY distance to any valid SDC path sample; no direction test | No metric under this name; possible M6 typed path metric must be called path-sample distance | Unsupported and upstream name is misleading |
 | `sdc_progression` | SDC projection to the nearest valid on-route path samples and arc-length ratio | Deferred to typed M6 route context | Unsupported by current contract |
@@ -91,6 +100,11 @@ the pinned arithmetic branches and are checked natively. Overlap uses the
 source-neutral NumPy scorecard definition and must match every valid native flag in
 the bounded observed parity subset; any mismatch fails the run and is retained rather
 than normalized.
+
+The kinematic metric and its native parity anchor use version `1.0.1`. Every other M5
+metric and the log-divergence and overlap parity anchors remain version `1.0.0`; the
+result schema itself is unchanged because it already records and validates the
+per-metric version.
 
 ### Logged-position divergence
 
@@ -175,9 +189,20 @@ abs(steering_curvature) > 0.3 + 1e-3
 The action validity mask is old-valid AND new-valid. Parity retains all object types;
 the scorecard subsequently restricts target components to non-ego vehicles because a
 bicycle-model threshold is weak quality semantics for pedestrians and cyclists.
-Parity requires exact masks, threshold branches, and binary flags. The official run
-requires each scored reloaded source `timestamp_micros` delta to equal exactly
-`100_000`; any other cadence is fatal.
+Parity requires exact masks, threshold branches, and binary flags.
+
+Version `1.0.1` names the required timebase
+`fixed_0.1_s_inverse_dynamics_timebase`. Source cadence does not select, exclude,
+reweight, round, or normalize a case or transition, and nonuniform positive source
+intervals do not alter the fixed-step calculation for an identical candidate state
+sequence. They can still change policy rollouts indirectly because rollout dynamics
+use the actual interval duration. Exact valid-object timestamp consensus, strict
+monotonicity, source-to-contract timestamp identity, rollout timestamp identity, and
+source immutability remain required.
+
+This Waymax-semantic diagnostic is deliberately not a physical-time-normalized
+feasibility measure. EvalSim rollout dynamics and the acceleration, jerk, yaw-rate,
+and continuity metrics continue to use the actual positive source intervals.
 
 ## Unsupported native semantics
 

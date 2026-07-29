@@ -23,6 +23,7 @@ from evalsim.evaluation.m5 import (
 )
 from evalsim.evaluation.m5_waymax import (
     M5_PARITY_METRIC_NAMES,
+    M5_PARITY_METRIC_VERSIONS,
     M5_PARITY_POLICY_NAMES,
     M5_PARITY_RANK_DOMAIN,
     M5_PARITY_ROW_COUNT,
@@ -290,6 +291,7 @@ def test_component_rows_fail_on_mask_empty_nonfinite_and_branch_drift() -> None:
         reference_mask=mask.copy(),
     )
     assert invalid_raw_ignored.status == "accepted"
+    assert invalid_raw_ignored.metric_version == "1.0.0"
     branch_drift = build_discrete_parity_row(
         parity_index=0,
         policy_name="log_replay",
@@ -302,6 +304,45 @@ def test_component_rows_fail_on_mask_empty_nonfinite_and_branch_drift() -> None:
     )
     assert branch_drift.status == "rejected"
     assert branch_drift.mismatch_count == 1
+    assert branch_drift.metric_version == "1.0.1"
+
+
+def test_parity_rows_enforce_anchor_specific_metric_versions() -> None:
+    common = {
+        "parity_index": 0,
+        "policy_name": "log_replay",
+        "compared_components": 1,
+        "mismatch_count": 0,
+        "max_abs_error": 0.0,
+        "max_tolerance_excess": 0.0,
+        "exact_match": True,
+        "status": "accepted",
+    }
+    assert dict(M5_PARITY_METRIC_VERSIONS) == {
+        "log_divergence": "1.0.0",
+        "overlap": "1.0.0",
+        "kinematic_infeasibility": "1.0.1",
+    }
+    for metric_name, metric_version in M5_PARITY_METRIC_VERSIONS.items():
+        row = M5WaymaxParityRow(
+            metric_name=metric_name,
+            metric_version=metric_version,
+            **common,
+        )
+        assert row.metric_version == metric_version
+    with pytest.raises(ValueError, match="parity-anchor version"):
+        M5WaymaxParityRow(
+            metric_name="kinematic_infeasibility",
+            metric_version="1.0.0",
+            **common,
+        )
+    for metric_name in ("log_divergence", "overlap"):
+        with pytest.raises(ValueError, match="parity-anchor version"):
+            M5WaymaxParityRow(
+                metric_name=metric_name,
+                metric_version="1.0.1",
+                **common,
+            )
 
 
 def _agent(
@@ -496,6 +537,47 @@ def test_exact_log_executor_detects_output_drift_and_source_mutation(
         WaymaxExactLogReferenceExecutor().execute(case)
 
 
+def test_native_parity_detects_source_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from evalsim.evaluation import m5_waymax
+
+    case = _mock_case()
+
+    def mutate_source(
+        *,
+        state: _FakeState,
+        scenario: Scenario,
+        rollout: Rollout,
+        parity_index: int,
+        policy_name: str,
+    ) -> tuple[M5WaymaxParityRow, ...]:
+        del scenario, rollout
+        state.values[0] += 1
+        return (
+            M5WaymaxParityRow(
+                parity_index=parity_index,
+                policy_name=policy_name,
+                metric_name="log_divergence",
+                metric_version=M5_PARITY_METRIC_VERSIONS["log_divergence"],
+                compared_components=1,
+                mismatch_count=0,
+                max_abs_error=0.0,
+                max_tolerance_excess=-1e-6,
+                exact_match=True,
+                status="accepted",
+            ),
+        )
+
+    monkeypatch.setattr(m5_waymax, "_native_metric_rows", mutate_source)
+    with pytest.raises(M5WaymaxEvaluationError, match="source_mutated"):
+        WaymaxM5MetricParityAdapter().evaluate_case(
+            case,
+            parity_index=0,
+            executions=_policy_executions(case.scenario),
+        )
+
+
 def _policy_executions(scenario: Scenario) -> tuple[ExecutionRollout, ...]:
     result = []
     for policy in canonical_m5_policies():
@@ -528,7 +610,7 @@ class _AcceptedAdapter:
                 parity_index=parity_index,
                 policy_name=policy_name,
                 metric_name=metric_name,
-                metric_version="1.0.0",
+                metric_version=M5_PARITY_METRIC_VERSIONS[metric_name],
                 compared_components=20,
                 mismatch_count=0,
                 max_abs_error=0.0,
@@ -581,6 +663,10 @@ def test_official_parity_builder_requires_exact_accepted_144_row_matrix() -> Non
     assert len(rows) == M5_PARITY_ROW_COUNT
     assert rows[0].parity_index == 0
     assert rows[-1].parity_index == M5_PARITY_SCENE_COUNT - 1
+    assert all(
+        row.metric_version == M5_PARITY_METRIC_VERSIONS[row.metric_name]
+        for row in rows
+    )
     with pytest.raises(M5WaymaxEvaluationError, match="parity_matrix_invalid"):
         build_waymax_parity_rows(
             inputs[:-1],
@@ -802,6 +888,42 @@ def _synthetic_native_fixture() -> tuple[Any, Scenario]:
     return state, scenario
 
 
+def _replace_native_timestamps(
+    state: Any,
+    scenario: Scenario,
+    canonical_micros: np.ndarray,
+) -> tuple[Any, Scenario]:
+    jnp = pytest.importorskip("jax.numpy")
+    canonical = np.asarray(canonical_micros, dtype=np.int64)
+    assert canonical.shape == (scenario.num_steps,)
+    timestamp_micros = np.broadcast_to(
+        canonical,
+        np.asarray(state.log_trajectory.timestamp_micros).shape,
+    ).copy()
+    log_trajectory = replace(
+        state.log_trajectory,
+        timestamp_micros=jnp.asarray(timestamp_micros),
+    )
+    sim_trajectory = replace(
+        state.sim_trajectory,
+        timestamp_micros=jnp.asarray(timestamp_micros),
+    )
+    return (
+        replace(
+            state,
+            log_trajectory=log_trajectory,
+            sim_trajectory=sim_trajectory,
+        ),
+        replace(
+            scenario,
+            timestamps=(
+                canonical - canonical[0]
+            ).astype(np.float64)
+            * 1e-6,
+        ),
+    )
+
+
 def test_pinned_native_exact_log_and_metric_parity_on_synthetic_state() -> None:
     pytest.importorskip("jax")
     pytest.importorskip("waymax")
@@ -843,7 +965,40 @@ def test_pinned_native_exact_log_and_metric_parity_on_synthetic_state() -> None:
     np.testing.assert_array_equal(np.asarray(state.timestep), source_timestep_before)
 
 
-def test_native_parity_rejects_a_scored_source_cadence_drift() -> None:
+def test_native_parity_accepts_coherent_nonuniform_source_timestamps() -> None:
+    pytest.importorskip("waymax")
+    state, scenario = _synthetic_native_fixture()
+    canonical = np.arange(scenario.num_steps, dtype=np.int64) * 100_000
+    canonical[11::2] += 1
+    state, scenario = _replace_native_timestamps(state, scenario, canonical)
+    record = WaymaxRecord(
+        scenario_id=scenario.scenario_id,
+        state=state,
+        audit={},
+        shard_suffix="00000",
+        record_ordinal=0,
+        shard_sha256="a" * 64,
+        dataset_config_fingerprint="b" * 64,
+    )
+    case = EvaluationCase(
+        cohort_index=0,
+        scenario=scenario,
+        reference_payload=record,
+    )
+    rows = WaymaxM5MetricParityAdapter().evaluate_case(
+        case,
+        parity_index=0,
+        executions=_policy_executions(scenario),
+    )
+    assert len(rows) == 9
+    assert all(row.status == "accepted" for row in rows)
+    assert all(
+        row.metric_version == M5_PARITY_METRIC_VERSIONS[row.metric_name]
+        for row in rows
+    )
+
+
+def test_native_parity_rejects_source_timestamp_consensus_drift() -> None:
     jnp = pytest.importorskip("jax.numpy")
     pytest.importorskip("waymax")
     state, scenario = _synthetic_native_fixture()
@@ -868,9 +1023,80 @@ def test_native_parity_rejects_a_scored_source_cadence_drift() -> None:
         scenario=scenario,
         reference_payload=record,
     )
-    with pytest.raises(M5WaymaxEvaluationError, match="source_cadence_drift"):
+    with pytest.raises(M5WaymaxEvaluationError, match="source_identity_mismatch"):
         WaymaxM5MetricParityAdapter().evaluate_case(
             case,
             parity_index=0,
             executions=_policy_executions(scenario),
+        )
+
+
+def test_native_parity_rejects_contract_timestamp_drift() -> None:
+    pytest.importorskip("waymax")
+    state, scenario = _synthetic_native_fixture()
+    canonical = np.arange(scenario.num_steps, dtype=np.int64) * 100_000
+    canonical[11::2] += 1
+    drifted_state, _ = _replace_native_timestamps(state, scenario, canonical)
+    record = WaymaxRecord(
+        scenario_id=scenario.scenario_id,
+        state=drifted_state,
+        audit={},
+        shard_suffix="00000",
+        record_ordinal=0,
+        shard_sha256="a" * 64,
+        dataset_config_fingerprint="b" * 64,
+    )
+    case = EvaluationCase(
+        cohort_index=0,
+        scenario=scenario,
+        reference_payload=record,
+    )
+    with pytest.raises(M5WaymaxEvaluationError, match="source_identity_mismatch"):
+        WaymaxM5MetricParityAdapter().evaluate_case(
+            case,
+            parity_index=0,
+            executions=_policy_executions(scenario),
+        )
+
+
+def test_native_parity_rejects_coherent_nonmonotonic_timestamps() -> None:
+    pytest.importorskip("waymax")
+    state, nominal_scenario = _synthetic_native_fixture()
+    nominal_executions = _policy_executions(nominal_scenario)
+    canonical = np.arange(nominal_scenario.num_steps, dtype=np.int64) * 100_000
+    canonical[12] = canonical[11]
+    state, scenario = _replace_native_timestamps(
+        state,
+        nominal_scenario,
+        canonical,
+    )
+    executions = tuple(
+        replace(
+            execution,
+            rollout=replace(
+                execution.rollout,
+                timestamps=np.array(scenario.timestamps, copy=True),
+            ),
+        )
+        for execution in nominal_executions
+    )
+    record = WaymaxRecord(
+        scenario_id=scenario.scenario_id,
+        state=state,
+        audit={},
+        shard_suffix="00000",
+        record_ordinal=0,
+        shard_sha256="a" * 64,
+        dataset_config_fingerprint="b" * 64,
+    )
+    case = EvaluationCase(
+        cohort_index=0,
+        scenario=scenario,
+        reference_payload=record,
+    )
+    with pytest.raises(ValueError, match="timestamps_invalid"):
+        WaymaxM5MetricParityAdapter().evaluate_case(
+            case,
+            parity_index=0,
+            executions=executions,
         )

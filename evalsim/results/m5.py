@@ -25,7 +25,11 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from evalsim.metrics.m5 import M5_METRIC_SPECS
+from evalsim.metrics.m5 import (
+    M5_KINEMATIC_METRIC_VERSION,
+    M5_METRIC_SPECS,
+    M5_METRIC_VERSION,
+)
 from evalsim.report.m5 import (
     M5_SCORECARD_RENDERER_VERSION,
     M5_SCORECARD_REPORT_MEDIA_TYPE,
@@ -150,6 +154,13 @@ _M5_PARITY_METRIC_NAMES = (
     "kinematic_infeasibility",
     "log_divergence",
     "overlap",
+)
+_M5_PARITY_METRIC_VERSIONS = MappingProxyType(
+    {
+        "kinematic_infeasibility": M5_KINEMATIC_METRIC_VERSION,
+        "log_divergence": M5_METRIC_VERSION,
+        "overlap": M5_METRIC_VERSION,
+    }
 )
 _M5_ERROR_ORACLE_METRIC_NAMES = (
     "acceleration_error_mps2",
@@ -3468,8 +3479,11 @@ def _parity_row(raw: Mapping[str, Any]) -> dict[str, Any]:
     if row["metric_name"] not in _M5_PARITY_METRIC_NAMES:
         raise ValueError("parity metric is not a canonical M5 anchor")
     row["metric_version"] = _version(row["metric_version"], "metric_version")
-    if row["metric_version"] != "1.0.0":
-        raise ValueError("parity metric_version must be exactly '1.0.0'")
+    expected_version = _M5_PARITY_METRIC_VERSIONS[row["metric_name"]]
+    if row["metric_version"] != expected_version:
+        raise ValueError(
+            "parity metric_version differs from the frozen anchor version"
+        )
     row["compared_components"] = _integer(
         row["compared_components"],
         name="compared_components",

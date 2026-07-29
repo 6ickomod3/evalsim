@@ -14,12 +14,14 @@ import hashlib
 import json
 import math
 import re
+from types import MappingProxyType
 from typing import Any, NoReturn
 
 import numpy as np
 
 from evalsim.contracts import AgentType, Rollout, Scenario
 from evalsim.metrics.m5 import (
+    M5_KINEMATIC_METRIC_VERSION,
     M5_METRIC_VERSION,
     canonical_float32_view,
     kinematic_infeasibility_components,
@@ -58,6 +60,13 @@ M5_PARITY_METRIC_NAMES = (
     "log_divergence",
     "overlap",
     "kinematic_infeasibility",
+)
+M5_PARITY_METRIC_VERSIONS = MappingProxyType(
+    {
+        "log_divergence": M5_METRIC_VERSION,
+        "overlap": M5_METRIC_VERSION,
+        "kinematic_infeasibility": M5_KINEMATIC_METRIC_VERSION,
+    }
 )
 
 _PARITY_ORDER_HASH_DOMAIN = b"evalsim-m5-metric-parity-order-v1\0"
@@ -114,7 +123,6 @@ _ERROR_CODES = frozenset(
         "parity_mismatch",
         "parity_selection_invalid",
         "receipt_invalid",
-        "source_cadence_drift",
         "source_identity_mismatch",
         "source_mutated",
         "source_state_invalid",
@@ -689,8 +697,11 @@ class M5WaymaxParityRow:
             raise ValueError("policy_name is not registered for M5 parity")
         if self.metric_name not in M5_PARITY_METRIC_NAMES:
             raise ValueError("metric_name is not an M5 parity anchor")
-        if self.metric_version != M5_METRIC_VERSION:
-            raise ValueError("metric_version differs from the frozen M5 version")
+        expected_version = M5_PARITY_METRIC_VERSIONS[self.metric_name]
+        if self.metric_version != expected_version:
+            raise ValueError(
+                "metric_version differs from the frozen M5 parity-anchor version"
+            )
         components = _plain_int(
             self.compared_components,
             "compared_components",
@@ -818,7 +829,7 @@ def build_continuous_parity_row(
         parity_index=parity_index,
         policy_name=policy_name,
         metric_name=metric_name,
-        metric_version=M5_METRIC_VERSION,
+        metric_version=M5_PARITY_METRIC_VERSIONS[metric_name],
         compared_components=int(np.count_nonzero(mask)),
         mismatch_count=mismatch_count,
         max_abs_error=float(np.max(errors)),
@@ -866,7 +877,7 @@ def build_discrete_parity_row(
         parity_index=parity_index,
         policy_name=policy_name,
         metric_name=metric_name,
-        metric_version=M5_METRIC_VERSION,
+        metric_version=M5_PARITY_METRIC_VERSIONS[metric_name],
         compared_components=int(np.count_nonzero(mask)),
         mismatch_count=mismatch_count,
         max_abs_error=binary_error,
@@ -1024,20 +1035,6 @@ def _source_retained_slots(
                 "contract logged motion differs from the native source",
             )
     timestamps = log_arrays["timestamp_micros"][retained]
-    valid_window = log_arrays["valid"][
-        retained,
-        _CURRENT_INDEX:_PARITY_FRAME_STOP,
-    ]
-    deltas = np.diff(
-        timestamps[:, _CURRENT_INDEX:_PARITY_FRAME_STOP],
-        axis=1,
-    )
-    contiguous = valid_window[:, :-1] & valid_window[:, 1:]
-    if not np.all(deltas[contiguous] == 100_000):
-        _fail(
-            "source_cadence_drift",
-            "scored source transitions do not have exact 100000 us cadence",
-        )
     canonical = np.empty(scenario.num_steps, dtype=np.int64)
     source_valid = log_arrays["valid"][retained]
     for frame in range(scenario.num_steps):
@@ -1715,6 +1712,7 @@ def build_waymax_parity_rows(
 
 __all__ = [
     "M5_PARITY_METRIC_NAMES",
+    "M5_PARITY_METRIC_VERSIONS",
     "M5_PARITY_ORDER_VERSION",
     "M5_PARITY_POLICY_NAMES",
     "M5_PARITY_RANK_DOMAIN",
