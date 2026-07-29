@@ -309,39 +309,53 @@ collapsing motion quality into one score?
 **Claim unlocked after acceptance:** built a sliced motion-simulation evaluation
 framework on a locally auditable complete-case conditional WOMD cohort, with paired
 scenario-resampling stability analysis and pinned Waymax semantic cross-checks; this
-does not imply WOMD-population or simulator-superiority evidence. M6 is next and has
-not started.
+does not imply WOMD-population or simulator-superiority evidence. M6 implementation is
+now in progress under its accepted outcome-blind pre-registration.
 
-### M6 — Counterfactual closed-loop reactivity
+### M6 — Counterfactual closed-loop reactivity 🚧
+
+**Accepted pre-registration:** [exact M6 v1 scope](2026-07-29-m6-counterfactual-reactivity.md).
+No M6 WOMD eligibility count or policy outcome has been opened.
 
 **Question:** What happens when ego leaves the logged future, and can the evaluation
-separate nonreactivity from unsafe or overly conservative reaction?
+separate nonreactivity from a deliberately costly simulated response?
 
 **Build**
 
-- Select WOMD scenes using explicit perturbation eligibility.
-- Add typed, versioned ego interventions: braking, delayed acceleration, stop duration,
-  lateral offset, and timing changes.
-- Run paired baseline/counterfactual experiments from identical initial state, seed,
-  policy, and horizon.
-- Compare log playback, custom IDM, Waymax's privileged logged-trajectory
-  waypoint-following IDM reference, and both rollout backends on the parity cohort
-  where semantics match. Do not describe the Waymax policy as causal, map-route-aware,
-  or independent ground truth.
-- Measure response latency, following acceleration change, TTC/minimum-distance change,
-  collisions avoided or introduced, progress loss, and response smoothness.
+- Enforce separate history-only and privileged policy initialization capabilities;
+  history-only built-ins receive observed history/static context and then only realized
+  current state.
+- Add a typed identity control and one source-templated longitudinal-braking family:
+  primary positive deceleration magnitude `b=2.0 m/s²` and a complete secondary
+  `b=4.0 m/s²` severity view.
+- Run source-eligible paired 40-transition NumPy experiments for privileged log replay,
+  history-only constant velocity, and history-only EvalSim IDM.
+- Use Waymax on a source-ranked, exact-cadence 20-transition subset as a logged-world
+  executor and privileged logged-trajectory waypoint-following IDM reference, with
+  same-scene NumPy views. Do not describe it as causal, map-route-aware, independent
+  ground truth, or a numerical twin of EvalSim IDM.
+- Keep additional delayed-acceleration, stop/hold, lateral-offset, and arc-time-warp
+  families deferred until they receive separate formulas, eligibility, budgets, and
+  outcome-blind review.
 
 **Evidence gate**
 
-- Tests prove no logged-future leakage into causal policies.
-- Synthetic oracles establish the expected causal direction before real-data analysis.
-- Severity is monotonic where the intervention definition implies monotonicity.
-- Real-WOMD results include paired intervals and eligibility counts.
-- Nonreactivity and overreaction are independently detectable.
-- Engine/backend disagreements remain visible and explained.
+- Tests enforce the history-only data-flow boundary, preserve the full-length legacy
+  no-plan path, and prove the synchronous earliest-response floor.
+- Independent analytic oracles validate sham identity, braking equations, feasibility,
+  nested severity, nonresponse, response, and deliberately costly response.
+- Every accepted M4 scene receives one outcome-independent eligibility disposition;
+  every accepted analysis scene remains completely paired.
+- Four separate response/reactivity measures retain null, sparse, adverse, and
+  contradictory results under pre-registered finite-cohort reweighting summaries.
+- Real-WOMD and bounded Waymax paths pass their declared identity, lifecycle, control,
+  cadence, tolerance, determinism, privacy, and publication gates.
 
-**Claim unlocked after acceptance:** designed counterfactual closed-loop reactivity
-evaluation over WOMD using Waymax and typed ego interventions.
+**Claim unlocked only after result acceptance:** implemented and evaluated one typed
+paired ego-braking intervention on a fixed source-eligible subset of the local WOMD
+cohort, with audited history-only policies and explicitly privileged log-replay,
+ego-plan, and Waymax references. This will not imply real-traffic causality, safety,
+simulator superiority, or evaluator validity beyond the registered measures.
 
 ### M7 — Evaluator red-team and metric governance
 

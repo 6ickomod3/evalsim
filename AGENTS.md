@@ -119,7 +119,16 @@ For every milestone, follow this sequence:
 - Ego is exogenous: M2 copies the logged ego trajectory while policies simulate world
   agents. M6 may replace the ego trajectory through a typed perturbation/controller,
   while world policies continue to observe the current ego state.
+- Audited built-in policies must declare exactly one initialization capability:
+  `HistoryOnlySimulatorPolicy` receives only immutable observed history, static context,
+  and subsequently realized current state; `PrivilegedSimulatorPolicy` may receive an
+  explicit defensive full-reference copy. Reject plain, dual-capability, or mismatched
+  policies. Never give a history-only policy future validity, unrealized plan state,
+  intervention identity, configured dose, or an absolute-state override capability.
 - The rollout engine owns timestamps, validity masks, lifecycle births/re-entries, and
   feasibility integration. Policies synchronously return typed controls or explicit
   absolute-state overrides and must not mutate observations or retain run-local state on
   reusable policy instances.
+- In a typed ego-plan transition, the world policy acts on the assembled current frame
+  before the engine applies the next ego state. An ego change at `t+1` therefore cannot
+  produce a world-state response before `t+2`.

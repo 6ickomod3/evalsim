@@ -44,7 +44,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M3 | Local WOMD → Waymax/JAX → EvalSim vertical slice | ✅ | 🖥️ |
 | M4 | Deterministic WOMD cohort + Waymax parity | ✅ | 🖥️ |
 | M5 | Metric system + statistical scorecards; real-WOMD acceptance | ✅ | 🖥️ |
-| M6 | Counterfactual closed-loop reactivity | ⬜ | 🖥️ |
+| M6 | Counterfactual closed-loop reactivity | 🚧 | 🖥️ |
 | M7 | Evaluator red-team + metric governance | ⬜ | 🖥️ |
 | M8 | JAX/Flax learned realism discriminator | ⬜ | 🖥️/☁️ |
 | M9 | Semantic-video and real camera/VLM bridge | ⬜ | 🖥️/☁️ |
@@ -63,10 +63,19 @@ overall winner or simulator-superiority claim. See the
 [sanitized M5 acceptance report](docs/results/m5-official-acceptance.md) and the
 [accepted pre-registration](docs/plans/2026-07-28-m5-real-womd-metrics-scorecards.md).
 
+M6 is now in progress under an
+[accepted outcome-blind pre-registration](docs/plans/2026-07-29-m6-counterfactual-reactivity.md).
+Its v1 scope is one typed identity control plus a source-templated ego-braking family
+with primary `b=2.0 m/s²` and secondary `b=4.0 m/s²` doses, an enforced
+history-only/privileged policy boundary, paired 40-transition NumPy evaluation, and a
+bounded 20-transition Waymax reference view. Four broader intervention families are
+explicitly deferred. No M6 WOMD eligibility count or policy outcome has been opened,
+and no M6 result claim is available yet.
+
 **Tests:** current full repository suite: 876 passed + 1 expected local-data skip;
 fresh clean core-only environment: 790 passed + 28 expected optional/local skips ·
-**Last updated:** 2026-07-29 (M5 official ten-shard acceptance completed; M6 is next and
-has not started)
+**Last updated:** 2026-07-29 (M6 outcome-blind pre-registration accepted; implementation
+is in progress and real-WOMD outcomes remain unopened)
 
 ## Completed work
 
@@ -516,7 +525,8 @@ reported metrics and 8 source-only slices were evaluated over that unchanged coh
 with paired finite-cohort scorecards, deterministic scenario-reweighting stability
 analysis, and bounded native Waymax metric cross-checks. The mixed result supports the
 evaluation methodology, not an overall policy winner, WOMD-population conclusion,
-causal claim, or simulator-superiority claim. Counterfactuals, stress tests, learned evaluators,
-scalable execution, and video/VLM work remain unavailable as claims until their
-evidence gates pass. M6 is next but has not started. See the
+causal claim, or simulator-superiority claim. M6 counterfactual implementation is now
+in progress under its accepted pre-registration, but counterfactual results, stress
+tests, learned evaluators, scalable execution, and video/VLM work remain unavailable
+as claims until their evidence gates pass. See the
 [claim-to-evidence ledger](docs/interview/claim-evidence-ledger.md).
