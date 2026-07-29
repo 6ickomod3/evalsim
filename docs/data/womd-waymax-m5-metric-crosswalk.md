@@ -1,7 +1,8 @@
 # WOMD / Waymax / EvalSim M5 metric crosswalk
 
 **Status:** Accepted pre-registered semantics, data-free overlap-boundary amendment,
-and data-free implementation; no M5 WOMD outcomes or native M5 parity results inspected
+data-free implementation, and official-runner implementation; no M5 WOMD outcome or
+native M5 WOMD parity result computed
 **Pinned Waymax commit:** `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`
 
 This document separates numerical equivalence, deliberate EvalSim definitions, and
@@ -13,13 +14,14 @@ their trigonometric results differ at the bit level. This falsifies universal ba
 bit-equivalence before any M5 WOMD outcome access. The counterexample is retained in
 tests; exact observed flags remain mandatory on the frozen parity subset.
 
-## Accepted data-free implementation evidence
+## Accepted data-free and official-runner implementation evidence
 
 The data-free M5 path was accepted on 2026-07-29 after architecture, methods/statistics,
 and privacy/publication review. The M5-focused suite reports 264 passing tests; the
 locked Waymo-extra suite reports 757 passed with one expected local-data skip; and the
-clean locked core-only suite reports 676 passed with 23 expected optional-runtime
-skips. This is software and analytic-oracle evidence only:
+fresh clean core-only suite without JAX, jaxlib, TensorFlow, Flax, or Waymax reports
+779 passed with 25 expected optional/local skips. This is software and
+analytic-oracle evidence only:
 
 - five fixed 91-frame synthetic scenarios run through three EvalSim policies and
   thirteen metrics, producing exactly 195 metric rows;
@@ -37,11 +39,21 @@ terminal status, manifest, and scorecard use the `data_free_test` profile, and n
 result verification rejects that profile unless the caller explicitly opts into
 data-free verification.
 
+The accepted official-runner boundary adds a source-only 16-case selector, exact-log
+reference execution, one-case-at-a-time native parity evaluation, pre-metric parity
+order receipt, post-evaluation determinism receipt, and exact official result-store
+domains. It passed 14 runner tests, a public mocked 128-case lifecycle, 18 injected
+failure boundaries, 34 adversarial lifecycle cases, the full repository suite with 862
+passing tests and one expected local-data skip, and final adversarial review with
+**ACCEPT**. The mocked lifecycle enforces 6,656 metric rows, 1,024 slice rows, 312
+scorecard rows, and 144 parity-summary rows.
+
 No real-WOMD metric effect, slice prevalence, missingness result, or native metric
-parity result is established here. The later official path remains conditional on the
-unchanged 128-scenario complete-case M4 cohort. It is not population inference; the
-custom and reference paths share the pinned Waymax decoder; and log replay remains a
-privileged logged-future construction oracle rather than independent ground truth.
+parity result is established here: the official lifecycle used mocks and no M5 WOMD
+outcome was computed. The later data execution remains conditional on the unchanged
+128-scenario complete-case M4 cohort. It is not population inference; the custom and
+reference paths share the pinned Waymax decoder; and log replay remains a privileged
+logged-future construction oracle rather than independent ground truth.
 
 Pinned sources:
 
@@ -273,7 +285,8 @@ canonical candidate motion/validity and contract dimensions into retained
 timestamps, roadgraph, and padding, sets the current timestep, and calls the native
 metric class directly.
 
-The full 128-scene/80-transition Waymax exact-log path remains a separate M5 execution
-gate. The data-free acceptance produced no native parity rows. Any later 16 × 20 parity
-result is a bounded semantic cross-check, not a policy benchmark or a rerun of Waymax
-IDM.
+The official runner now implements the separate full 128-scene/80-transition Waymax
+exact-log gate and exact 144-row parity-summary domain. The public mocked lifecycle and
+data-free acceptance produced no native WOMD parity result. Any later observed 16 × 20
+parity result is a bounded semantic cross-check, not a policy benchmark or a rerun of
+Waymax IDM.

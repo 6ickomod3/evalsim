@@ -51,21 +51,30 @@ const requiredPatterns = [
   ["Waymax full citation", /Waymax: An Accelerated, Data-Driven Simulator for Large-Scale Autonomous Driving Research/],
   ["pinned Waymax license", /a64dfec9be8576b60d9cecc94f406d9812d4a7d0\/LICENSE/],
   ["non-commercial scope", /personal, non-commercial interview-preparation purpose/],
-  ["current full-suite evidence", /757 passed/],
-  ["current core-only evidence", /676 passed and 23 expected optional-runtime skips/],
+  ["current full-suite evidence", /862 passed/],
+  ["current full-suite local skip", /1 expected local-data skip/],
+  ["current core-only evidence", /779 passed with 25 expected optional\/local skips/],
   ["accepted M4 cohort evidence", /2,916 → 128/],
   ["M4 conditional-sample caveat", /conditional and nonrepresentative by design/],
   ["M4 accepted status", /M0–M4 accepted/],
   ["M4 cohort classification", /2,916 raw records: 1,527 eligible and 1,389 rejected/],
-  ["locked M4 matrix evidence", /421 passed/],
   ["shared-decode limitation", /same pinned Waymax WOMD decoder/],
   ["M5 data-free evidence", /Thirteen metrics, eight source-only slices/],
+  [
+    "M5 official row contracts",
+    /6,656 metric, 1,024 slice, 312 scorecard, and 144 native-parity/
+  ],
+  [
+    "M5 official lifecycle evidence",
+    /Eighteen failure boundaries, 34 adversarial lifecycle cases, and 14 runner tests/
+  ],
   ["M5 metric boundary", /No M5 real-data scorecard or policy-quality result/],
   ["narrow benchmark scope", /batch-2 exact-log JAX kernel/],
   ["process-RSS caveat", /process high-water memory, not JAX device memory/],
-  ["M5 implementation status", /Implemented data-free · M5/],
-  ["M5 pending real-data gate", /bound WOMD\/Waymax metric run/],
+  ["M5 implementation status", /Runner accepted data-free · M5/],
+  ["M5 pending real-data gate", /bound WOMD\/Waymax run/],
   ["M5 synthetic command", /evalsim-m5-synthetic/],
+  ["M5 official command", /evalsim-m5-official/],
   ["shell-safe M4 output example", /outputs\/m4\/manual-acceptance-01/],
   ["worker fetch handler", /async fetch\(request\)/]
 ];
@@ -102,7 +111,9 @@ const staleEvidencePatterns = [
   /M0–M4 complete/,
   /493 passed/,
   /418 passed/,
+  /757 passed/,
   /No M5 scorecards or metric parity/,
+  /Implemented data-free · M5/,
   /Next · M5/,
   /M5 is next/,
   /&lt;new-run-name&gt;/

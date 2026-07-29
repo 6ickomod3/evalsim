@@ -13,13 +13,20 @@ import pytest
 import evalsim.results.m5 as result_store_module
 from evalsim.results import (
     ExpectedRowCounts,
+    M5_M4_INTEGRITY_ASSUMPTION,
+    M5_M4_REUSE_SCHEMA_VERSION,
+    M5_PARITY_ORDER_VERSION,
+    M5_PARITY_RANK_DOMAIN,
     M5_RESULT_SCHEMAS,
+    M5DeterminismReceipt,
+    M5ParityOrderReceipt,
     M5RunProvenance,
     M5ResultStore,
     M5ResultStoreError,
     M5ResultStoreIntegrityError,
     M5ResultStoreStateError,
     METRIC_RESULTS,
+    OFFICIAL_WAYMAX_REFERENCE_PARAMETERS,
     SCORECARDS,
     SLICE_MEMBERSHIP,
     PreparedM5Finalization,
@@ -27,7 +34,9 @@ from evalsim.results import (
     executable_source_fingerprint,
     official_executable_source_paths,
     scorecard_row_from_result,
+    verify_committed_m5_result_store,
     verify_m5_result_store,
+    verify_prepared_m5_result_store,
 )
 from evalsim.stats.m5 import (
     PairedCellSpec,
@@ -119,6 +128,48 @@ def _provenance(project: Path | None = None) -> M5RunProvenance:
             "waymo_waymax": "a64dfec9",
         },
     )
+
+
+def _parity_receipt() -> M5ParityOrderReceipt:
+    return M5ParityOrderReceipt(
+        rank_domain=M5_PARITY_RANK_DOMAIN,
+        order_version=M5_PARITY_ORDER_VERSION,
+        ordered_membership_sha256="9" * 64,
+    )
+
+
+def _determinism_receipt(
+    *,
+    metric_sha256: str = "7" * 64,
+    statistics_sha256: str = "8" * 64,
+) -> M5DeterminismReceipt:
+    return M5DeterminismReceipt(
+        metric_pass_1_sha256=metric_sha256,
+        metric_pass_2_sha256=metric_sha256,
+        statistics_pass_1_sha256=statistics_sha256,
+        statistics_pass_2_sha256=statistics_sha256,
+    )
+
+
+def _extended_provenance(project: Path | None = None) -> M5RunProvenance:
+    payload = _provenance(project).to_dict()
+    payload.update(
+        {
+            "m4_aggregate_summary_sha256": "1" * 64,
+            "m4_integrity_assumption": M5_M4_INTEGRITY_ASSUMPTION,
+            "m4_receipt_verified": False,
+            "m4_reuse_schema_version": M5_M4_REUSE_SCHEMA_VERSION,
+            "parity_order_fingerprint_sha256": "9" * 64,
+            "parity_order_version": M5_PARITY_ORDER_VERSION,
+        }
+    )
+    payload["simulator_specs"]["waymax_exact_log_state_dynamics"].update(
+        {
+            "parameters": dict(OFFICIAL_WAYMAX_REFERENCE_PARAMETERS),
+            "version": result_store_module.WAYMAX_REFERENCE_VERSION,
+        }
+    )
+    return M5RunProvenance(**payload)
 
 
 def _official_source_project(tmp_path: Path) -> tuple[Path, tuple[str, ...]]:
@@ -643,6 +694,12 @@ def test_prepared_finalization_requires_exact_capability(
     assert (store.run_path / "FINALIZING").read_bytes() == b"FINALIZING\n"
     assert (store.run_path / "evaluation-manifest.json").is_file()
     assert not (store.run_path / "SUCCESS").exists()
+    prepared_verified = verify_prepared_m5_result_store(
+        project,
+        "prepared-capability",
+        allow_data_free=True,
+    )
+    assert prepared_verified.manifest["complete"] is True
 
     forged = PreparedM5Finalization(
         run_path=prepared.run_path,
@@ -653,6 +710,15 @@ def test_prepared_finalization_requires_exact_capability(
     assert not (store.run_path / "SUCCESS").exists()
 
     assert store.commit_finalization(prepared) == store.run_path
+    with pytest.raises(
+        M5ResultStoreIntegrityError,
+        match="cannot already be committed",
+    ):
+        verify_prepared_m5_result_store(
+            project,
+            "prepared-capability",
+            allow_data_free=True,
+        )
     verified = verify_m5_result_store(
         project,
         "prepared-capability",
@@ -687,6 +753,111 @@ def test_prepared_finalization_can_abort_but_never_commit(
         store.commit_finalization(prepared)
 
 
+def test_official_committed_checkpoint_is_abortable_not_success(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    store = M5ResultStore.create(
+        project,
+        "abortable-committed",
+        expected_rows=_TEST_COUNTS,
+        data_free=True,
+    )
+    _write_all(store)
+    prepared = store.prepare_finalization(
+        provenance=_provenance(project)
+    )
+
+    # Exercise the state machine without constructing WOMD-sized official
+    # artifacts.  The manifest remains data-free, so the independent official
+    # committed verifier must reject it even though the checkpoint itself is
+    # exact and abortable within this writer process.
+    store.row_accounting_profile = result_store_module.OFFICIAL_M5_PROFILE
+    assert (
+        store.mark_committed_for_verification(prepared)
+        == store.run_path
+    )
+    assert (store.run_path / "COMMITTED").read_bytes() == b"COMMITTED\n"
+    assert not (store.run_path / "SUCCESS").exists()
+    with pytest.raises(
+        M5ResultStoreIntegrityError,
+        match="only official M5 runs",
+    ):
+        verify_committed_m5_result_store(
+            project,
+            "abortable-committed",
+            allow_data_free=True,
+        )
+
+    failure = store.abort_finalization(
+        prepared,
+        "verification_failed",
+    )
+    assert json.loads(failure.read_text(encoding="utf-8"))[
+        "reason_code"
+    ] == "verification_failed"
+    assert (store.run_path / "COMMITTED").read_bytes() == b"COMMITTED\n"
+    assert not (store.run_path / "SUCCESS").exists()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "finalizing",
+        "manifest",
+        "artifact",
+        "pending_link",
+        "scorecard_report",
+        "unexpected_member",
+    ),
+)
+def test_terminal_byte_seal_rejects_post_prepare_mutation(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    project = _project(tmp_path)
+    store = M5ResultStore.create(
+        project,
+        f"post-prepare-{mutation}",
+        expected_rows=_TEST_COUNTS,
+        data_free=True,
+    )
+    _write_all(store)
+    prepared = store.prepare_finalization(
+        provenance=_provenance(project)
+    )
+
+    if mutation == "finalizing":
+        (store.run_path / "FINALIZING").write_bytes(b"changed\n")
+    elif mutation == "manifest":
+        manifest = store.run_path / "evaluation-manifest.json"
+        manifest.write_bytes(manifest.read_bytes() + b" ")
+    elif mutation == "artifact":
+        artifact = store.run_path / store.artifacts[0].path
+        artifact.write_bytes(artifact.read_bytes() + b"x")
+    elif mutation == "pending_link":
+        record = store.artifacts[0]
+        canonical = store.run_path / record.path
+        pending = store.run_path / "pending" / record.path
+        payload = pending.read_bytes()
+        pending.unlink()
+        pending.write_bytes(payload)
+        assert canonical.stat().st_ino != pending.stat().st_ino
+    elif mutation == "scorecard_report":
+        report = store.run_path / "scorecard.md"
+        report.write_bytes(report.read_bytes() + b"x")
+    else:
+        (store.run_path / "unregistered.txt").write_text(
+            "unexpected\n",
+            encoding="utf-8",
+        )
+
+    with pytest.raises(M5ResultStoreIntegrityError):
+        store.commit_finalization(prepared)
+    assert (store.run_path / "FAILURE.json").is_file()
+    assert not (store.run_path / "SUCCESS").exists()
+
+
 def test_run_and_artifact_creation_are_exclusive(tmp_path: Path) -> None:
     project = _project(tmp_path)
     store = M5ResultStore.create(
@@ -707,6 +878,104 @@ def test_run_and_artifact_creation_are_exclusive(tmp_path: Path) -> None:
     with pytest.raises(FileExistsError):
         store.write_metric_results_part([_metric_row(1)])
     assert (store.run_path / "FAILURE.json").is_file()
+
+
+@pytest.mark.parametrize("failure_point", ("run_fsync", "child_fsync"))
+def test_fresh_store_creation_failure_leaves_no_ownerless_partial_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_point: str,
+) -> None:
+    project = _project(tmp_path)
+    run_name = f"creation-{failure_point}"
+    target = project / "outputs/m5" / run_name
+    real_fsync = result_store_module._fsync_directory
+    injected = False
+
+    def failing_fsync(path: Path) -> None:
+        nonlocal injected
+        should_fail = (
+            failure_point == "run_fsync"
+            and path == project / "outputs/m5"
+            and target.exists()
+        ) or (
+            failure_point == "child_fsync"
+            and path == target
+            and (target / "pending").exists()
+        )
+        if should_fail and not injected:
+            injected = True
+            raise OSError("injected creation fsync failure")
+        real_fsync(path)
+
+    monkeypatch.setattr(
+        result_store_module,
+        "_fsync_directory",
+        failing_fsync,
+    )
+    with pytest.raises(M5ResultStoreError):
+        M5ResultStore.create(
+            project,
+            run_name,
+            expected_rows=_TEST_COUNTS,
+            data_free=True,
+        )
+    assert injected
+    assert not target.exists()
+
+    monkeypatch.setattr(
+        result_store_module,
+        "_fsync_directory",
+        real_fsync,
+    )
+    retry = M5ResultStore.create(
+        project,
+        run_name,
+        expected_rows=_TEST_COUNTS,
+        data_free=True,
+    )
+    assert retry.run_path == target
+
+
+def test_fresh_store_rollback_marks_unexpected_retained_member_failed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = _project(tmp_path)
+    run_name = "creation-retained"
+    target = project / "outputs/m5" / run_name
+    real_child = result_store_module._create_child_directory
+
+    def fail_after_unexpected_member(parent: Path, name: str) -> Path:
+        if parent == target and name == "pending":
+            (target / "unexpected.txt").write_text(
+                "concurrent member\n",
+                encoding="utf-8",
+            )
+            raise M5ResultStoreError("injected child creation failure")
+        return real_child(parent, name)
+
+    monkeypatch.setattr(
+        result_store_module,
+        "_create_child_directory",
+        fail_after_unexpected_member,
+    )
+    with pytest.raises(M5ResultStoreError):
+        M5ResultStore.create(
+            project,
+            run_name,
+            expected_rows=_TEST_COUNTS,
+            data_free=True,
+        )
+    assert target.is_dir()
+    failure = json.loads(
+        (target / "FAILURE.json").read_text(encoding="utf-8")
+    )
+    assert failure == {
+        "complete": False,
+        "reason_code": "result_store_failed",
+        "schema_version": result_store_module.M5_RESULT_STORE_SCHEMA_VERSION,
+    }
 
 
 def test_scorecards_wait_for_exact_metric_and_slice_accounting(
@@ -1023,6 +1292,39 @@ def test_log_divergence_parity_is_bound_to_tolerance_excess() -> None:
         result_store_module._parity_row(impossible_excess)
 
 
+def test_waymax_reference_equality_and_zero_oracle_are_exact() -> None:
+    log_row = _metric_row(0, execution_name="log_replay", seed=0)
+    log_row.update({"distribution": [0.0], "value": 0.0})
+    reference_row = dict(log_row)
+    reference_row.update(
+        {
+            "execution_name": "waymax_exact_log_state_dynamics",
+            "execution_role": "reference",
+        }
+    )
+    normalized_log = result_store_module._metric_row(log_row)
+    normalized_reference = result_store_module._metric_row(reference_row)
+    assert result_store_module._reference_equivalence_digest(
+        normalized_reference
+    ) == result_store_module._reference_equivalence_digest(normalized_log)
+    assert (
+        result_store_module._validate_exact_log_zero_oracle(
+            normalized_reference
+        )
+        == 1
+    )
+
+    forged_reference = dict(normalized_reference)
+    forged_reference.update({"distribution": [1.0], "value": 1.0})
+    assert result_store_module._reference_equivalence_digest(
+        forged_reference
+    ) != result_store_module._reference_equivalence_digest(normalized_log)
+    with pytest.raises(M5ResultStoreIntegrityError, match="zero-error"):
+        result_store_module._validate_exact_log_zero_oracle(
+            forged_reference
+        )
+
+
 def test_finalize_requires_typed_complete_provenance(tmp_path: Path) -> None:
     project = _project(tmp_path)
     store = M5ResultStore.create(
@@ -1069,6 +1371,285 @@ def test_provenance_rejects_nondeterministic_or_incomplete_runtime() -> None:
     del payload["runtime_versions"]["jax"]
     with pytest.raises(ValueError, match="dependency version"):
         M5RunProvenance(**payload)
+
+
+def test_extended_provenance_binds_m4_reuse_and_parity_order() -> None:
+    legacy = _provenance()
+    assert legacy.has_official_extensions is False
+    assert "m4_aggregate_summary_sha256" not in legacy.to_dict()
+    assert M5RunProvenance.from_dict(legacy.to_dict()) == legacy
+
+    extended = _extended_provenance()
+    assert extended.has_official_extensions is True
+    assert extended.m4_receipt_verified is False
+    assert (
+        extended.parity_order_fingerprint_sha256
+        == _parity_receipt().ordered_membership_sha256
+    )
+    assert M5RunProvenance.from_dict(extended.to_dict()) == extended
+    result_store_module._validate_official_provenance_contract(extended)
+
+    partial = legacy.to_dict()
+    partial["m4_aggregate_summary_sha256"] = "1" * 64
+    with pytest.raises(ValueError, match="all present or absent"):
+        M5RunProvenance(**partial)
+
+    wrong_order = extended.to_dict()
+    wrong_order["selected_order_version"] = "invented-order"
+    with pytest.raises(
+        M5ResultStoreIntegrityError,
+        match="wrong accepted-M4 order",
+    ):
+        result_store_module._validate_official_provenance_contract(
+            M5RunProvenance(**wrong_order)
+        )
+
+
+def test_official_waymax_spec_must_be_exact_and_executed() -> None:
+    payload = _extended_provenance().to_dict()
+    payload["simulator_specs"][
+        "waymax_exact_log_state_dynamics"
+    ]["parameters"]["executed"] = False
+    provenance = M5RunProvenance(**payload)
+    with pytest.raises(
+        M5ResultStoreIntegrityError,
+        match="not frozen or executed",
+    ):
+        result_store_module._validate_official_provenance_contract(
+            provenance
+        )
+
+
+def test_typed_receipts_reject_digest_drift_and_expose_no_digest_repr() -> None:
+    parity = _parity_receipt()
+    assert set(parity.to_dict()) == {
+        "member_count",
+        "order_version",
+        "ordered_membership_sha256",
+        "rank_domain",
+        "transition_count",
+    }
+    assert parity.ordered_membership_sha256 not in repr(parity)
+    assert M5ParityOrderReceipt.from_dict(parity.to_dict()) == parity
+
+    with pytest.raises(ValueError, match="metric pass digests"):
+        M5DeterminismReceipt(
+            metric_pass_1_sha256="1" * 64,
+            metric_pass_2_sha256="2" * 64,
+            statistics_pass_1_sha256="3" * 64,
+            statistics_pass_2_sha256="3" * 64,
+        )
+    receipt = _determinism_receipt()
+    assert receipt.metric_pass_1_sha256 not in repr(receipt)
+    assert M5DeterminismReceipt.from_dict(receipt.to_dict()) == receipt
+
+
+def test_official_parity_receipt_is_immutable_and_pre_metric(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    store = M5ResultStore.create(project, "official-receipt")
+    record = store.write_parity_order_receipt(_parity_receipt())
+    canonical = store.run_path / record.path
+    pending = store.run_path / "pending" / record.path
+    assert canonical.stat().st_ino == pending.stat().st_ino
+    assert canonical.stat().st_dev == pending.stat().st_dev
+    assert canonical.stat().st_mode & 0o777 == 0o600
+    assert store.parity_order_receipt == _parity_receipt()
+
+    store.write_metric_results_part([])
+    with pytest.raises(M5ResultStoreStateError, match="precede metric"):
+        store.write_parity_order_receipt(_parity_receipt())
+    assert (store.run_path / "FAILURE.json").is_file()
+
+    missing = M5ResultStore.create(project, "official-receipt-missing")
+    with pytest.raises(M5ResultStoreStateError, match="pre-metric"):
+        missing.write_metric_results_part([])
+    assert (missing.run_path / "FAILURE.json").is_file()
+
+
+def test_official_receipt_accepts_waymax_adapter_type(tmp_path: Path) -> None:
+    from evalsim.evaluation.m5_waymax import (
+        M5ParityOrderReceipt as WaymaxParityOrderReceipt,
+    )
+
+    adapter_receipt = WaymaxParityOrderReceipt(
+        rank_domain=M5_PARITY_RANK_DOMAIN,
+        order_version=M5_PARITY_ORDER_VERSION,
+        ordered_membership_sha256="9" * 64,
+        member_count=16,
+        transition_count=20,
+    )
+    project = _project(tmp_path)
+    store = M5ResultStore.create(project, "adapter-receipt")
+    store.write_parity_order_receipt(adapter_receipt)  # type: ignore[arg-type]
+    assert store.parity_order_receipt == _parity_receipt()
+
+
+def test_official_determinism_receipt_is_typed_and_immutable(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    store = M5ResultStore.create(project, "determinism-receipt")
+    store.write_parity_order_receipt(_parity_receipt())
+    record = store.write_determinism_receipt(_determinism_receipt())
+    canonical = store.run_path / record.path
+    pending = store.run_path / "pending" / record.path
+    assert canonical.stat().st_ino == pending.stat().st_ino
+    assert canonical.stat().st_dev == pending.stat().st_dev
+    assert store.determinism_receipt == _determinism_receipt()
+    with pytest.raises(FileExistsError):
+        store.write_determinism_receipt(_determinism_receipt())
+    assert (store.run_path / "FAILURE.json").is_file()
+
+
+def test_determinism_receipt_requires_exact_domains_and_equality_oracles() -> None:
+    payload = _determinism_receipt().to_dict()
+    assert payload["metric_row_count"] == 6_656
+    assert payload["statistics_row_count"] == 312
+    assert payload["metric_passes_equal"] is True
+    assert payload["statistics_passes_equal"] is True
+    assert payload["reference_matches_log_replay"] is True
+    assert payload["zero_error_oracles_passed"] is True
+
+    for key in (
+        "metric_passes_equal",
+        "statistics_passes_equal",
+        "reference_matches_log_replay",
+        "zero_error_oracles_passed",
+    ):
+        with pytest.raises(ValueError, match="exactly true"):
+            M5DeterminismReceipt(**{**payload, key: False})
+    with pytest.raises(ValueError, match="official domains"):
+        M5DeterminismReceipt(
+            **{
+                **payload,
+                "metric_row_count": payload["metric_row_count"] - 1,
+            }
+        )
+
+
+def test_result_store_digest_protocol_matches_streaming_evaluator() -> None:
+    import evalsim.evaluation.m5 as evaluation_module
+
+    payload = (
+        {"cohort_index": 0, "rows": ({"value": 1.0},)},
+        {"cohort_index": 1, "rows": ({"value": 2.0},)},
+    )
+    assert result_store_module._canonical_evaluation_digest(
+        "evalsim-m5-case-metric-pass-v1",
+        payload,
+    ) == evaluation_module._canonical_digest(
+        "evalsim-m5-case-metric-pass-v1",
+        payload,
+    )
+    case_digests = {0: "1" * 64, 1: "2" * 64}
+    cohort_payload = tuple(
+        {
+            "cohort_index": cohort_index,
+            "sha256": case_digests[cohort_index],
+        }
+        for cohort_index in sorted(case_digests)
+    )
+    assert result_store_module._canonical_evaluation_digest(
+        "evalsim-m5-cohort-metric-pass-v1",
+        cohort_payload,
+    ) == evaluation_module._cohort_metric_digest(case_digests)
+
+
+def test_streaming_artifact_verifier_avoids_full_table_reads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = _project(tmp_path)
+    store = M5ResultStore.create(
+        project,
+        "streaming-artifacts",
+        expected_rows=_TEST_COUNTS,
+        data_free=True,
+    )
+    _write_all(store)
+
+    def forbidden(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("full-table materialization is forbidden")
+
+    monkeypatch.setattr(
+        result_store_module,
+        "_read_and_validate_table",
+        forbidden,
+    )
+    monkeypatch.setattr(
+        result_store_module,
+        "_read_all_artifact_rows",
+        forbidden,
+    )
+    assert result_store_module._verify_artifact_records(
+        store.run_path,
+        store.artifacts,
+        streaming=True,
+    ) == _TEST_COUNTS.to_dict()
+
+
+def test_official_preflight_never_calls_read_all_artifact_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = _project(tmp_path)
+    store = M5ResultStore.create(
+        project,
+        "streaming-preflight",
+        expected_rows=_TEST_COUNTS,
+        data_free=True,
+    )
+    _write_all(store)
+    scorecard_rows = tuple(
+        store.read_dataset(SCORECARDS).to_pylist()
+    )
+    store.row_accounting_profile = result_store_module.OFFICIAL_M5_PROFILE
+    store._parity_order_receipt = _parity_receipt()
+    store._determinism_receipt = _determinism_receipt()
+    summary = result_store_module._OfficialScanSummary(
+        metric_pass_sha256="7" * 64,
+        statistics_pass_sha256="8" * 64,
+        scorecard_rows=scorecard_rows,
+    )
+
+    def forbidden(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("official preflight called _read_all_artifact_rows")
+
+    monkeypatch.setattr(
+        result_store_module,
+        "_read_all_artifact_rows",
+        forbidden,
+    )
+    monkeypatch.setattr(
+        M5ResultStore,
+        "_verified_supplemental_artifacts",
+        lambda self: (),
+    )
+    monkeypatch.setattr(
+        M5ResultStore,
+        "_verified_scorecard_report",
+        lambda self, records, *, scorecard_rows=None: self.scorecard_report,
+    )
+    monkeypatch.setattr(
+        result_store_module,
+        "_scan_official_artifacts",
+        lambda run_path, records, receipt: summary,
+    )
+    monkeypatch.setattr(
+        result_store_module,
+        "_validate_official_source_binding",
+        lambda project_root, provenance: None,
+    )
+    monkeypatch.setattr(
+        result_store_module,
+        "_validate_run_members",
+        lambda *args, **kwargs: None,
+    )
+    assert store._preflight_finalization(
+        _extended_provenance(project)
+    ) == summary
 
 
 def test_official_source_enumeration_is_exhaustive_and_rejects_ignored_code(

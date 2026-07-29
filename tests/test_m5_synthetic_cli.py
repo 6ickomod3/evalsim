@@ -2,18 +2,22 @@
 from __future__ import annotations
 
 import argparse
+import _thread
 import json
 import os
 from pathlib import Path
 import stat
 import subprocess
 import sys
+import threading
+import time
 
 import pytest
 
 import evalsim.results.m5 as result_store_module
 from evalsim.cli import m5_synthetic as cli
 from evalsim.cli._terminal import (
+    MAX_TERMINAL_TRANSCRIPT_BYTES,
     TerminalBoundaryError,
     TerminalizedFailure,
     capture_terminal,
@@ -212,6 +216,284 @@ def test_terminal_capture_requires_silent_success_and_retains_details_locally(
     assert sentinel not in captured.err
 
 
+def test_terminal_capture_drains_large_output_with_bounded_retention(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    chunk = b"x" * (64 * 1024)
+
+    def noisy() -> None:
+        for _ in range(40):
+            os.write(1, chunk)
+
+    with capfd.disabled():
+        with pytest.raises(TerminalizedFailure) as caught:
+            capture_terminal(noisy)
+    failure = caught.value
+    try:
+        assert type(failure.primary) is TerminalBoundaryError
+        assert failure.primary.code == "terminal_output_detected"
+        assert len(failure.transcript) == MAX_TERMINAL_TRANSCRIPT_BYTES
+        assert failure.transcript.endswith(
+            b"\n...[terminal transcript truncated]...\n"
+        )
+    finally:
+        failure.terminal_status.close_best_effort()
+    captured = capfd.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_terminal_commit_runs_only_after_one_silent_drained_capture(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    events: list[tuple[str, int]] = []
+
+    def commit(value: int) -> None:
+        # Process-global stdout/stderr point at a sink until the irreversible
+        # terminal callback returns, so no async/native output can bypass the
+        # accepted transcript.
+        assert os.write(1, b"must-not-cross-terminal\n") > 0
+        assert os.write(2, b"must-not-cross-terminal\n") > 0
+        events.append(("commit", value))
+
+    with capfd.disabled():
+        captured = capture_terminal(
+            lambda: 17,
+            terminal_commit=commit,
+        )
+    try:
+        assert captured.value == 17
+        assert events == [("commit", 17)]
+    finally:
+        captured.terminal_status.close_best_effort()
+    observed = capfd.readouterr()
+    assert observed.out == ""
+    assert observed.err == ""
+
+
+def test_terminal_commit_is_not_called_after_output_or_callback_failure(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    calls: list[object] = []
+
+    def commit(value: object) -> None:
+        calls.append(value)
+
+    with capfd.disabled():
+        with pytest.raises(TerminalizedFailure) as noisy:
+            capture_terminal(
+                lambda: os.write(1, b"private-noise\n"),
+                terminal_commit=commit,
+            )
+    try:
+        assert type(noisy.value.primary) is TerminalBoundaryError
+        assert noisy.value.primary.code == "terminal_output_detected"
+    finally:
+        noisy.value.terminal_status.close_best_effort()
+
+    with capfd.disabled():
+        with pytest.raises(TerminalizedFailure) as failed:
+            capture_terminal(
+                lambda: (_ for _ in ()).throw(
+                    RuntimeError("private-callback-failure")
+                ),
+                terminal_commit=commit,
+            )
+    try:
+        assert type(failed.value.primary) is RuntimeError
+    finally:
+        failed.value.terminal_status.close_best_effort()
+    assert calls == []
+
+
+def test_sealed_terminal_blocks_unregistered_delayed_thread_until_exit(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    sentinel = b"delayed-native-private-sentinel\n"
+    attempted = threading.Event()
+
+    def callback() -> None:
+        def delayed_write() -> None:
+            time.sleep(0.05)
+            os.write(1, sentinel)
+            attempted.set()
+
+        # Raw workers do not appear in threading.enumerate(), matching native
+        # runtimes that own their own thread registration.
+        _thread.start_new_thread(delayed_write, ())
+
+    with capfd.disabled():
+        captured = capture_terminal(
+            callback,
+            seal_terminal=True,
+        )
+        assert attempted.wait(timeout=1.0)
+        captured.terminal_status.close_best_effort()
+    observed = capfd.readouterr()
+    assert "delayed-native-private-sentinel" not in observed.out
+    assert "delayed-native-private-sentinel" not in observed.err
+
+
+def test_sealed_terminal_blocks_raw_thread_in_dedicated_process() -> None:
+    script = r"""
+import _thread
+import os
+import time
+from evalsim.cli._terminal import capture_terminal, write_all
+
+def callback():
+    def delayed():
+        time.sleep(0.15)
+        os.write(1, b"RAW_THREAD_PRIVATE_SENTINEL\n")
+        os.write(2, b"RAW_THREAD_PRIVATE_SENTINEL\n")
+    _thread.start_new_thread(delayed, ())
+    return 7
+
+captured = capture_terminal(
+    callback,
+    terminal_commit=lambda value: None,
+    seal_terminal=True,
+)
+write_all(captured.terminal_status.stdout_fd, b'{"status":"success"}\n')
+captured.terminal_status.close_best_effort()
+time.sleep(0.35)
+os._exit(0)
+"""
+    completed = subprocess.run(
+        (sys.executable, "-c", script),
+        cwd=Path(__file__).resolve().parents[1],
+        check=False,
+        capture_output=True,
+        timeout=3,
+    )
+    assert completed.returncode == 0
+    assert completed.stdout == b'{"status":"success"}\n'
+    assert completed.stderr == b""
+
+
+def test_terminal_capture_retains_synchronous_child_output(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    def noisy_child() -> None:
+        subprocess.run(
+            (
+                sys.executable,
+                "-c",
+                "import os; "
+                "os.write(1, b'child-native-stdout\\n'); "
+                "os.write(2, b'child-native-stderr\\n')",
+            ),
+            check=True,
+        )
+
+    with capfd.disabled():
+        with pytest.raises(TerminalizedFailure) as caught:
+            capture_terminal(noisy_child)
+    failure = caught.value
+    try:
+        assert type(failure.primary) is TerminalBoundaryError
+        assert failure.primary.code == "terminal_output_detected"
+        assert b"child-native-stdout\n" in failure.transcript
+        assert b"child-native-stderr\n" in failure.transcript
+    finally:
+        failure.terminal_status.close_best_effort()
+    captured = capfd.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_terminal_capture_restore_failure_attempts_both_and_does_not_hang() -> None:
+    script = r"""
+import json
+import os
+import evalsim.cli._terminal as terminal
+
+real_restore = terminal._restore_descriptor
+calls = []
+
+def fail_stdout_before_restore(source, target, *, inheritable):
+    calls.append(target)
+    if target == 1:
+        raise OSError("injected pre-restore failure")
+    return real_restore(source, target, inheritable=inheritable)
+
+terminal._restore_descriptor = fail_stdout_before_restore
+try:
+    terminal.capture_terminal(
+        lambda: os.write(1, b"private-before-restore\n")
+    )
+except terminal.TerminalizedFailure as failure:
+    payload = (
+        json.dumps(
+            {
+                "calls": calls,
+                "code": failure.primary.code,
+                "transcript_bytes": len(failure.transcript),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode("ascii")
+    terminal.write_all(failure.terminal_status.stderr_fd, payload)
+    failure.terminal_status.close_best_effort()
+    os._exit(0)
+os._exit(2)
+"""
+    completed = subprocess.run(
+        (sys.executable, "-c", script),
+        cwd=Path(__file__).resolve().parents[1],
+        check=False,
+        capture_output=True,
+        timeout=3,
+    )
+    assert completed.returncode == 0
+    assert completed.stdout == b""
+    assert json.loads(completed.stderr) == {
+        "calls": [1, 2],
+        "code": "terminal_capture_failed",
+        "transcript_bytes": len(b"private-before-restore\n"),
+    }
+    assert b"private-before-restore" not in completed.stderr
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="requires POSIX fork")
+def test_terminal_capture_fails_boundedly_on_inherited_background_writer(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    child_pid: int | None = None
+
+    def leave_inherited_writer() -> None:
+        nonlocal child_pid
+        child_pid = os.fork()
+        if child_pid == 0:
+            time.sleep(10)
+            os._exit(0)
+
+    started = time.monotonic()
+    with capfd.disabled():
+        with pytest.raises(TerminalizedFailure) as caught:
+            capture_terminal(leave_inherited_writer)
+    elapsed = time.monotonic() - started
+    failure = caught.value
+    try:
+        assert type(failure.primary) is TerminalBoundaryError
+        assert failure.primary.code == "terminal_capture_failed"
+        assert failure.transcript == b""
+        assert elapsed < 2.0
+    finally:
+        failure.terminal_status.close_best_effort()
+        if child_pid is not None:
+            try:
+                os.kill(child_pid, 9)
+            except ProcessLookupError:
+                pass
+            os.waitpid(child_pid, 0)
+    captured = capfd.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
 def test_capture_success_preserves_noninheritable_status_descriptors() -> None:
     captured = capture_terminal(lambda: 17)
     try:
@@ -226,6 +508,26 @@ def test_capture_success_preserves_noninheritable_status_descriptors() -> None:
     ):
         with pytest.raises(OSError):
             os.fstat(descriptor)
+
+
+def test_terminal_capture_releases_internal_descriptors_and_drain_threads() -> None:
+    descriptor_root = Path("/dev/fd")
+    if not descriptor_root.is_dir():
+        pytest.skip("requires descriptor enumeration")
+    before = len(tuple(descriptor_root.iterdir()))
+    for _ in range(25):
+        captured = capture_terminal(lambda: 17)
+        captured.terminal_status.close_best_effort()
+    for _ in range(25):
+        with pytest.raises(TerminalizedFailure) as caught:
+            capture_terminal(lambda: os.write(1, b"captured\n"))
+        caught.value.terminal_status.close_best_effort()
+    after = len(tuple(descriptor_root.iterdir()))
+    assert after == before
+    assert not any(
+        thread.name == "evalsim-terminal-drain"
+        for thread in threading.enumerate()
+    )
 
 
 def test_captured_failure_creates_owner_only_ignored_diagnostics(

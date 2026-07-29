@@ -1,7 +1,7 @@
 """Data-free tests for the source-neutral M5 evaluation runner."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import inspect
 import math
 from pathlib import Path
@@ -44,6 +44,7 @@ from evalsim.results import (
 from evalsim.slices.m5 import M5_SLICE_SPECS
 from evalsim.sources.synthetic import SCENARIO_KINDS
 from evalsim.stats.m5 import M5_POLICY_CONTRASTS
+from evalsim.simulators import LogReplayPolicy
 
 
 @pytest.fixture(scope="module")
@@ -311,6 +312,31 @@ def test_cohort_identity_drift_fails_before_execution(mutate) -> None:
 
     with pytest.raises(M5EvaluationError, match="cohort|identit"):
         run_m5_evaluation(adapter, NeverExecutor())
+
+
+def test_policy_version_drift_fails_before_execution() -> None:
+    class WrongVersionLogReplay(LogReplayPolicy):
+        def metadata(self):
+            return replace(super().metadata(), version="9.9.9")
+
+    policies = tuple(
+        WrongVersionLogReplay()
+        if policy.metadata().name == "log_replay"
+        else policy
+        for policy in canonical_m5_policies()
+    )
+
+    class NeverExecutor:
+        def execute(self, case, policy, seed):
+            del case, policy, seed
+            pytest.fail("invalid policy provenance must fail before execution")
+
+    with pytest.raises(M5EvaluationError, match="version.*frozen"):
+        run_m5_evaluation(
+            SyntheticM5CohortAdapter(),
+            NeverExecutor(),
+            policies=policies,
+        )
 
 
 def _scenario_with_id(scenario, scenario_id: str):

@@ -33,6 +33,7 @@ from evalsim.report.m5 import (
     render_m5_scorecard,
 )
 from evalsim.simulators.waymax_reference import WAYMAX_EXACT_LOG_NAME
+from evalsim.simulators.waymax_reference import WAYMAX_REFERENCE_VERSION
 from evalsim.slices.m5 import M5_SLICE_SPECS, M5_SLICE_VERSION
 from evalsim.stats.m5 import (
     M5_BASE_SEED,
@@ -55,6 +56,41 @@ from evalsim.stats.m5 import (
 M5_RESULT_STORE_SCHEMA_VERSION = "m5-result-store-1.0.0"
 OFFICIAL_M5_PROFILE = "official_m5"
 DATA_FREE_TEST_PROFILE = "data_free_test"
+M5_PARITY_ORDER_RECEIPT_SCHEMA_VERSION = (
+    "m5-parity-order-receipt-1.0.0"
+)
+M5_DETERMINISM_RECEIPT_SCHEMA_VERSION = (
+    "m5-determinism-receipt-1.0.0"
+)
+M5_PARITY_RANK_DOMAIN = "evalsim-m5-metric-parity-v1"
+M5_PARITY_ORDER_VERSION = "m5-metric-parity-order-1"
+M5_PARITY_SCENE_COUNT = 16
+M5_PARITY_TRANSITION_COUNT = 20
+M5_DETERMINISM_CANONICALIZATION_VERSION = (
+    "m5-evaluation-canonical-json-digests-1"
+)
+M5_M4_REUSE_SCHEMA_VERSION = "m5-m4-reuse-1.0.0"
+M5_M4_SELECTED_ORDER_VERSION = "m4-selected-order-1"
+M5_M4_INTEGRITY_ASSUMPTION = (
+    "explicit_ignored_m4_run_is_local_trust_root"
+)
+
+PARITY_ORDER_RECEIPT = "parity_order_receipt"
+DETERMINISM_RECEIPT = "determinism_receipt"
+_SUPPLEMENTAL_PATHS = MappingProxyType(
+    {
+        PARITY_ORDER_RECEIPT: "parity-order-receipt.json",
+        DETERMINISM_RECEIPT: "determinism-receipt.json",
+    }
+)
+
+OFFICIAL_WAYMAX_REFERENCE_PARAMETERS: Mapping[str, Any] = MappingProxyType(
+    {
+        "executed": True,
+        "horizon_transitions": 80,
+        "scenario_count": 128,
+    }
+)
 
 METRIC_RESULTS = "metric-results"
 SLICE_MEMBERSHIP = "slice-membership"
@@ -81,6 +117,7 @@ _PART_NAME = re.compile(r"part-([0-9]{5})\.parquet")
 _FLOAT32_MAX = 3.4028234663852886e38
 _CONTROL_FILES = frozenset(
     {
+        "COMMITTED",
         "FINALIZING",
         "FAILURE.json",
         "evaluation-manifest.json",
@@ -113,6 +150,13 @@ _M5_PARITY_METRIC_NAMES = (
     "kinematic_infeasibility",
     "log_divergence",
     "overlap",
+)
+_M5_ERROR_ORACLE_METRIC_NAMES = (
+    "acceleration_error_mps2",
+    "jerk_error_mps3",
+    "position_error_m",
+    "speed_error_mps",
+    "yaw_rate_error_radps",
 )
 _OFFICIAL_EXECUTABLE_ROOTS = (
     "evalsim/cli",
@@ -350,6 +394,201 @@ class ExpectedRowCounts:
 
 
 @dataclass(frozen=True, slots=True)
+class M5ParityOrderReceipt:
+    """Immutable source-only selection receipt written before metric outcomes."""
+
+    rank_domain: str
+    order_version: str
+    ordered_membership_sha256: str = field(repr=False)
+    member_count: int = M5_PARITY_SCENE_COUNT
+    transition_count: int = M5_PARITY_TRANSITION_COUNT
+
+    def __post_init__(self) -> None:
+        if self.rank_domain != M5_PARITY_RANK_DOMAIN:
+            raise ValueError("rank_domain is not the frozen M5 parity domain")
+        if self.order_version != M5_PARITY_ORDER_VERSION:
+            raise ValueError("order_version is not the frozen M5 parity order")
+        if (
+            not isinstance(self.ordered_membership_sha256, str)
+            or _SHA256.fullmatch(self.ordered_membership_sha256) is None
+        ):
+            raise ValueError(
+                "ordered_membership_sha256 must be a SHA-256 digest"
+            )
+        if self.member_count != M5_PARITY_SCENE_COUNT:
+            raise ValueError("member_count is not the frozen parity size")
+        if self.transition_count != M5_PARITY_TRANSITION_COUNT:
+            raise ValueError(
+                "transition_count is not the frozen parity horizon"
+            )
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "member_count": self.member_count,
+            "order_version": self.order_version,
+            "ordered_membership_sha256": self.ordered_membership_sha256,
+            "rank_domain": self.rank_domain,
+            "transition_count": self.transition_count,
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        payload: Mapping[str, Any],
+    ) -> "M5ParityOrderReceipt":
+        expected = {
+            "member_count",
+            "order_version",
+            "ordered_membership_sha256",
+            "rank_domain",
+            "transition_count",
+        }
+        if set(payload) != expected:
+            raise M5ResultStoreIntegrityError(
+                "parity-order receipt has unexpected fields"
+            )
+        try:
+            return cls(**dict(payload))
+        except (TypeError, ValueError) as exc:
+            raise M5ResultStoreIntegrityError(
+                "parity-order receipt is invalid"
+            ) from exc
+
+
+@dataclass(frozen=True, slots=True)
+class M5DeterminismReceipt:
+    """Two-pass evaluator digests, later rebound to the stored official rows."""
+
+    metric_pass_1_sha256: str = field(repr=False)
+    metric_pass_2_sha256: str = field(repr=False)
+    statistics_pass_1_sha256: str = field(repr=False)
+    statistics_pass_2_sha256: str = field(repr=False)
+    metric_row_count: int = 6_656
+    statistics_row_count: int = 312
+    metric_passes_equal: bool = True
+    statistics_passes_equal: bool = True
+    reference_matches_log_replay: bool = True
+    zero_error_oracles_passed: bool = True
+    canonicalization_version: str = (
+        M5_DETERMINISM_CANONICALIZATION_VERSION
+    )
+    schema_version: str = M5_DETERMINISM_RECEIPT_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        for name in (
+            "metric_pass_1_sha256",
+            "metric_pass_2_sha256",
+            "statistics_pass_1_sha256",
+            "statistics_pass_2_sha256",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
+                raise ValueError(f"{name} must be a SHA-256 digest")
+        object.__setattr__(
+            self,
+            "metric_row_count",
+            _integer(
+                self.metric_row_count,
+                name="metric_row_count",
+                minimum=0,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "statistics_row_count",
+            _integer(
+                self.statistics_row_count,
+                name="statistics_row_count",
+                minimum=0,
+            ),
+        )
+        for name in (
+            "metric_passes_equal",
+            "statistics_passes_equal",
+            "reference_matches_log_replay",
+            "zero_error_oracles_passed",
+        ):
+            if getattr(self, name) is not True:
+                raise ValueError(f"{name} must be exactly true")
+        if (
+            self.metric_pass_1_sha256 != self.metric_pass_2_sha256
+            or not self.metric_passes_equal
+        ):
+            raise ValueError("metric pass digests must be identical")
+        if (
+            self.statistics_pass_1_sha256
+            != self.statistics_pass_2_sha256
+            or not self.statistics_passes_equal
+        ):
+            raise ValueError("statistics pass digests must be identical")
+        if (
+            self.metric_row_count
+            != OFFICIAL_M5_ROW_COUNTS.metric_results
+            or self.statistics_row_count
+            != OFFICIAL_M5_ROW_COUNTS.scorecards
+        ):
+            raise ValueError(
+                "determinism receipt row counts are not the official domains"
+            )
+        if (
+            self.canonicalization_version
+            != M5_DETERMINISM_CANONICALIZATION_VERSION
+        ):
+            raise ValueError(
+                "determinism canonicalization version is unsupported"
+            )
+        if self.schema_version != M5_DETERMINISM_RECEIPT_SCHEMA_VERSION:
+            raise ValueError("determinism receipt schema is unsupported")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "canonicalization_version": self.canonicalization_version,
+            "metric_passes_equal": self.metric_passes_equal,
+            "metric_pass_1_sha256": self.metric_pass_1_sha256,
+            "metric_pass_2_sha256": self.metric_pass_2_sha256,
+            "metric_row_count": self.metric_row_count,
+            "reference_matches_log_replay": (
+                self.reference_matches_log_replay
+            ),
+            "schema_version": self.schema_version,
+            "statistics_passes_equal": self.statistics_passes_equal,
+            "statistics_pass_1_sha256": self.statistics_pass_1_sha256,
+            "statistics_pass_2_sha256": self.statistics_pass_2_sha256,
+            "statistics_row_count": self.statistics_row_count,
+            "zero_error_oracles_passed": self.zero_error_oracles_passed,
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        payload: Mapping[str, Any],
+    ) -> "M5DeterminismReceipt":
+        expected = {
+            "canonicalization_version",
+            "metric_passes_equal",
+            "metric_pass_1_sha256",
+            "metric_pass_2_sha256",
+            "metric_row_count",
+            "reference_matches_log_replay",
+            "schema_version",
+            "statistics_passes_equal",
+            "statistics_pass_1_sha256",
+            "statistics_pass_2_sha256",
+            "statistics_row_count",
+            "zero_error_oracles_passed",
+        }
+        if set(payload) != expected:
+            raise M5ResultStoreIntegrityError(
+                "determinism receipt has unexpected fields"
+            )
+        try:
+            return cls(**dict(payload))
+        except (TypeError, ValueError) as exc:
+            raise M5ResultStoreIntegrityError(
+                "determinism receipt is invalid"
+            ) from exc
+
+
+@dataclass(frozen=True, slots=True)
 class M5RunProvenance:
     """Typed non-payload provenance required before a run can become success."""
 
@@ -363,6 +602,12 @@ class M5RunProvenance:
     git_tree: str
     simulator_specs: Mapping[str, Any]
     runtime_versions: Mapping[str, str]
+    m4_aggregate_summary_sha256: str | None = None
+    m4_reuse_schema_version: str | None = None
+    m4_integrity_assumption: str | None = None
+    m4_receipt_verified: bool | None = None
+    parity_order_version: str | None = None
+    parity_order_fingerprint_sha256: str | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -389,6 +634,43 @@ class M5RunProvenance:
             "selected_order_version",
             _text(self.selected_order_version, "selected_order_version"),
         )
+        extension_names = (
+            "m4_aggregate_summary_sha256",
+            "m4_reuse_schema_version",
+            "m4_integrity_assumption",
+            "m4_receipt_verified",
+            "parity_order_version",
+            "parity_order_fingerprint_sha256",
+        )
+        extension_values = tuple(
+            getattr(self, name) for name in extension_names
+        )
+        if any(value is None for value in extension_values) and not all(
+            value is None for value in extension_values
+        ):
+            raise ValueError(
+                "official M4/parity provenance fields must be all present or absent"
+            )
+        if all(value is not None for value in extension_values):
+            for name in (
+                "m4_aggregate_summary_sha256",
+                "parity_order_fingerprint_sha256",
+            ):
+                value = getattr(self, name)
+                if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
+                    raise ValueError(f"{name} must be a SHA-256 digest")
+            if self.m4_reuse_schema_version != M5_M4_REUSE_SCHEMA_VERSION:
+                raise ValueError("m4_reuse_schema_version is unsupported")
+            if self.m4_integrity_assumption != M5_M4_INTEGRITY_ASSUMPTION:
+                raise ValueError(
+                    "m4_integrity_assumption is not the documented local rule"
+                )
+            if type(self.m4_receipt_verified) is not bool:
+                raise TypeError("m4_receipt_verified must be a boolean")
+            if self.parity_order_version != M5_PARITY_ORDER_VERSION:
+                raise ValueError(
+                    "parity_order_version is not the frozen M5 value"
+                )
         if isinstance(self.executable_source_paths, (str, bytes)):
             raise ValueError(
                 "executable_source_paths must be a sequence, not a string"
@@ -462,7 +744,7 @@ class M5RunProvenance:
         object.__setattr__(self, "runtime_versions", runtime_versions)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "executable_source_fingerprint_sha256": (
                 self.executable_source_fingerprint_sha256
             ),
@@ -480,10 +762,34 @@ class M5RunProvenance:
             "selected_order_version": self.selected_order_version,
             "simulator_specs": _thaw_json(self.simulator_specs),
         }
+        if self.has_official_extensions:
+            payload.update(
+                {
+                    "m4_aggregate_summary_sha256": (
+                        self.m4_aggregate_summary_sha256
+                    ),
+                    "m4_integrity_assumption": (
+                        self.m4_integrity_assumption
+                    ),
+                    "m4_receipt_verified": self.m4_receipt_verified,
+                    "m4_reuse_schema_version": (
+                        self.m4_reuse_schema_version
+                    ),
+                    "parity_order_fingerprint_sha256": (
+                        self.parity_order_fingerprint_sha256
+                    ),
+                    "parity_order_version": self.parity_order_version,
+                }
+            )
+        return payload
+
+    @property
+    def has_official_extensions(self) -> bool:
+        return self.m4_aggregate_summary_sha256 is not None
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "M5RunProvenance":
-        required = {
+        legacy = {
             "executable_source_fingerprint_sha256",
             "executable_source_paths",
             "git_commit",
@@ -495,7 +801,16 @@ class M5RunProvenance:
             "selected_order_version",
             "simulator_specs",
         }
-        if set(payload) != required:
+        extended = legacy | {
+            "m4_aggregate_summary_sha256",
+            "m4_integrity_assumption",
+            "m4_receipt_verified",
+            "m4_reuse_schema_version",
+            "parity_order_fingerprint_sha256",
+            "parity_order_version",
+        }
+        fields = frozenset(payload)
+        if fields not in {frozenset(legacy), frozenset(extended)}:
             raise M5ResultStoreIntegrityError(
                 "manifest provenance has unexpected fields"
             )
@@ -557,6 +872,73 @@ class ArtifactRecord:
         except (TypeError, ValueError) as exc:
             raise M5ResultStoreIntegrityError(
                 "manifest artifact record is invalid"
+            ) from exc
+
+
+@dataclass(frozen=True, slots=True)
+class SupplementalArtifactRecord:
+    """Manifest record for one typed immutable official JSON artifact."""
+
+    kind: str
+    path: str
+    schema_version: str
+    size_bytes: int
+    sha256: str = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if self.kind not in _SUPPLEMENTAL_PATHS:
+            raise ValueError("supplemental artifact kind is unsupported")
+        if self.path != _SUPPLEMENTAL_PATHS[self.kind]:
+            raise ValueError("supplemental artifact path is not canonical")
+        expected_schema = {
+            PARITY_ORDER_RECEIPT: M5_PARITY_ORDER_RECEIPT_SCHEMA_VERSION,
+            DETERMINISM_RECEIPT: M5_DETERMINISM_RECEIPT_SCHEMA_VERSION,
+        }[self.kind]
+        if self.schema_version != expected_schema:
+            raise ValueError(
+                "supplemental artifact schema version is unsupported"
+            )
+        object.__setattr__(
+            self,
+            "size_bytes",
+            _integer(self.size_bytes, name="size_bytes", minimum=1),
+        )
+        if (
+            not isinstance(self.sha256, str)
+            or _SHA256.fullmatch(self.sha256) is None
+        ):
+            raise ValueError("sha256 must be a lowercase hexadecimal digest")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "path": self.path,
+            "schema_version": self.schema_version,
+            "sha256": self.sha256,
+            "size_bytes": self.size_bytes,
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        payload: Mapping[str, Any],
+    ) -> "SupplementalArtifactRecord":
+        expected = {
+            "kind",
+            "path",
+            "schema_version",
+            "sha256",
+            "size_bytes",
+        }
+        if set(payload) != expected:
+            raise M5ResultStoreIntegrityError(
+                "supplemental artifact record has unexpected fields"
+            )
+        try:
+            return cls(**dict(payload))
+        except (TypeError, ValueError) as exc:
+            raise M5ResultStoreIntegrityError(
+                "supplemental artifact record is invalid"
             ) from exc
 
 
@@ -629,6 +1011,18 @@ class VerifiedM5ResultStore:
     manifest: Mapping[str, Any]
     artifacts: tuple[ArtifactRecord, ...]
     scorecard_report: ScorecardReportRecord
+    supplemental_artifacts: tuple[SupplementalArtifactRecord, ...] = ()
+    parity_order_receipt: M5ParityOrderReceipt | None = None
+    determinism_receipt: M5DeterminismReceipt | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _OfficialScanSummary:
+    """Compact facts retained from one incremental official artifact scan."""
+
+    metric_pass_sha256: str
+    statistics_pass_sha256: str
+    scorecard_rows: tuple[Mapping[str, Any], ...] = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -658,6 +1052,12 @@ class M5ResultStore:
         self.row_accounting_profile = row_accounting_profile
         self._artifacts: dict[str, ArtifactRecord] = {}
         self._scorecard_report: ScorecardReportRecord | None = None
+        self._supplemental_artifacts: dict[
+            str,
+            SupplementalArtifactRecord,
+        ] = {}
+        self._parity_order_receipt: M5ParityOrderReceipt | None = None
+        self._determinism_receipt: M5DeterminismReceipt | None = None
         self._keys: dict[str, set[tuple[Any, ...]]] = {
             name: set() for name in _DATASET_NAMES
         }
@@ -666,8 +1066,10 @@ class M5ResultStore:
         }
         self._failed = False
         self._finalizing = False
+        self._committed_for_verification = False
         self._successful = False
         self._prepared_finalization: PreparedM5Finalization | None = None
+        self._prepared_manifest_bytes: bytes | None = None
 
     @classmethod
     def create(
@@ -701,23 +1103,39 @@ class M5ResultStore:
             raise FileExistsError(
                 f"M5 run {name!r} already exists and cannot be overwritten"
             )
+        created_run = False
         try:
             os.mkdir(run_path, mode=0o700)
+            created_run = True
             _fsync_directory(m5_root)
-        except FileExistsError:
-            raise
-        except OSError as exc:
-            raise M5ResultStoreError("could not create the M5 run directory") from exc
-        if (
-            _path_kind(run_path) != "directory"
-            or run_path.resolve(strict=True) != run_path
-            or run_path.parent != m5_root
-        ):
-            raise M5ResultStoreError("created M5 run failed containment checks")
-
-        pending = _create_child_directory(run_path, "pending")
-        _create_child_directory(pending, METRIC_RESULTS)
-        _create_child_directory(run_path, METRIC_RESULTS)
+            if (
+                _path_kind(run_path) != "directory"
+                or run_path.resolve(strict=True) != run_path
+                or run_path.parent != m5_root
+            ):
+                raise M5ResultStoreError(
+                    "created M5 run failed containment checks"
+                )
+            pending = _create_child_directory(run_path, "pending")
+            _create_child_directory(pending, METRIC_RESULTS)
+            _create_child_directory(run_path, METRIC_RESULTS)
+        except FileExistsError as exc:
+            if not created_run:
+                raise
+            _rollback_fresh_result_store(run_path)
+            raise M5ResultStoreError(
+                "could not create the M5 run directory"
+            ) from exc
+        except BaseException as exc:
+            if created_run:
+                _rollback_fresh_result_store(run_path)
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise
+            if isinstance(exc, M5ResultStoreError):
+                raise
+            raise M5ResultStoreError(
+                "could not create the M5 run directory"
+            ) from exc
         return cls(
             project_root=root,
             run_name=name,
@@ -742,12 +1160,124 @@ class M5ResultStore:
     def scorecard_report(self) -> ScorecardReportRecord | None:
         return self._scorecard_report
 
+    @property
+    def supplemental_artifacts(
+        self,
+    ) -> tuple[SupplementalArtifactRecord, ...]:
+        return tuple(
+            self._supplemental_artifacts[kind]
+            for kind in sorted(self._supplemental_artifacts)
+        )
+
+    @property
+    def parity_order_receipt(self) -> M5ParityOrderReceipt | None:
+        return self._parity_order_receipt
+
+    @property
+    def determinism_receipt(self) -> M5DeterminismReceipt | None:
+        return self._determinism_receipt
+
+    def write_parity_order_receipt(
+        self,
+        receipt: M5ParityOrderReceipt,
+    ) -> SupplementalArtifactRecord:
+        """Write the official source-only parity order before any metric row."""
+
+        self._ensure_active()
+        if self.row_accounting_profile != OFFICIAL_M5_PROFILE:
+            raise M5ResultStoreStateError(
+                "parity-order receipts are official-run-only"
+            )
+        if not isinstance(receipt, M5ParityOrderReceipt):
+            try:
+                raw_receipt = receipt.to_dict()  # type: ignore[union-attr]
+            except AttributeError as exc:
+                raise TypeError(
+                    "receipt must be a compatible M5ParityOrderReceipt"
+                ) from exc
+            if not isinstance(raw_receipt, Mapping):
+                raise TypeError(
+                    "receipt must be a compatible M5ParityOrderReceipt"
+                )
+            receipt = M5ParityOrderReceipt.from_dict(raw_receipt)
+        if (
+            self._row_counts[METRIC_RESULTS]
+            or self._row_counts[SCORECARDS]
+            or self._row_counts[WAYMAX_PARITY_SUMMARY]
+            or any(
+                record.dataset
+                in {
+                    METRIC_RESULTS,
+                    SCORECARDS,
+                    WAYMAX_PARITY_SUMMARY,
+                }
+                for record in self._artifacts.values()
+            )
+        ):
+            self._poison("parity_order_receipt_late")
+            raise M5ResultStoreStateError(
+                "pre-metric parity-order receipt must precede metric-derived "
+                "result rows"
+            )
+        try:
+            payload = receipt.to_dict()
+            payload["schema_version"] = (
+                M5_PARITY_ORDER_RECEIPT_SCHEMA_VERSION
+            )
+            record = self._write_supplemental_artifact(
+                PARITY_ORDER_RECEIPT,
+                payload,
+            )
+            self._parity_order_receipt = receipt
+            return record
+        except BaseException:
+            self._poison("parity_order_receipt_write_failed")
+            raise
+
+    def write_determinism_receipt(
+        self,
+        receipt: M5DeterminismReceipt,
+    ) -> SupplementalArtifactRecord:
+        """Write the two-pass receipt whose digests finalization will rederive."""
+
+        self._ensure_active()
+        if self.row_accounting_profile != OFFICIAL_M5_PROFILE:
+            raise M5ResultStoreStateError(
+                "determinism receipts are official-run-only"
+            )
+        if not isinstance(receipt, M5DeterminismReceipt):
+            raise TypeError("receipt must be M5DeterminismReceipt")
+        if self._parity_order_receipt is None:
+            self._poison("determinism_receipt_before_parity_order")
+            raise M5ResultStoreStateError(
+                "determinism receipt requires the pre-metric parity receipt"
+            )
+        try:
+            record = self._write_supplemental_artifact(
+                DETERMINISM_RECEIPT,
+                receipt.to_dict(),
+            )
+            self._determinism_receipt = receipt
+            return record
+        except BaseException:
+            self._poison("determinism_receipt_write_failed")
+            raise
+
     def write_metric_results_part(
         self,
         rows: Iterable[Mapping[str, Any]],
         *,
         part_index: int = 0,
     ) -> ArtifactRecord:
+        self._ensure_active()
+        if (
+            self.row_accounting_profile == OFFICIAL_M5_PROFILE
+            and self._parity_order_receipt is None
+        ):
+            self._poison("parity_order_receipt_missing")
+            raise M5ResultStoreStateError(
+                "official metric rows require a pre-metric parity receipt"
+            )
         index = _integer(part_index, name="part_index", minimum=0, maximum=99_999)
         relative = Path(METRIC_RESULTS) / f"part-{index:05d}.parquet"
         return self._write_dataset(METRIC_RESULTS, relative, rows)
@@ -918,6 +1448,8 @@ class M5ResultStore:
         """Prepare a verified manifest and immediately commit ``SUCCESS``."""
 
         prepared = self.prepare_finalization(provenance=provenance)
+        if self.row_accounting_profile == OFFICIAL_M5_PROFILE:
+            self.mark_committed_for_verification(prepared)
         return self.commit_finalization(prepared)
 
     def prepare_finalization(
@@ -936,34 +1468,68 @@ class M5ResultStore:
         if not isinstance(provenance, M5RunProvenance):
             raise TypeError("provenance must be M5RunProvenance")
         try:
-            self._preflight_finalization(provenance)
+            preflight_summary = self._preflight_finalization(provenance)
             self._finalizing = True
             _write_bytes_exclusive(
                 self.run_path / "FINALIZING",
                 b"FINALIZING\n",
             )
-            records = self._verify_artifacts()
-            report = self._verified_scorecard_report(records)
+            if self.row_accounting_profile == OFFICIAL_M5_PROFILE:
+                if (
+                    preflight_summary is None
+                    or self._determinism_receipt is None
+                ):
+                    raise M5ResultStoreIntegrityError(
+                        "official finalization lost its streamed preflight"
+                    )
+                records = self.artifacts
+                _verify_artifact_bytes(self.run_path, records)
+                supplemental = self._verified_supplemental_artifacts()
+                scan_summary = preflight_summary
+                report = self._verified_scorecard_report(
+                    records,
+                    scorecard_rows=scan_summary.scorecard_rows,
+                )
+            else:
+                records = self._verify_artifacts()
+                scan_summary = None
+                supplemental = ()
+                report = self._verified_scorecard_report(records)
             _validate_run_members(
                 self.run_path,
                 records,
                 report,
                 allowed_controls={"FINALIZING"},
+                supplemental_records=supplemental,
             )
             payload = self._manifest_payload(records, provenance)
             manifest_path = self.run_path / "evaluation-manifest.json"
-            _write_bytes_exclusive(
-                manifest_path,
-                _canonical_json_bytes(payload),
-            )
+            manifest_bytes = _canonical_json_bytes(payload)
+            _write_bytes_exclusive(manifest_path, manifest_bytes)
             # Guard the small manifest-to-success interval against external mutation.
-            self._verify_artifacts()
-            self._verified_scorecard_report(records)
+            if self.row_accounting_profile == OFFICIAL_M5_PROFILE:
+                if (
+                    scan_summary is None
+                    or self._determinism_receipt is None
+                ):
+                    raise M5ResultStoreIntegrityError(
+                        "official scan summary disappeared"
+                    )
+                _verify_artifact_bytes(self.run_path, records)
+                self._verified_supplemental_artifacts()
+                self._verified_scorecard_report(
+                    records,
+                    scorecard_rows=scan_summary.scorecard_rows,
+                )
+            else:
+                self._verify_artifacts()
+                self._verified_scorecard_report(records)
             _validate_run_members(
                 self.run_path,
                 records,
                 report,
                 allowed_controls={"FINALIZING", "evaluation-manifest.json"},
+                supplemental_records=supplemental,
             )
         except BaseException:
             self._poison("finalization_failed")
@@ -973,6 +1539,7 @@ class M5ResultStore:
             _nonce=object(),
         )
         self._prepared_finalization = prepared
+        self._prepared_manifest_bytes = manifest_bytes
         return prepared
 
     def commit_finalization(
@@ -997,6 +1564,16 @@ class M5ResultStore:
             or os.path.lexists(self.run_path / "FAILURE.json")
             or _path_kind(self.run_path / "FINALIZING") != "file"
             or _path_kind(self.run_path / "evaluation-manifest.json") != "file"
+            or (
+                self.row_accounting_profile == OFFICIAL_M5_PROFILE
+                and (
+                    not self._committed_for_verification
+                    or not _regular_file_has_exact_bytes(
+                        self.run_path / "COMMITTED",
+                        b"COMMITTED\n",
+                    )
+                )
+            )
             or os.path.lexists(self.run_path / "SUCCESS")
         ):
             raise M5ResultStoreStateError(
@@ -1004,10 +1581,13 @@ class M5ResultStore:
             )
         success_path = self.run_path / "SUCCESS"
         try:
+            self._verify_terminal_byte_seal()
             _write_bytes_exclusive(success_path, b"SUCCESS\n")
             self._successful = True
             self._finalizing = False
+            self._committed_for_verification = False
             self._prepared_finalization = None
+            self._prepared_manifest_bytes = None
             return self.run_path
         except BaseException:
             if _regular_file_has_exact_bytes(
@@ -1016,7 +1596,102 @@ class M5ResultStore:
             ):
                 self._successful = True
                 self._finalizing = False
+                self._committed_for_verification = False
                 self._prepared_finalization = None
+                self._prepared_manifest_bytes = None
+                return self.run_path
+            self._poison("finalization_failed")
+            raise
+
+    def _verify_terminal_byte_seal(self) -> None:
+        """Recheck every registered byte immediately before ``SUCCESS``."""
+
+        expected_manifest = self._prepared_manifest_bytes
+        manifest_path = self.run_path / "evaluation-manifest.json"
+        if (
+            type(expected_manifest) is not bytes
+            or not _regular_file_has_exact_bytes(
+                self.run_path / "FINALIZING",
+                b"FINALIZING\n",
+            )
+            or _path_kind(manifest_path) != "file"
+            or _read_regular_bytes(manifest_path) != expected_manifest
+        ):
+            raise M5ResultStoreIntegrityError(
+                "prepared finalization bytes changed before success"
+            )
+        records = self.artifacts
+        _verify_artifact_bytes(self.run_path, records)
+        if self.row_accounting_profile == OFFICIAL_M5_PROFILE:
+            if not _regular_file_has_exact_bytes(
+                self.run_path / "COMMITTED",
+                b"COMMITTED\n",
+            ):
+                raise M5ResultStoreIntegrityError(
+                    "official commit checkpoint changed before success"
+                )
+            supplemental = self._verified_supplemental_artifacts()
+            allowed_controls = {
+                "COMMITTED",
+                "FINALIZING",
+                "evaluation-manifest.json",
+            }
+        else:
+            supplemental = ()
+            allowed_controls = {
+                "FINALIZING",
+                "evaluation-manifest.json",
+            }
+        report = self._verified_scorecard_report(records)
+        _validate_run_members(
+            self.run_path,
+            records,
+            report,
+            allowed_controls=allowed_controls,
+            supplemental_records=supplemental,
+        )
+
+    def mark_committed_for_verification(
+        self,
+        prepared: PreparedM5Finalization,
+    ) -> Path:
+        """Create an abortable in-process checkpoint before verification.
+
+        ``COMMITTED`` is not success.  The prepared capability remains active so
+        verification failure can still create ``FAILURE.json`` and can never be
+        mistaken for an accepted run.
+        """
+
+        committed_path = self.run_path / "COMMITTED"
+        if (
+            self.row_accounting_profile != OFFICIAL_M5_PROFILE
+            or not isinstance(prepared, PreparedM5Finalization)
+            or prepared is not self._prepared_finalization
+            or prepared.run_path != self.run_path
+            or not self._finalizing
+            or self._failed
+            or self._successful
+            or self._committed_for_verification
+            or os.path.lexists(self.run_path / "FAILURE.json")
+            or os.path.lexists(self.run_path / "SUCCESS")
+            or os.path.lexists(committed_path)
+            or _path_kind(self.run_path / "FINALIZING") != "file"
+            or _path_kind(self.run_path / "evaluation-manifest.json") != "file"
+        ):
+            raise M5ResultStoreStateError(
+                "only an active prepared official run can be committed "
+                "for verification"
+            )
+        try:
+            _write_bytes_exclusive(committed_path, b"COMMITTED\n")
+            self._committed_for_verification = True
+            return self.run_path
+        except BaseException:
+            if _regular_file_has_exact_bytes(
+                committed_path,
+                b"COMMITTED\n",
+            ):
+                self._committed_for_verification = True
                 return self.run_path
             self._poison("finalization_failed")
             raise
@@ -1042,7 +1717,64 @@ class M5ResultStore:
         reason = _lower_name(reason_code, name="reason_code")
         self._poison(reason)
         self._prepared_finalization = None
+        self._prepared_manifest_bytes = None
         return self.run_path / "FAILURE.json"
+
+    def _write_supplemental_artifact(
+        self,
+        kind: str,
+        payload: Mapping[str, Any],
+    ) -> SupplementalArtifactRecord:
+        if kind not in _SUPPLEMENTAL_PATHS:
+            raise ValueError("supplemental artifact kind is unsupported")
+        if kind in self._supplemental_artifacts:
+            raise FileExistsError(
+                f"supplemental artifact {kind!r} already exists"
+            )
+        path_text = _SUPPLEMENTAL_PATHS[kind]
+        relative = Path(path_text)
+        pending_path = _pending_path(self.run_path, relative)
+        canonical_path = _contained_artifact_path(
+            self.run_path,
+            path_text,
+        )
+        encoded = _canonical_json_bytes(payload)
+        _write_bytes_exclusive(pending_path, encoded)
+        try:
+            os.link(
+                pending_path,
+                canonical_path,
+                follow_symlinks=False,
+            )
+            _fsync_directory(canonical_path.parent)
+        except FileExistsError:
+            raise
+        except OSError as exc:
+            raise M5ResultStoreError(
+                "could not exclusively publish a supplemental artifact"
+            ) from exc
+        pending_stat = pending_path.stat()
+        canonical_stat = canonical_path.stat()
+        if (
+            pending_stat.st_dev,
+            pending_stat.st_ino,
+        ) != (
+            canonical_stat.st_dev,
+            canonical_stat.st_ino,
+        ):
+            raise M5ResultStoreIntegrityError(
+                "supplemental artifact is not its immutable pending file"
+            )
+        digest, size = _file_sha256(canonical_path)
+        record = SupplementalArtifactRecord(
+            kind=kind,
+            path=path_text,
+            schema_version=str(payload["schema_version"]),
+            size_bytes=size,
+            sha256=digest,
+        )
+        self._supplemental_artifacts[kind] = record
+        return record
 
     def _write_dataset(
         self,
@@ -1164,26 +1896,50 @@ class M5ResultStore:
     def _preflight_finalization(
         self,
         provenance: M5RunProvenance,
-    ) -> None:
+    ) -> _OfficialScanSummary | None:
         expected = self.expected_rows.to_dict()
         if self._row_counts != expected:
             raise M5ResultStoreIntegrityError(
                 "result row accounting does not match the expected matrix"
-            )
+        )
         _validate_artifact_layout(self.artifacts)
         self._verify_artifacts()
-        report = self._verified_scorecard_report(self.artifacts)
-        rows = _read_all_artifact_rows(
-            self.run_path,
-            self.artifacts,
-        )
-        _validate_scorecards_derived_from_rows(rows)
         if self.row_accounting_profile == OFFICIAL_M5_PROFILE:
-            _validate_official_key_domains(rows)
+            supplemental = self._verified_supplemental_artifacts()
+            if (
+                self._parity_order_receipt is None
+                or self._determinism_receipt is None
+                or provenance.parity_order_fingerprint_sha256
+                != self._parity_order_receipt.ordered_membership_sha256
+                or provenance.parity_order_version
+                != self._parity_order_receipt.order_version
+            ):
+                raise M5ResultStoreIntegrityError(
+                    "official parity-order receipt differs from provenance"
+                )
+            scan_summary = _scan_official_artifacts(
+                self.run_path,
+                self.artifacts,
+                self._determinism_receipt,
+            )
+            report = self._verified_scorecard_report(
+                self.artifacts,
+                scorecard_rows=scan_summary.scorecard_rows,
+            )
+            _validate_official_provenance_contract(provenance)
             _validate_official_source_binding(
                 self.project_root,
                 provenance,
             )
+        else:
+            supplemental = ()
+            report = self._verified_scorecard_report(self.artifacts)
+            rows = _read_all_artifact_rows(
+                self.run_path,
+                self.artifacts,
+            )
+            _validate_scorecards_derived_from_rows(rows)
+            scan_summary = None
         observed_source_fingerprint = executable_source_fingerprint(
             self.project_root,
             provenance.executable_source_paths,
@@ -1200,81 +1956,30 @@ class M5ResultStore:
             self.artifacts,
             report,
             allowed_controls=set(),
+            supplemental_records=supplemental,
         )
+        return scan_summary
 
     def _verify_artifacts(self) -> tuple[ArtifactRecord, ...]:
-        seen: dict[str, set[tuple[Any, ...]]] = {
-            name: set() for name in _DATASET_NAMES
-        }
-        verified: list[ArtifactRecord] = []
-        for record in self.artifacts:
-            canonical = _contained_artifact_path(self.run_path, record.path)
-            pending = _pending_path(
-                self.run_path,
-                _safe_relative_artifact_path(record.path),
-            )
-            if _path_kind(canonical) != "file" or _path_kind(pending) != "file":
-                raise M5ResultStoreIntegrityError(
-                    f"artifact {record.path} is not a regular file"
-                )
-            canonical_stat = canonical.stat()
-            pending_stat = pending.stat()
-            if (
-                canonical_stat.st_dev,
-                canonical_stat.st_ino,
-            ) != (
-                pending_stat.st_dev,
-                pending_stat.st_ino,
-            ):
-                raise M5ResultStoreIntegrityError(
-                    f"artifact {record.path} is no longer its pending hard link"
-                )
-            digest, size = _file_sha256(canonical)
-            if digest != record.sha256 or size != record.size_bytes:
-                raise M5ResultStoreIntegrityError(
-                    f"artifact {record.path} failed SHA-256 verification"
-                )
-            table = _read_and_validate_table(canonical, record.dataset)
-            if table.num_rows != record.rows:
-                raise M5ResultStoreIntegrityError(
-                    f"artifact {record.path} failed row accounting"
-                )
-            normalized, keys = _normalize_rows(
-                record.dataset,
-                table.to_pylist(),
-            )
-            expected_keys = [
-                tuple(row[field] for field in _KEY_FIELDS[record.dataset])
-                for row in normalized
-            ]
-            if expected_keys != sorted(expected_keys):
-                raise M5ResultStoreIntegrityError(
-                    f"artifact {record.path} is not in canonical key order"
-                )
-            duplicate = seen[record.dataset].intersection(keys)
-            if duplicate:
-                raise M5ResultStoreIntegrityError(
-                    f"{record.dataset} has duplicate keys across parts"
-                )
-            seen[record.dataset].update(keys)
-            verified.append(record)
-        actual = {
-            dataset: sum(
-                record.rows
-                for record in verified
-                if record.dataset == dataset
-            )
-            for dataset in _DATASET_NAMES
-        }
+        verified = self.artifacts
+        actual = _verify_artifact_records(
+            self.run_path,
+            verified,
+            streaming=(
+                self.row_accounting_profile == OFFICIAL_M5_PROFILE
+            ),
+        )
         if actual != self._row_counts:
             raise M5ResultStoreIntegrityError(
                 "artifact row counts differ from writer accounting"
             )
-        return tuple(verified)
+        return verified
 
     def _verified_scorecard_report(
         self,
         records: Sequence[ArtifactRecord],
+        *,
+        scorecard_rows: Sequence[Mapping[str, Any]] | None = None,
     ) -> ScorecardReportRecord:
         if self._scorecard_report is None:
             raise M5ResultStoreIntegrityError(
@@ -1285,15 +1990,39 @@ class M5ResultStore:
             self._scorecard_report,
             self.row_accounting_profile,
             records,
+            scorecard_rows=scorecard_rows,
         )
         return self._scorecard_report
+
+    def _verified_supplemental_artifacts(
+        self,
+    ) -> tuple[SupplementalArtifactRecord, ...]:
+        records = self.supplemental_artifacts
+        _validate_supplemental_layout(records)
+        observed = {
+            record.kind: _verify_supplemental_artifact(
+                self.run_path,
+                record,
+            )
+            for record in records
+        }
+        if (
+            observed.get(PARITY_ORDER_RECEIPT)
+            != self._parity_order_receipt
+            or observed.get(DETERMINISM_RECEIPT)
+            != self._determinism_receipt
+        ):
+            raise M5ResultStoreIntegrityError(
+                "official receipt bytes differ from the writer state"
+            )
+        return records
 
     def _manifest_payload(
         self,
         records: tuple[ArtifactRecord, ...],
         provenance: M5RunProvenance,
     ) -> dict[str, Any]:
-        return {
+        payload = {
             "actual_rows": dict(self._row_counts),
             "artifacts": [record.to_dict() for record in records],
             "catalog_fingerprints": _catalog_fingerprints(),
@@ -1319,6 +2048,12 @@ class M5ResultStore:
             "schema_version": M5_RESULT_STORE_SCHEMA_VERSION,
             "write_mode": "exclusive_immutable_pending_hardlink",
         }
+        if self.row_accounting_profile == OFFICIAL_M5_PROFILE:
+            supplemental = self._verified_supplemental_artifacts()
+            payload["official_artifacts"] = [
+                record.to_dict() for record in supplemental
+            ]
+        return payload
 
 
 def scorecard_row_from_result(
@@ -1562,6 +2297,30 @@ def _validate_official_source_binding(
         )
 
 
+def _validate_official_provenance_contract(
+    provenance: M5RunProvenance,
+) -> None:
+    if not provenance.has_official_extensions:
+        raise M5ResultStoreIntegrityError(
+            "official M5 provenance omits M4 reuse or parity-order evidence"
+        )
+    if provenance.selected_order_version != M5_M4_SELECTED_ORDER_VERSION:
+        raise M5ResultStoreIntegrityError(
+            "official M5 provenance uses the wrong accepted-M4 order"
+        )
+    reference_spec = provenance.simulator_specs[WAYMAX_EXACT_LOG_NAME]
+    if (
+        reference_spec["version"] != WAYMAX_REFERENCE_VERSION
+        or reference_spec["deterministic"] is not True
+        or reference_spec["execution_role"] != "reference"
+        or dict(reference_spec["parameters"])
+        != dict(OFFICIAL_WAYMAX_REFERENCE_PARAMETERS)
+    ):
+        raise M5ResultStoreIntegrityError(
+            "official Waymax exact-log execution spec is not frozen or executed"
+        )
+
+
 def _validate_recorded_official_source_binding(
     project_root: Path,
     provenance: M5RunProvenance,
@@ -1792,8 +2551,65 @@ def verify_m5_result_store(
 ) -> VerifiedM5ResultStore:
     """Fail closed unless the named local run is a complete immutable result set."""
 
+    return _verify_m5_result_store(
+        project_root,
+        run_name,
+        allow_data_free=allow_data_free,
+        state="success",
+    )
+
+
+def verify_prepared_m5_result_store(
+    project_root: str | Path,
+    run_name: str,
+    *,
+    allow_data_free: bool = False,
+) -> VerifiedM5ResultStore:
+    """Independently verify a prepared run before irreversible ``SUCCESS``.
+
+    A prepared run must contain the exact ``FINALIZING`` marker and final
+    manifest, must not yet contain ``SUCCESS`` or ``FAILURE.json``, and must pass
+    every artifact, provenance, receipt, source, statistics, and report check
+    applied to a successful run.
+    """
+
+    return _verify_m5_result_store(
+        project_root,
+        run_name,
+        allow_data_free=allow_data_free,
+        state="prepared",
+    )
+
+
+def verify_committed_m5_result_store(
+    project_root: str | Path,
+    run_name: str,
+    *,
+    allow_data_free: bool = False,
+) -> VerifiedM5ResultStore:
+    """Verify the abortable in-process checkpoint before ``SUCCESS``."""
+
+    return _verify_m5_result_store(
+        project_root,
+        run_name,
+        allow_data_free=allow_data_free,
+        state="committed",
+    )
+
+
+def _verify_m5_result_store(
+    project_root: str | Path,
+    run_name: str,
+    *,
+    allow_data_free: bool,
+    state: str,
+) -> VerifiedM5ResultStore:
+    """Shared complete-store verifier for prepared and committed states."""
+
     if type(allow_data_free) is not bool:
         raise TypeError("allow_data_free must be a boolean")
+    if state not in {"prepared", "committed", "success"}:
+        raise ValueError("state must be prepared, committed, or success")
     root = _validated_project_root(project_root)
     name = _validated_run_name(run_name)
     run_path = root / "outputs" / "m5" / name
@@ -1804,10 +2620,23 @@ def verify_m5_result_store(
         raise M5ResultStoreIntegrityError("M5 result path is missing or unsafe")
     if os.path.lexists(run_path / "FAILURE.json"):
         raise M5ResultStoreIntegrityError("failed runs cannot verify as success")
-    for control, expected in (
-        ("FINALIZING", b"FINALIZING\n"),
-        ("SUCCESS", b"SUCCESS\n"),
-    ):
+    controls = [("FINALIZING", b"FINALIZING\n")]
+    if state == "prepared":
+        if os.path.lexists(run_path / "COMMITTED") or os.path.lexists(
+            run_path / "SUCCESS"
+        ):
+            raise M5ResultStoreIntegrityError(
+                "a prepared M5 result store cannot already be committed"
+            )
+    elif state == "committed":
+        controls.append(("COMMITTED", b"COMMITTED\n"))
+        if os.path.lexists(run_path / "SUCCESS"):
+            raise M5ResultStoreIntegrityError(
+                "a committed verification checkpoint cannot contain SUCCESS"
+            )
+    else:
+        controls.append(("SUCCESS", b"SUCCESS\n"))
+    for control, expected in controls:
         path = run_path / control
         if _path_kind(path) != "file" or path.read_bytes() != expected:
             raise M5ResultStoreIntegrityError(
@@ -1830,6 +2659,24 @@ def verify_m5_result_store(
         )
     _validate_manifest_identity(payload, name)
     profile = payload["row_accounting_profile"]
+    if (
+        state == "committed"
+        and profile != OFFICIAL_M5_PROFILE
+    ):
+        raise M5ResultStoreIntegrityError(
+            "only official M5 runs use a committed verification checkpoint"
+        )
+    if (
+        state == "success"
+        and profile == OFFICIAL_M5_PROFILE
+        and not _regular_file_has_exact_bytes(
+            run_path / "COMMITTED",
+            b"COMMITTED\n",
+        )
+    ):
+        raise M5ResultStoreIntegrityError(
+            "official M5 success omits its committed verification checkpoint"
+        )
     if profile == DATA_FREE_TEST_PROFILE and not allow_data_free:
         raise M5ResultStoreIntegrityError(
             "production verification rejects data-free row-count overrides"
@@ -1926,6 +2773,7 @@ def verify_m5_result_store(
         raise M5ResultStoreIntegrityError("manifest provenance must be an object")
     bound_provenance = M5RunProvenance.from_dict(provenance_payload)
     if profile == OFFICIAL_M5_PROFILE:
+        _validate_official_provenance_contract(bound_provenance)
         _validate_recorded_official_source_binding(root, bound_provenance)
     elif executable_source_fingerprint(
         root,
@@ -1935,79 +2783,92 @@ def verify_m5_result_store(
             "bound executable-source files changed after finalization"
         )
 
-    seen: dict[str, set[tuple[Any, ...]]] = {
-        dataset: set() for dataset in _DATASET_NAMES
-    }
-    for record in records:
-        canonical = _contained_artifact_path(run_path, record.path)
-        pending = _pending_path(
-            run_path,
-            _safe_relative_artifact_path(record.path),
+    verified_counts = _verify_artifact_records(
+        run_path,
+        records,
+        streaming=(profile == OFFICIAL_M5_PROFILE),
+    )
+    if verified_counts != actual_counts:
+        raise M5ResultStoreIntegrityError(
+            "verified artifact rows differ from the manifest"
         )
-        if _path_kind(canonical) != "file" or _path_kind(pending) != "file":
+    if profile == OFFICIAL_M5_PROFILE:
+        raw_supplemental = payload.get("official_artifacts")
+        if not isinstance(raw_supplemental, list):
             raise M5ResultStoreIntegrityError(
-                f"artifact {record.path} is missing or unsafe"
+                "official supplemental artifacts must be an array"
             )
+        supplemental = tuple(
+            SupplementalArtifactRecord.from_dict(item)
+            if isinstance(item, Mapping)
+            else _raise_invalid_supplemental_artifact()
+            for item in raw_supplemental
+        )
+        _validate_supplemental_layout(supplemental)
+        supplemental_payloads = {
+            record.kind: _verify_supplemental_artifact(
+                run_path,
+                record,
+            )
+            for record in supplemental
+        }
+        parity_receipt = supplemental_payloads[PARITY_ORDER_RECEIPT]
+        determinism_receipt = supplemental_payloads[DETERMINISM_RECEIPT]
         if (
-            canonical.stat().st_dev,
-            canonical.stat().st_ino,
-        ) != (
-            pending.stat().st_dev,
-            pending.stat().st_ino,
+            not isinstance(parity_receipt, M5ParityOrderReceipt)
+            or not isinstance(determinism_receipt, M5DeterminismReceipt)
+            or bound_provenance.parity_order_version
+            != parity_receipt.order_version
+            or bound_provenance.parity_order_fingerprint_sha256
+            != parity_receipt.ordered_membership_sha256
         ):
             raise M5ResultStoreIntegrityError(
-                f"artifact {record.path} is detached from its pending part"
+                "official supplemental evidence differs from provenance"
             )
-        digest, size = _file_sha256(canonical)
-        if digest != record.sha256 or size != record.size_bytes:
-            raise M5ResultStoreIntegrityError(
-                f"artifact {record.path} failed SHA-256 verification"
-            )
-        table = _read_and_validate_table(canonical, record.dataset)
-        if table.num_rows != record.rows:
-            raise M5ResultStoreIntegrityError(
-                f"artifact {record.path} failed row accounting"
-            )
-        normalized, keys = _normalize_rows(record.dataset, table.to_pylist())
-        ordered = [
-            tuple(row[field] for field in _KEY_FIELDS[record.dataset])
-            for row in normalized
-        ]
-        if ordered != sorted(ordered):
-            raise M5ResultStoreIntegrityError(
-                f"artifact {record.path} has noncanonical row order"
-            )
-        if seen[record.dataset].intersection(keys):
-            raise M5ResultStoreIntegrityError(
-                f"{record.dataset} has duplicate keys across parts"
-            )
-        seen[record.dataset].update(keys)
-
-    result_rows = _read_all_artifact_rows(run_path, records)
-    _validate_scorecards_derived_from_rows(result_rows)
-    if profile == OFFICIAL_M5_PROFILE:
-        _validate_official_key_domains(result_rows)
+        scan_summary = _scan_official_artifacts(
+            run_path,
+            records,
+            determinism_receipt,
+        )
+        scorecard_rows = scan_summary.scorecard_rows
+    else:
+        supplemental = ()
+        parity_receipt = None
+        determinism_receipt = None
+        result_rows = _read_all_artifact_rows(run_path, records)
+        _validate_scorecards_derived_from_rows(result_rows)
+        scorecard_rows = None
     _verify_scorecard_report(
         run_path,
         scorecard_report,
         profile,
         records,
+        scorecard_rows=scorecard_rows,
     )
     _validate_run_members(
         run_path,
         records,
         scorecard_report,
-        allowed_controls={
-            "FINALIZING",
-            "evaluation-manifest.json",
-            "SUCCESS",
-        },
+        allowed_controls=(
+            {"FINALIZING", "evaluation-manifest.json"}
+            | ({"COMMITTED"} if state == "committed" else set())
+            | ({"SUCCESS"} if state == "success" else set())
+            | (
+                {"COMMITTED"}
+                if state == "success" and profile == OFFICIAL_M5_PROFILE
+                else set()
+            )
+        ),
+        supplemental_records=supplemental,
     )
     return VerifiedM5ResultStore(
         run_path=run_path,
         manifest=MappingProxyType(payload),
         artifacts=records,
         scorecard_report=scorecard_report,
+        supplemental_artifacts=supplemental,
+        parity_order_receipt=parity_receipt,
+        determinism_receipt=determinism_receipt,
     )
 
 
@@ -2019,24 +2880,10 @@ def _normalize_rows(
         raise KeyError(dataset)
     if isinstance(rows, (str, bytes, Mapping)):
         raise TypeError("rows must be an iterable of row mappings")
-    schema = M5_RESULT_SCHEMAS[dataset]
-    expected_fields = set(schema.names)
-    validators = {
-        METRIC_RESULTS: _metric_row,
-        SLICE_MEMBERSHIP: _slice_row,
-        SCORECARDS: _scorecard_row,
-        WAYMAX_PARITY_SUMMARY: _parity_row,
-    }
     normalized: list[dict[str, Any]] = []
     keys: set[tuple[Any, ...]] = set()
     for raw in rows:
-        if not isinstance(raw, Mapping):
-            raise TypeError(f"{dataset} rows must be mappings")
-        if set(raw) != expected_fields:
-            raise ValueError(
-                f"{dataset} row fields must exactly match its fixed schema"
-            )
-        row = validators[dataset](raw)
+        row = _normalize_row(dataset, raw)
         key = tuple(row[field] for field in _KEY_FIELDS[dataset])
         if key in keys:
             raise M5ResultStoreIntegrityError(
@@ -2050,6 +2897,27 @@ def _normalize_rows(
         )
     )
     return normalized, keys
+
+
+def _normalize_row(
+    dataset: str,
+    raw: Mapping[str, Any],
+) -> dict[str, Any]:
+    if dataset not in _DATASET_NAMES:
+        raise KeyError(dataset)
+    if not isinstance(raw, Mapping):
+        raise TypeError(f"{dataset} rows must be mappings")
+    if set(raw) != set(M5_RESULT_SCHEMAS[dataset].names):
+        raise ValueError(
+            f"{dataset} row fields must exactly match its fixed schema"
+        )
+    validator = {
+        METRIC_RESULTS: _metric_row,
+        SLICE_MEMBERSHIP: _slice_row,
+        SCORECARDS: _scorecard_row,
+        WAYMAX_PARITY_SUMMARY: _parity_row,
+    }[dataset]
+    return validator(raw)
 
 
 def _metric_row(raw: Mapping[str, Any]) -> dict[str, Any]:
@@ -2766,6 +3634,35 @@ def _read_and_validate_table(path: Path, dataset: str) -> pa.Table:
     return table
 
 
+def _iter_normalized_artifact_rows(
+    path: Path,
+    dataset: str,
+    *,
+    batch_size: int = 64,
+) -> Iterable[dict[str, Any]]:
+    """Incrementally validate and yield one canonical Parquet artifact."""
+
+    try:
+        parquet_file = pq.ParquetFile(path)
+        if not parquet_file.schema_arrow.equals(
+            M5_RESULT_SCHEMAS[dataset],
+            check_metadata=True,
+        ):
+            raise M5ResultStoreIntegrityError(
+                f"{dataset} Parquet part does not use the fixed schema"
+            )
+        for batch in parquet_file.iter_batches(batch_size=batch_size):
+            batch.validate(full=True)
+            for raw in batch.to_pylist():
+                yield _normalize_row(dataset, raw)
+    except M5ResultStoreIntegrityError:
+        raise
+    except (OSError, pa.ArrowException, TypeError, ValueError) as exc:
+        raise M5ResultStoreIntegrityError(
+            f"{dataset} Parquet part could not be incrementally validated"
+        ) from exc
+
+
 def _write_parquet_pending(path: Path, table: pa.Table) -> None:
     if os.path.lexists(path):
         raise FileExistsError(f"pending part {path.name!r} already exists")
@@ -2930,11 +3827,82 @@ def _read_regular_bytes(path: Path) -> bytes:
     return payload
 
 
+def _verify_supplemental_artifact(
+    run_path: Path,
+    record: SupplementalArtifactRecord,
+) -> M5ParityOrderReceipt | M5DeterminismReceipt:
+    if not isinstance(record, SupplementalArtifactRecord):
+        raise M5ResultStoreIntegrityError(
+            "supplemental artifact record has the wrong type"
+        )
+    canonical = _contained_artifact_path(run_path, record.path)
+    pending = _pending_path(run_path, Path(record.path))
+    if _path_kind(canonical) != "file" or _path_kind(pending) != "file":
+        raise M5ResultStoreIntegrityError(
+            "supplemental artifact is missing or unsafe"
+        )
+    canonical_stat = canonical.stat()
+    pending_stat = pending.stat()
+    if (
+        canonical_stat.st_dev,
+        canonical_stat.st_ino,
+    ) != (
+        pending_stat.st_dev,
+        pending_stat.st_ino,
+    ):
+        raise M5ResultStoreIntegrityError(
+            "supplemental artifact is detached from its pending hard link"
+        )
+    if (
+        stat.S_IMODE(canonical_stat.st_mode) != 0o600
+        or stat.S_IMODE(pending_stat.st_mode) != 0o600
+    ):
+        raise M5ResultStoreIntegrityError(
+            "supplemental artifact permissions are not owner-only"
+        )
+    encoded = _read_regular_bytes(canonical)
+    if (
+        len(encoded) != record.size_bytes
+        or hashlib.sha256(encoded).hexdigest() != record.sha256
+    ):
+        raise M5ResultStoreIntegrityError(
+            "supplemental artifact failed SHA-256 verification"
+        )
+    try:
+        payload = json.loads(encoded.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise M5ResultStoreIntegrityError(
+            "supplemental artifact is not canonical JSON"
+        ) from exc
+    if (
+        not isinstance(payload, Mapping)
+        or _canonical_json_bytes(payload) != encoded
+    ):
+        raise M5ResultStoreIntegrityError(
+            "supplemental artifact is not canonical JSON"
+        )
+    if payload.get("schema_version") != record.schema_version:
+        raise M5ResultStoreIntegrityError(
+            "supplemental payload schema differs from its manifest record"
+        )
+    if record.kind == PARITY_ORDER_RECEIPT:
+        receipt_payload = dict(payload)
+        del receipt_payload["schema_version"]
+        return M5ParityOrderReceipt.from_dict(receipt_payload)
+    if record.kind != DETERMINISM_RECEIPT:
+        raise M5ResultStoreIntegrityError(
+            "supplemental artifact kind is unsupported"
+        )
+    return M5DeterminismReceipt.from_dict(payload)
+
+
 def _verify_scorecard_report(
     run_path: Path,
     record: ScorecardReportRecord,
     row_accounting_profile: str,
     records: Sequence[ArtifactRecord],
+    *,
+    scorecard_rows: Sequence[Mapping[str, Any]] | None = None,
 ) -> None:
     if not isinstance(record, ScorecardReportRecord):
         raise M5ResultStoreIntegrityError(
@@ -2994,13 +3962,26 @@ def _verify_scorecard_report(
         raise M5ResultStoreIntegrityError(
             "scorecard report source table failed SHA-256 verification"
         )
-    table = _read_and_validate_table(source_path, SCORECARDS)
-    if table.num_rows != source_record.rows:
-        raise M5ResultStoreIntegrityError(
-            "scorecard report source row count changed"
-        )
     try:
-        normalized, _ = _normalize_rows(SCORECARDS, table.to_pylist())
+        if scorecard_rows is None:
+            table = _read_and_validate_table(source_path, SCORECARDS)
+            if table.num_rows != source_record.rows:
+                raise M5ResultStoreIntegrityError(
+                    "scorecard report source row count changed"
+                )
+            normalized, _ = _normalize_rows(
+                SCORECARDS,
+                table.to_pylist(),
+            )
+        else:
+            normalized = [
+                _normalize_row(SCORECARDS, row)
+                for row in scorecard_rows
+            ]
+            if len(normalized) != source_record.rows:
+                raise M5ResultStoreIntegrityError(
+                    "scorecard report source row count changed"
+                )
         expected = render_m5_scorecard(
             normalized,
             row_accounting_profile=row_accounting_profile,
@@ -3082,6 +4063,58 @@ def _create_child_directory(parent: Path, name: str) -> Path:
     return path
 
 
+def _rollback_fresh_result_store(run_path: Path) -> None:
+    """Best-effort rollback of only the known, newly-created empty layout.
+
+    If concurrent or unexpected members make exact ``rmdir`` rollback
+    impossible, retain the directory and publish a canonical failure marker so
+    it cannot be mistaken for a resumable or successful run.
+    """
+
+    candidates = (
+        run_path / "pending" / METRIC_RESULTS,
+        run_path / "pending",
+        run_path / METRIC_RESULTS,
+        run_path,
+    )
+    for candidate in candidates:
+        try:
+            if _path_kind(candidate) == "directory":
+                os.rmdir(candidate)
+        except OSError:
+            pass
+    if _path_kind(run_path) != "directory":
+        return
+    failure_path = run_path / "FAILURE.json"
+    if os.path.lexists(failure_path):
+        return
+    try:
+        _write_bytes_exclusive(
+            failure_path,
+            _canonical_json_bytes(
+                {
+                    "complete": False,
+                    "reason_code": "result_store_failed",
+                    "schema_version": M5_RESULT_STORE_SCHEMA_VERSION,
+                }
+            ),
+        )
+    except (OSError, M5ResultStoreError):
+        # Exclusive creation can report a post-create fsync error.  Preserve an
+        # exact marker if it nevertheless reached disk.
+        if not _regular_file_has_exact_bytes(
+            failure_path,
+            _canonical_json_bytes(
+                {
+                    "complete": False,
+                    "reason_code": "result_store_failed",
+                    "schema_version": M5_RESULT_STORE_SCHEMA_VERSION,
+                }
+            ),
+        ):
+            return
+
+
 def _path_kind(path: Path) -> str:
     try:
         mode = path.lstat().st_mode
@@ -3159,11 +4192,16 @@ def _validate_run_members(
     scorecard_report: ScorecardReportRecord,
     *,
     allowed_controls: set[str],
+    supplemental_records: Sequence[SupplementalArtifactRecord] = (),
 ) -> None:
     canonical = {record.path for record in records}
     pending = {f"pending/{record.path}" for record in records}
     canonical.add(scorecard_report.path)
     pending.add(f"pending/{scorecard_report.path}")
+    canonical.update(record.path for record in supplemental_records)
+    pending.update(
+        f"pending/{record.path}" for record in supplemental_records
+    )
     allowed_files = canonical | pending | allowed_controls
     allowed_directories = {
         ".",
@@ -3247,6 +4285,120 @@ def _validate_artifact_layout(
         )
 
 
+def _validate_supplemental_layout(
+    records: Sequence[SupplementalArtifactRecord],
+) -> None:
+    expected_kinds = tuple(sorted(_SUPPLEMENTAL_PATHS))
+    observed_kinds = tuple(record.kind for record in records)
+    if observed_kinds != expected_kinds:
+        raise M5ResultStoreIntegrityError(
+            "official supplemental artifacts are incomplete or unordered"
+        )
+    if len({record.path for record in records}) != len(records):
+        raise M5ResultStoreIntegrityError(
+            "official supplemental artifact paths are not unique"
+        )
+
+
+def _verify_artifact_records(
+    run_path: Path,
+    records: Sequence[ArtifactRecord],
+    *,
+    streaming: bool,
+) -> dict[str, int]:
+    """Verify immutable links, hashes, schemas, keys, order, and row counts."""
+
+    _verify_artifact_bytes(run_path, records)
+    seen: dict[str, set[tuple[Any, ...]]] = {
+        name: set() for name in _DATASET_NAMES
+    }
+    counts = {name: 0 for name in _DATASET_NAMES}
+    for record in records:
+        canonical = _contained_artifact_path(run_path, record.path)
+        if streaming:
+            row_count = 0
+            previous_key: tuple[Any, ...] | None = None
+            for row in _iter_normalized_artifact_rows(
+                canonical,
+                record.dataset,
+            ):
+                key = tuple(
+                    row[field] for field in _KEY_FIELDS[record.dataset]
+                )
+                if previous_key is not None and key <= previous_key:
+                    raise M5ResultStoreIntegrityError(
+                        f"artifact {record.path} is not in canonical key order"
+                    )
+                if key in seen[record.dataset]:
+                    raise M5ResultStoreIntegrityError(
+                        f"{record.dataset} has duplicate keys across parts"
+                    )
+                seen[record.dataset].add(key)
+                previous_key = key
+                row_count += 1
+        else:
+            table = _read_and_validate_table(canonical, record.dataset)
+            normalized, keys = _normalize_rows(
+                record.dataset,
+                table.to_pylist(),
+            )
+            ordered = [
+                tuple(row[field] for field in _KEY_FIELDS[record.dataset])
+                for row in normalized
+            ]
+            if ordered != sorted(ordered):
+                raise M5ResultStoreIntegrityError(
+                    f"artifact {record.path} is not in canonical key order"
+                )
+            if seen[record.dataset].intersection(keys):
+                raise M5ResultStoreIntegrityError(
+                    f"{record.dataset} has duplicate keys across parts"
+                )
+            seen[record.dataset].update(keys)
+            row_count = table.num_rows
+        if row_count != record.rows:
+            raise M5ResultStoreIntegrityError(
+                f"artifact {record.path} failed row accounting"
+            )
+        counts[record.dataset] += row_count
+    return counts
+
+
+def _verify_artifact_bytes(
+    run_path: Path,
+    records: Sequence[ArtifactRecord],
+) -> None:
+    """Recheck immutable identities and hashes without materializing row data."""
+
+    for record in records:
+        canonical = _contained_artifact_path(run_path, record.path)
+        pending = _pending_path(
+            run_path,
+            _safe_relative_artifact_path(record.path),
+        )
+        if _path_kind(canonical) != "file" or _path_kind(pending) != "file":
+            raise M5ResultStoreIntegrityError(
+                f"artifact {record.path} is not a regular file"
+            )
+        canonical_stat = canonical.stat()
+        pending_stat = pending.stat()
+        if (
+            canonical_stat.st_dev,
+            canonical_stat.st_ino,
+        ) != (
+            pending_stat.st_dev,
+            pending_stat.st_ino,
+        ):
+            raise M5ResultStoreIntegrityError(
+                f"artifact {record.path} is no longer its pending hard link"
+            )
+        digest, size = _file_sha256(canonical)
+        if digest != record.sha256 or size != record.size_bytes:
+            raise M5ResultStoreIntegrityError(
+                f"artifact {record.path} failed SHA-256 verification"
+            )
+
+
 def _read_all_artifact_rows(
     run_path: Path,
     records: Sequence[ArtifactRecord],
@@ -3262,6 +4414,407 @@ def _read_all_artifact_rows(
         normalized, _ = _normalize_rows(record.dataset, table.to_pylist())
         rows[record.dataset].extend(normalized)
     return rows
+
+
+def _canonical_evaluation_digest(domain: str, payload: Any) -> str:
+    encoded = json.dumps(
+        _thaw_json(payload),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(domain.encode("ascii") + b"\0" + encoded).hexdigest()
+
+
+def _iter_dataset_rows(
+    run_path: Path,
+    records: Sequence[ArtifactRecord],
+    dataset: str,
+) -> Iterable[dict[str, Any]]:
+    dataset_records = tuple(
+        record for record in records if record.dataset == dataset
+    )
+    for record in dataset_records:
+        yield from _iter_normalized_artifact_rows(
+            _contained_artifact_path(run_path, record.path),
+            dataset,
+        )
+
+
+def _reference_equivalence_digest(row: Mapping[str, Any]) -> str:
+    payload = {
+        name: row[name]
+        for name in M5_RESULT_SCHEMAS[METRIC_RESULTS].names
+        if name not in {"execution_name", "execution_role"}
+    }
+    return _canonical_evaluation_digest(
+        "evalsim-m5-reference-log-replay-equivalence-v1",
+        payload,
+    )
+
+
+def _validate_exact_log_zero_oracle(
+    row: Mapping[str, Any],
+) -> int:
+    if row["metric_name"] not in _M5_ERROR_ORACLE_METRIC_NAMES:
+        raise ValueError("metric row is not an exact-log zero oracle")
+    distribution = row["distribution"]
+    if (
+        row["valid"] is not True
+        or row["value"] != 0.0
+        or not distribution
+        or any(component != 0.0 for component in distribution)
+    ):
+        raise M5ResultStoreIntegrityError(
+            "Waymax exact-log reference failed a zero-error oracle"
+        )
+    return len(distribution)
+
+
+def _scenario_scalar_from_metric_row(
+    row: Mapping[str, Any],
+) -> ScenarioScalar:
+    cohort_index = int(row["cohort_index"])
+    if row["valid"]:
+        return ScenarioScalar(
+            cohort_index=cohort_index,
+            value=float(row["value"]),
+            eligible_components=int(row["eligible_components"]),
+            total_components=int(row["total_components"]),
+        )
+    return ScenarioScalar.missing(
+        cohort_index,
+        str(row["invalid_reason"]),
+        total_components=int(row["total_components"]),
+    )
+
+
+def _scan_official_artifacts(
+    run_path: Path,
+    records: Sequence[ArtifactRecord],
+    determinism_receipt: M5DeterminismReceipt,
+) -> _OfficialScanSummary:
+    """Stream the official matrix while retaining only compact review facts."""
+
+    if not isinstance(determinism_receipt, M5DeterminismReceipt):
+        raise M5ResultStoreIntegrityError(
+            "official M5 determinism receipt is missing"
+        )
+    cohort_indices = range(128)
+    metric_names = tuple(M5_METRIC_SPECS)
+    execution_names = tuple(sorted(_M5_EXECUTION_ROLES))
+    expected_metric_domain = {
+        (cohort_index, execution_name, metric_name)
+        for cohort_index in cohort_indices
+        for execution_name in execution_names
+        for metric_name in metric_names
+    }
+    observed_metric_domain: set[tuple[int, str, str]] = set()
+    policy_scalars: dict[
+        tuple[int, str, str],
+        ScenarioScalar,
+    ] = {}
+    reference_digests: dict[tuple[int, str], str] = {}
+    log_replay_digests: dict[tuple[int, str], str] = {}
+    case_digests: dict[int, str] = {}
+    case_rows: list[Mapping[str, Any]] = []
+    active_case: int | None = None
+    previous_metric_key: tuple[Any, ...] | None = None
+
+    def finish_case() -> None:
+        nonlocal case_rows
+        if active_case is None:
+            return
+        if len(case_rows) != len(_M5_EXECUTION_ROLES) * len(
+            M5_METRIC_SPECS
+        ):
+            raise M5ResultStoreIntegrityError(
+                "official case metric matrix is incomplete"
+            )
+        case_digests[active_case] = _canonical_evaluation_digest(
+            "evalsim-m5-case-metric-pass-v1",
+            tuple(case_rows),
+        )
+        case_rows = []
+
+    for row in _iter_dataset_rows(run_path, records, METRIC_RESULTS):
+        key = tuple(row[field] for field in _KEY_FIELDS[METRIC_RESULTS])
+        if previous_metric_key is not None and key <= previous_metric_key:
+            raise M5ResultStoreIntegrityError(
+                "official metric rows are not globally canonical"
+            )
+        previous_metric_key = key
+        cohort_index = int(row["cohort_index"])
+        execution_name = str(row["execution_name"])
+        metric_name = str(row["metric_name"])
+        domain_key = (cohort_index, execution_name, metric_name)
+        observed_metric_domain.add(domain_key)
+        if row["seed"] != 0:
+            raise M5ResultStoreIntegrityError(
+                "each official execution must use the frozen seed zero"
+            )
+        if (
+            metric_name in M5_PRIMARY_METRIC_NAMES
+            and row["valid"] is not True
+        ):
+            raise M5ResultStoreIntegrityError(
+                "every official primary metric must be valid for all four executions"
+            )
+        if execution_name in _M5_POLICY_NAMES:
+            policy_scalars[domain_key] = _scenario_scalar_from_metric_row(row)
+        equivalence_key = (cohort_index, metric_name)
+        if execution_name == "log_replay":
+            log_replay_digests[equivalence_key] = (
+                _reference_equivalence_digest(row)
+            )
+        elif execution_name == WAYMAX_EXACT_LOG_NAME:
+            reference_digests[equivalence_key] = (
+                _reference_equivalence_digest(row)
+            )
+            if metric_name in _M5_ERROR_ORACLE_METRIC_NAMES:
+                _validate_exact_log_zero_oracle(row)
+
+        if active_case is None:
+            active_case = cohort_index
+        elif cohort_index != active_case:
+            finish_case()
+            if cohort_index != active_case + 1:
+                raise M5ResultStoreIntegrityError(
+                    "official metric cohort order is not contiguous"
+                )
+            active_case = cohort_index
+        case_rows.append(row)
+    finish_case()
+
+    if (
+        observed_metric_domain != expected_metric_domain
+        or len(observed_metric_domain)
+        != OFFICIAL_M5_ROW_COUNTS.metric_results
+        or tuple(sorted(case_digests)) != tuple(cohort_indices)
+    ):
+        raise M5ResultStoreIntegrityError(
+            "metric results do not cover the frozen 128×4×13 domain"
+        )
+    if set(policy_scalars) != {
+        (cohort_index, policy_name, metric_name)
+        for cohort_index in cohort_indices
+        for policy_name in _M5_POLICY_NAMES
+        for metric_name in metric_names
+    }:
+        raise M5ResultStoreIntegrityError(
+            "official policy scalar matrix is incomplete"
+        )
+    if set(reference_digests) != set(log_replay_digests):
+        raise M5ResultStoreIntegrityError(
+            "Waymax reference/log-replay metric identity differs"
+        )
+    reference_mismatch_rows = sum(
+        reference_digests[key] != log_replay_digests[key]
+        for key in reference_digests
+    )
+    if reference_mismatch_rows:
+        raise M5ResultStoreIntegrityError(
+            "Waymax exact-log results differ from EvalSim log replay"
+        )
+    metric_pass_sha256 = _canonical_evaluation_digest(
+        "evalsim-m5-cohort-metric-pass-v1",
+        tuple(
+            {
+                "cohort_index": cohort_index,
+                "sha256": case_digests[cohort_index],
+            }
+            for cohort_index in cohort_indices
+        ),
+    )
+    if (
+        determinism_receipt.metric_pass_1_sha256
+        != metric_pass_sha256
+        or determinism_receipt.metric_pass_2_sha256
+        != metric_pass_sha256
+    ):
+        raise M5ResultStoreIntegrityError(
+            "stored metric rows differ from the determinism receipt"
+        )
+
+    slice_names = tuple(_M5_SLICE_SPECS)
+    expected_slice_domain = {
+        (cohort_index, slice_name)
+        for cohort_index in cohort_indices
+        for slice_name in slice_names
+    }
+    observed_slice_domain: set[tuple[int, str]] = set()
+    slice_members: dict[str, list[int]] = {
+        name: [] for name in slice_names
+    }
+    for row in _iter_dataset_rows(run_path, records, SLICE_MEMBERSHIP):
+        key = (int(row["cohort_index"]), str(row["slice_name"]))
+        observed_slice_domain.add(key)
+        if row["eligible"] and row["member"]:
+            slice_members[key[1]].append(key[0])
+        if (
+            key[1] == "all"
+            and (not row["eligible"] or not row["member"])
+        ):
+            raise M5ResultStoreIntegrityError(
+                "the official all slice must contain every accepted scenario"
+            )
+    if observed_slice_domain != expected_slice_domain:
+        raise M5ResultStoreIntegrityError(
+            "slice membership does not cover the frozen 128×8 domain"
+        )
+    for members in slice_members.values():
+        members.sort()
+
+    expected_scorecard_domain = {
+        (metric_name, slice_name, policy_a, policy_b)
+        for metric_name in metric_names
+        for slice_name in slice_names
+        for policy_a, policy_b in _M5_POLICY_CONTRASTS
+    }
+    observed_scorecard_domain: set[tuple[str, str, str, str]] = set()
+    scorecard_rows: list[Mapping[str, Any]] = []
+    derived_results: dict[
+        tuple[str, str, str, str],
+        PairedCellResult,
+    ] = {}
+    for row in _iter_dataset_rows(run_path, records, SCORECARDS):
+        domain_key = (
+            str(row["metric_name"]),
+            str(row["slice_name"]),
+            str(row["policy_a"]),
+            str(row["policy_b"]),
+        )
+        observed_scorecard_domain.add(domain_key)
+        members = slice_members[domain_key[1]]
+        values_a = tuple(
+            policy_scalars[
+                (cohort_index, domain_key[2], domain_key[0])
+            ]
+            for cohort_index in members
+        )
+        values_b = tuple(
+            policy_scalars[
+                (cohort_index, domain_key[3], domain_key[0])
+            ]
+            for cohort_index in members
+        )
+        try:
+            result = analyze_paired_cell(
+                PairedCellSpec(
+                    metric_name=domain_key[0],
+                    metric_version=str(row["metric_version"]),
+                    slice_name=domain_key[1],
+                    slice_version=str(row["slice_version"]),
+                    contrast=PolicyContrast(
+                        domain_key[2],
+                        domain_key[3],
+                    ),
+                ),
+                values_a,
+                values_b,
+            )
+            expected = scorecard_row_from_result(result)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise M5ResultStoreIntegrityError(
+                "scorecard could not be derived from streamed source rows"
+            ) from exc
+        if dict(row) != expected:
+            raise M5ResultStoreIntegrityError(
+                "scorecard differs from its exact stored metric/slice derivation"
+            )
+        if (
+            row["cohort_n"] != len(members)
+            or row["source_pairing_complete"] is not True
+        ):
+            raise M5ResultStoreIntegrityError(
+                "official scorecard pairing contradicts source-only membership"
+            )
+        if (
+            domain_key[0] in M5_PRIMARY_METRIC_NAMES
+            and domain_key[1] == "all"
+            and not (
+                row["cohort_n"]
+                == row["valid_a_n"]
+                == row["valid_b_n"]
+                == row["paired_n"]
+                == 128
+            )
+        ):
+            raise M5ResultStoreIntegrityError(
+                "official primary all-slice cells require 128 valid paired scenarios"
+            )
+        derived_results[domain_key] = result
+        scorecard_rows.append(row)
+    if observed_scorecard_domain != expected_scorecard_domain:
+        raise M5ResultStoreIntegrityError(
+            "scorecards do not cover the frozen 13×8×3 domain"
+        )
+    registry_results = tuple(
+        derived_results[
+            (
+                metric_spec.name,
+                slice_spec.name,
+                policy_a,
+                policy_b,
+            )
+        ]
+        for metric_spec in M5_METRIC_SPECS.values()
+        for slice_spec in M5_SLICE_SPECS
+        for policy_a, policy_b in _M5_POLICY_CONTRASTS
+    )
+    statistics_pass_sha256 = _canonical_evaluation_digest(
+        "evalsim-m5-statistics-pass-v1",
+        tuple(result.to_dict() for result in registry_results),
+    )
+    if (
+        determinism_receipt.statistics_pass_1_sha256
+        != statistics_pass_sha256
+        or determinism_receipt.statistics_pass_2_sha256
+        != statistics_pass_sha256
+    ):
+        raise M5ResultStoreIntegrityError(
+            "stored scorecards differ from the determinism receipt"
+        )
+
+    expected_parity_domain = {
+        (parity_index, policy_name, metric_name)
+        for parity_index in range(M5_PARITY_SCENE_COUNT)
+        for policy_name in _M5_POLICY_NAMES
+        for metric_name in _M5_PARITY_METRIC_NAMES
+    }
+    observed_parity_domain: set[tuple[int, str, str]] = set()
+    for row in _iter_dataset_rows(
+        run_path,
+        records,
+        WAYMAX_PARITY_SUMMARY,
+    ):
+        observed_parity_domain.add(
+            (
+                int(row["parity_index"]),
+                str(row["policy_name"]),
+                str(row["metric_name"]),
+            )
+        )
+        if (
+            row["compared_components"] < 1
+            or row["status"] != "accepted"
+            or row["mismatch_count"] != 0
+            or row["exact_match"] is not True
+        ):
+            raise M5ResultStoreIntegrityError(
+                "Waymax parity contains a rejected or mismatched row"
+            )
+    if observed_parity_domain != expected_parity_domain:
+        raise M5ResultStoreIntegrityError(
+            "Waymax parity does not cover the frozen 16×3×3 domain"
+        )
+
+    return _OfficialScanSummary(
+        metric_pass_sha256=metric_pass_sha256,
+        statistics_pass_sha256=statistics_pass_sha256,
+        scorecard_rows=tuple(scorecard_rows),
+    )
 
 
 def _validate_scorecards_derived_from_rows(
@@ -3623,6 +5176,8 @@ def _validate_manifest_identity(payload: Mapping[str, Any], run_name: str) -> No
         "schema_version",
         "write_mode",
     }
+    if payload.get("row_accounting_profile") == OFFICIAL_M5_PROFILE:
+        required.add("official_artifacts")
     if set(payload) != required:
         raise M5ResultStoreIntegrityError(
             "final evaluation manifest has unexpected fields"
@@ -3655,6 +5210,12 @@ def _validate_manifest_identity(payload: Mapping[str, Any], run_name: str) -> No
 
 def _raise_invalid_artifact() -> ArtifactRecord:
     raise M5ResultStoreIntegrityError("manifest artifact must be an object")
+
+
+def _raise_invalid_supplemental_artifact() -> SupplementalArtifactRecord:
+    raise M5ResultStoreIntegrityError(
+        "manifest supplemental artifact must be an object"
+    )
 
 
 def _integer(
@@ -3824,10 +5385,23 @@ def _canonical_json_bytes(payload: Mapping[str, Any]) -> bytes:
 
 __all__ = [
     "ArtifactRecord",
+    "DETERMINISM_RECEIPT",
     "ExpectedRowCounts",
+    "M5_DETERMINISM_CANONICALIZATION_VERSION",
+    "M5_DETERMINISM_RECEIPT_SCHEMA_VERSION",
+    "M5_M4_INTEGRITY_ASSUMPTION",
+    "M5_M4_REUSE_SCHEMA_VERSION",
+    "M5_M4_SELECTED_ORDER_VERSION",
+    "M5_PARITY_ORDER_RECEIPT_SCHEMA_VERSION",
+    "M5_PARITY_ORDER_VERSION",
+    "M5_PARITY_RANK_DOMAIN",
+    "M5_PARITY_SCENE_COUNT",
+    "M5_PARITY_TRANSITION_COUNT",
     "M5_RESULT_SCHEMAS",
     "M5_RESULT_STORE_SCHEMA_VERSION",
     "M5_SLICE_VERSION",
+    "M5DeterminismReceipt",
+    "M5ParityOrderReceipt",
     "M5RunProvenance",
     "M5ResultStore",
     "M5ResultStoreError",
@@ -3836,12 +5410,15 @@ __all__ = [
     "METRIC_RESULTS",
     "METRIC_RESULTS_SCHEMA",
     "OFFICIAL_M5_ROW_COUNTS",
+    "OFFICIAL_WAYMAX_REFERENCE_PARAMETERS",
+    "PARITY_ORDER_RECEIPT",
     "PreparedM5Finalization",
     "SCORECARDS",
     "SCORECARDS_SCHEMA",
     "ScorecardReportRecord",
     "SLICE_MEMBERSHIP",
     "SLICE_MEMBERSHIP_SCHEMA",
+    "SupplementalArtifactRecord",
     "VerifiedM5ResultStore",
     "WAYMAX_PARITY_SUMMARY",
     "WAYMAX_PARITY_SUMMARY_SCHEMA",
@@ -3849,4 +5426,6 @@ __all__ = [
     "official_executable_source_paths",
     "scorecard_row_from_result",
     "verify_m5_result_store",
+    "verify_committed_m5_result_store",
+    "verify_prepared_m5_result_store",
 ]

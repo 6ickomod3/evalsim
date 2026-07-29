@@ -37,15 +37,20 @@ work.
   JAX CPU gates. M5's data-free implementation adds 13 registered motion metrics, 8
   source-only slices, paired finite-cohort scorecards, a schema- and hash-bound
   immutable result store, deterministic aggregate renderer, fail-closed accepted-M4
-  reuse verification, and a fixed synthetic acceptance CLI. The current full
-  repository suite has 757 passing tests and one expected local-data skip; a clean
-  core-only environment has 676 passing tests and 23 expected optional-runtime skips.
+  reuse verification, a fixed synthetic acceptance CLI, and an accepted streaming
+  official runner with exact-log reference and a bounded native metric-parity adapter.
+  The official-runner boundary passed a public mocked 128-case lifecycle, 18 injected
+  failure boundaries, 34 adversarial lifecycle cases, 14 runner tests, and final
+  adversarial review with **ACCEPT**. The current full repository suite has 862 passing
+  tests and one expected local-data skip; a fresh environment without JAX, jaxlib,
+  TensorFlow, Flax, or Waymax has 779 passing tests and 25 expected optional/local
+  skips.
 - **Available locally:** WOMD v1.3.1 TFExample validation shards `00000`–`00009`.
   Additional files in the directory do not expand the frozen M4 population.
-- **Not yet accepted:** M5 real-WOMD/Waymax metric execution, custom/Waymax metric
-  cross-checks, and any policy-quality result. Counterfactual ego control, evaluator
-  stress tests, learned evaluators, multimodal/video/VLM evaluation, and a scalable
-  resumable pipeline are also not yet implemented.
+- **Not yet accepted:** M5 real-WOMD/Waymax metric execution, observed custom/Waymax
+  metric cross-checks, and any policy-quality result. Counterfactual ego control,
+  evaluator stress tests, learned evaluators, multimodal/video/VLM evaluation, and a
+  scalable resumable pipeline are also not yet implemented.
 
 Plans and downloaded files do not count as implemented evidence. The accepted M5
 data-free implementation does not count as real-data or policy-quality evidence.
@@ -208,8 +213,8 @@ version 6. Raw data and all generated experiment artifacts remained local and ig
 
 ### M5 — Real-WOMD metric system and statistical scorecards
 
-**Status:** 🚧 Data-free implementation accepted on 2026-07-29 after adversarial
-review; the bound real-WOMD/Waymax execution is still pending. The
+**Status:** 🚧 Data-free and official-runner implementations accepted on 2026-07-29
+after adversarial review; the bound real-WOMD/Waymax execution is still pending. The
 [`accepted M5 pre-registration`](2026-07-28-m5-real-womd-metrics-scorecards.md)
 supersedes the less-specific build bullets below.
 
@@ -221,16 +226,26 @@ renderer, fail-closed accepted-M4 reuse verification, and a fixed five-scenario
 synthetic CLI. That CLI produces 195 metric rows, 40 slice rows, 312 scorecard rows,
 25 exact log-replay zero oracles, and zero Waymax-parity rows.
 
-No M5 WOMD/Waymax metric run has been accepted. There is therefore no policy-quality
-effect, winner, ranking, simulator-superiority result, or WOMD-population claim. The
-synthetic CLI is implementation evidence only, and its five-scenario scorecards retain
-the pre-registered small-sample suppression.
+The accepted official boundary adds a one-pass 128-case evaluator, a separate Waymax
+exact-log reference role, a source-only 16-case parity selector, native parity
+adapters, pre-metric parity-order and post-evaluation determinism receipts, exact
+result-store verification, exhaustive source/Git/data/M4/output binding, and a bounded
+terminal lifecycle. It enforces exact official domains of 6,656 metric rows, 1,024
+slice rows, 312 scorecard rows, and 144 parity-summary rows.
+
+Software verification includes 14 runner tests, a public mocked 128-case lifecycle,
+18 injected failure boundaries, 34 adversarial lifecycle cases, the full repository
+suite with 862 passing tests and one expected local-data skip, and final adversarial
+**ACCEPT**. No M5 WOMD/Waymax metric outcome has been computed or accepted. There is
+therefore no observed native WOMD parity result, policy-quality effect, winner,
+ranking, simulator-superiority result, or WOMD-population claim. Both the synthetic
+CLI and mocked official lifecycle are implementation evidence only.
 
 **Question:** Can independent metrics expose materially different simulator failures on
 the frozen real-scene cohort without hiding scene-level variation or collapsing motion
 quality into one score?
 
-**Implemented data-free build**
+**Implemented data-free and official-runner build**
 
 - The metric registry and per-scenario local result store consume only project
   contracts.
@@ -257,6 +272,12 @@ quality into one score?
   complete comparison ledger, and adjusted primary stability bands are implemented.
   Fixed-cohort resampling is not presented as WOMD-population confidence, and the
   implementation does not generate exploratory significance claims.
+- The official CLI streams each accepted M4 member exactly once through the three
+  policy roles and separate exact-log reference, retaining only bounded cross-case
+  facts before deterministic scorecard finalization.
+- The official store fails closed on source, Git, shard, accepted-M4, output,
+  determinism, parity, terminal, schema, row-domain, or hash drift. A failed ignored
+  run is preserved and cannot be promoted to success in place.
 
 **Remaining real-data evidence gate**
 

@@ -193,17 +193,24 @@ class _PreparedHolder:
     prepared: PreparedM5Finalization | None = field(default=None, repr=False)
 
 
-@dataclass(frozen=True, slots=True)
 class _CommandFailure(RuntimeError):
-    primary: BaseException = field(repr=False)
-    failure_relative: Path | None
-    reason_code: str
-    terminal_status: TerminalStatus | None = field(default=None, repr=False)
-
-    def __post_init__(self) -> None:
-        if self.reason_code not in _TRUSTED_CODES:
-            object.__setattr__(self, "reason_code", "unexpected_failure")
-        RuntimeError.__init__(self, "M5 synthetic command failure")
+    def __init__(
+        self,
+        *,
+        primary: BaseException,
+        failure_relative: Path | None,
+        reason_code: str,
+        terminal_status: TerminalStatus | None = None,
+    ) -> None:
+        self.primary = primary
+        self.failure_relative = failure_relative
+        self.reason_code = (
+            reason_code
+            if reason_code in _TRUSTED_CODES
+            else "unexpected_failure"
+        )
+        self.terminal_status = terminal_status
+        super().__init__("M5 synthetic command failure")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -1093,10 +1100,6 @@ def _persist_failure(
     prepared: PreparedM5Finalization | None = None,
 ) -> tuple[Path | None, str]:
     requested_code = _failure_code(primary)
-    try:
-        _write_failure_diagnostics(store.run_path, primary, transcript)
-    except OSError:
-        pass
     failure_path = store.run_path / "FAILURE.json"
     if not os.path.lexists(failure_path):
         try:
@@ -1109,8 +1112,12 @@ def _persist_failure(
     persisted = _read_canonical_failure_record(store)
     if persisted is None:
         # Never point at a record whose reason cannot be proven identical to the
-        # public status.  The local diagnostics remain available to the owner.
+        # public status.
         return None, "unexpected_failure"
+    try:
+        _write_failure_diagnostics(store.run_path, primary, transcript)
+    except OSError:
+        pass
     return persisted
 
 

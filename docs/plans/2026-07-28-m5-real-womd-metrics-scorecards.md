@@ -1,10 +1,10 @@
 # M5 — Real-WOMD metric system and statistical scorecards
 
 **Date:** 2026-07-28
-**Status:** Accepted pre-registration, data-free overlap-boundary amendment, and
-data-free implementation; the implementation is committed and pushed, bound real-WOMD
-acceptance remains pending, and no M5 WOMD outcomes or native M5 parity results have
-been inspected
+**Status:** Accepted pre-registration, data-free overlap-boundary amendment, data-free
+implementation, and official-runner implementation; the bound real-WOMD acceptance
+remains pending, and no M5 WOMD outcome or native M5 WOMD parity result has been
+computed
 **Depends on:** accepted M4 execution snapshot
 `a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`
 **Population:** the unchanged accepted M4 complete-case conditional cohort of
@@ -29,14 +29,15 @@ publication-claim reviewers accepted the bounded claim and permanent counterexam
 synthetic runner, thirteen metrics, eight source-only slices, paired finite-cohort
 statistics, immutable result store, aggregate scorecard, and privacy-safe CLI passed
 264 focused tests. The locked Waymo-extra suite passed 757 tests with one expected
-local-data skip; the clean locked core-only suite passed 676 tests with 23 expected
-optional-runtime skips. Independent architecture, methods/statistics, and
-privacy/claim reviews returned **ACCEPT** after the terminal/finalization and
-failure-record findings were corrected. The exact data-free matrix is 195 metric rows,
-40 slice rows, 312 scorecard rows, and zero native Waymax parity rows. All 25
-log-replay error oracles are exact zero across their eligible components. All 312
-synthetic scorecards have paired N from zero to five, are `insufficient_n`, suppress
-effects and bands, and forbid directional language.
+local-data skip. A fresh clean core-only release audit of the current implementation,
+without JAX, jaxlib, TensorFlow, Flax, or Waymax, passed 779 tests with 25 expected
+optional/local skips. Independent architecture, methods/statistics, and privacy/claim
+reviews returned **ACCEPT** after the terminal/finalization and failure-record findings
+were corrected. The exact data-free matrix is 195 metric rows, 40 slice rows, 312
+scorecard rows, and zero native Waymax parity rows. All 25 log-replay error oracles are
+exact zero across their eligible components. All 312 synthetic scorecards have paired
+N from zero to five, are `insufficient_n`, suppress effects and bands, and forbid
+directional language.
 
 This closure is implementation evidence, not real-WOMD result evidence. No real-WOMD
 metric result, slice count, policy difference, resampling interval, or native M5
@@ -45,6 +46,26 @@ Waymax decode, and privileged logged-future status of log replay remain mandator
 limitations. The data-free implementation is accepted and pushed but has not been used
 to inspect a real-WOMD M5 outcome. The reviewed implementation was committed as
 `9b2676ac4b1c7bfb9f35a1c92f0159158756544a` before that boundary was opened.
+
+**Accepted official-runner implementation closure, 2026-07-29:** the streaming
+128-case runner, exact-log reference, native metric-parity adapter, typed official
+receipts, immutable finalization lifecycle, exhaustive source binding, bounded terminal
+capture, and fail-closed preflight/reverification gates passed final adversarial review
+with **ACCEPT**. Verification includes 14 runner tests, a public mocked 128-case
+lifecycle, 18 injected failure boundaries, 34 adversarial lifecycle cases, and a full
+repository suite with 862 passing tests and one expected local-data skip. The mocked
+lifecycle enforces the exact official domains of 6,656 metric rows, 1,024 slice rows,
+312 scorecard rows, and 144 parity-summary rows.
+
+The 34-case adversarial lifecycle count is reproducible from an exact stable-tree node
+selection: 21 official-CLI lifecycle cases in `tests/test_m5_official_cli.py`, 10
+result-store lifecycle cases in `tests/test_m5_result_store.py`, and 3
+synthetic-terminal lifecycle cases in `tests/test_m5_synthetic_cli.py`.
+
+This is official-runner software evidence, not a data execution. The mocked cases do
+not contain an M5 WOMD metric outcome, slice prevalence, effect, interval, parity
+result, ranking, or winner. No official WOMD run was launched or accepted while this
+implementation boundary was reviewed.
 
 No real-WOMD M5 metric result, slice count, policy difference, resampling interval,
 native scenario identity, coordinate, or ignored M4 artifact **content** was inspected
@@ -586,6 +607,10 @@ Typed immutable outputs:
 - `scorecards.parquet`: one row per metric × slice × ordered pair;
 - `waymax-parity-summary.parquet`: one row per
   parity-scenario × EvalSim policy × parity metric;
+- `parity-order-receipt.json`: the exact source-only 16-case order and fingerprint,
+  published before the first metric-derived row;
+- `determinism-receipt.json`: exact first/second-pass metric and statistics digests,
+  final row domains, reference-equality checks, and zero-oracle checks;
 - local detailed diagnostics for Waymax components and explicit failures; and
 - a local human-readable scorecard.
 
@@ -599,13 +624,17 @@ The exact finalized matrix is:
 
 The four executions are the three policy paths plus the Waymax exact-log reference.
 Only the three `execution_role=policy` paths enter contrasts.
+The accepted public mocked 128-case lifecycle enforces these domains, but it does not
+populate them with WOMD outcomes.
 
-The writer uses exclusive creation, fixed PyArrow schemas, and unique keys. It first
-writes immutable parts beneath a pending subdirectory, validates and fsyncs them,
-hashes every artifact except the not-yet-created final manifest, then exclusively
-creates `evaluation-manifest.json` with `complete=true` and a `SUCCESS` marker.
-The final manifest never hashes itself. A failed run keeps pending artifacts and gains
-an exclusive failure record; it is never converted into success in place.
+The writer uses exclusive creation, fixed PyArrow schemas, and unique keys. It writes
+immutable receipts and parts beneath a pending subdirectory, validates and fsyncs
+them, and hashes every artifact except the not-yet-created final manifest. Finalization
+then creates an abortable committed checkpoint, rechecks the mutable Git, shard, M4,
+output, terminal, and store trust roots, and verifies the complete store before one
+sealed terminal callback may promote the exact `SUCCESS` marker. The final manifest
+never hashes itself. A failed run keeps pending artifacts and gains an exclusive
+failure record; it is never converted into success in place.
 
 Scorecards cannot be generated until metric and slice row accounting passes, and final
 success cannot be created until every expected row and part hash passes. DuckDB reads
@@ -710,7 +739,11 @@ Before any M5 WOMD execution, tests must prove:
 - no output schema or renderer contains a composite realism score.
 
 The existing full suite must continue to pass in both Waymo-extra and core-only
-environments. Optional Waymax imports remain lazy.
+environments. Optional Waymax imports remain lazy. The accepted official-runner
+closure passed 14 runner tests, a public mocked 128-case lifecycle, 18 injected
+failure boundaries, 34 adversarial lifecycle cases, final adversarial review with
+**ACCEPT**, and the full repository suite with 862 passing tests and one expected
+local-data skip. These checks contain no M5 WOMD outcome.
 
 ## 10. Bound real-WOMD acceptance
 
@@ -718,18 +751,19 @@ The first official M5 run occurs only after:
 
 1. this pre-registration and adversarial reviews are accepted, committed, and pushed;
 2. the data-free implementation and tests are accepted, committed, and pushed;
-3. the worktree is clean;
-4. all ten immutable shards are present;
-5. the accepted ignored M4 run passes reuse validation; and
-6. the command binds its executable-source fingerprint to the pushed commit.
+3. the official-runner implementation and tests are accepted, committed, and pushed;
+4. the worktree is clean;
+5. all ten immutable shards are present;
+6. the accepted ignored M4 run passes reuse validation; and
+7. the command binds its executable-source fingerprint to the pushed commit.
 
 The fingerprint enumerates, rejects symlinks in, lexically sorts, length-prefixes, and
 SHA-256 hashes every tracked regular file under these fixed roots plus the named
 top-level files:
 
-- `evalsim/contracts/`, `evalsim/metrics/`, `evalsim/results/`, `evalsim/slices/`,
-  `evalsim/stats/`, and `evalsim/report/`;
-- `evalsim/rollout/`, `evalsim/simulators/`, and `evalsim/sources/`;
+- `evalsim/cli/`, `evalsim/contracts/`, `evalsim/evaluation/`, `evalsim/metrics/`,
+  `evalsim/report/`, `evalsim/results/`, `evalsim/rollout/`, `evalsim/simulators/`,
+  `evalsim/slices/`, `evalsim/sources/`, and `evalsim/stats/`;
 - `tests/`;
 - this plan and the M5 crosswalk; and
 - `pyproject.toml`, `uv.lock`, `NOTICE.md`, and `AGENTS.md`.
@@ -822,18 +856,23 @@ M5 is falsified or blocked from release by any of:
 9. Run targeted, full Waymo-extra, core-only, package, and site checks; adversarially
    review the implementation.
 10. Commit and push the data-free implementation.
-11. Run one new bound ignored real-WOMD acceptance directory.
-12. Inspect local diagnostics and obtain three independent result reviews.
-13. Promote only accepted aggregate evidence into the README, roadmap, crosswalk,
+11. Implement the streaming official runner, exact-log reference, native metric-parity
+    adapter, official receipts, fail-closed finalization, and terminal boundary.
+12. Exercise the complete 128-case lifecycle with public mocks, injected failures, and
+    adversarial lifecycle tests; obtain final adversarial acceptance.
+13. Commit and push the accepted official-runner implementation before data access.
+14. Run one new bound ignored real-WOMD acceptance directory.
+15. Inspect local diagnostics and obtain three independent result reviews.
+16. Promote only accepted aggregate evidence into the README, roadmap, crosswalk,
     interview claim ledger, limitations, and owner-only presentation.
-14. Audit tracked/staged/archive contents, commit, push, deploy, and verify the remote
+17. Audit tracked/staged/archive contents, commit, push, deploy, and verify the remote
     and owner-only release.
 
 Rollback is additive: disable or revert M5 code while preserving prior commits and
 ignored evidence directories. Raw data and accepted M4 outputs are never modified or
 deleted.
 
-## 13. Pre-implementation and data-free closure checklist
+## 13. Pre-implementation, data-free, and official-runner closure checklist
 
 Four independent adversarial review tracks—architecture/feasibility, pinned Waymax
 semantics, finite-cohort statistics, and privacy/publication claims—initially rejected
@@ -857,11 +896,22 @@ release-surface audits.
       (`5a52203cdbb5b055d2a152aeddd114ab09083eb4`).
 - [x] Data-free metrics, slices, statistics, immutable store, report, source-neutral
       runner, and synthetic CLI implemented and accepted.
-- [x] Data-free verification completed: 264 focused tests passed; the locked Waymo-extra
-      suite passed 757 tests with one expected local-data skip; the clean locked
-      core-only suite passed 676 tests with 23 expected optional-runtime skips.
+- [x] Data-free verification completed: 264 focused tests passed; the locked
+      Waymo-extra suite passed 757 tests with one expected local-data skip.
 - [x] Final independent architecture, methods/statistics, and privacy/claim reviews
       accepted the data-free implementation with no remaining blocker.
 - [x] Accepted data-free implementation committed and pushed before WOMD execution
       (`9b2676ac4b1c7bfb9f35a1c92f0159158756544a`).
+- [x] Streaming 128-case evaluation, exact-log reference, native parity adapter,
+      official receipts, and fail-closed result/terminal lifecycle implemented without
+      computing a WOMD outcome.
+- [x] Official-runner verification completed: 14 runner tests, a public mocked
+      128-case lifecycle, 18 injected failure boundaries, 34 adversarial lifecycle
+      cases, the full repository suite with 862 passing tests and one expected
+      local-data skip, and a fresh clean core-only environment with 779 passing tests
+      and 25 expected optional/local skips.
+- [x] Final adversarial official-runner review returned **ACCEPT** with no remaining
+      release blocker.
+- [ ] Accepted official-runner implementation committed and pushed before WOMD
+      execution.
 - [ ] Bound real-WOMD M5 execution, native metric parity, and result reviews completed.
