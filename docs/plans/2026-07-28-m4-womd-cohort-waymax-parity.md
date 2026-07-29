@@ -1,9 +1,9 @@
 # M4 implementation plan — deterministic WOMD cohort and Waymax parity
 
 **Date:** 2026-07-28
-**Status:** ✅ Seventh fresh bound run empirically accepted at
-`a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`; evidence-closure release,
-push, and owner-only presentation deployment remain pending
+**Status:** ✅ Implemented, empirically accepted at
+`a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`, released, and post-release
+verified
 **Milestone:** M4 — exact ten-shard cohort → Waymax reference execution → EvalSim
 rollout contract
 
@@ -599,7 +599,7 @@ Release follows the project nine-step workflow:
 - [x] Three accepted-run result reviews have no unresolved blocker.
 - [x] Evidence-closure semantic, privacy, and cross-surface reviews have no unresolved
   blocker.
-- [ ] Milestone commit is pushed and the owner-only presentation deploy is verified.
+- [x] Milestone commit is pushed and the owner-only presentation deploy is verified.
 
 ## 13. Pre-registration record
 
@@ -1420,5 +1420,12 @@ executable-source fingerprint is different from the accepted run. A path-by-path
 comparison with `a7a20e5de89c9c988f36a4b2f10ff4acc49246f0` confirms that every other
 member of `_EXECUTABLE_PATHS` is unchanged. The empirical evidence remains bound to
 `a7a20e5`; the documentation-only closure commit is not represented as an executed
-snapshot and does not require another WOMD run under the rule in section 8. The
-evidence-closure commit, push, and owner-only presentation deployment remain pending.
+snapshot and does not require another WOMD run under the rule in section 8.
+
+Evidence-closure commit `9e4012d033c57cc6ce6d0d40494b05ef478baf08`
+was pushed to GitHub `main`; local `HEAD`, `origin/main`, and the remote ref matched.
+The same exact source state was saved and successfully deployed through the existing
+owner-only presentation as version 6. Dataset files, ignored manifests and outputs,
+private material, and generated experiment artifacts remained local and unpublished.
+This post-release record changes documentation only and is not represented as a new
+empirical execution snapshot.

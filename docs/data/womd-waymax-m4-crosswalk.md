@@ -1,9 +1,8 @@
 # WOMD / Waymax M4 execution crosswalk
 
-**Status:** Seventh fresh bound run empirically accepted at
-`a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`; evidence-closure release,
-push, and owner-only presentation deployment remain pending; M4 metric parity
-is not run here
+**Status:** M4 implemented, empirically accepted at
+`a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`, released, and post-release
+verified; M4 metric parity is not run here
 **Dataset profile:** WOMD v1.3.1 TFExample validation, 10 past + 1 current +
 80 future frames
 **Waymax revision:** `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`
@@ -311,8 +310,10 @@ JAX device memory. This is not end-to-end latency, full-cohort batching,
 accelerator or scaling evidence, or production throughput.
 
 M4 ran no custom-versus-Waymax numerical metric parity and makes no statistical
-realism conclusion. The empirical gates are closed; the evidence-closure
-commit, push, and owner-only presentation deployment remain pending.
+realism conclusion. The empirical gates are closed. Evidence-closure commit
+`9e4012d` is on GitHub `main`, and its exact source was successfully deployed
+through the existing owner-only presentation as version 6. Data and generated
+run artifacts remained local and ignored.
 
 ### Population
 

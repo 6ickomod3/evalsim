@@ -40,7 +40,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M1 | Synthetic scenario source + visualization | ✅ | 🖥️ |
 | M2 | Simulator adapters + rollout engine | ✅ | 🖥️ |
 | M3 | Local WOMD → Waymax/JAX → EvalSim vertical slice | ✅ | 🖥️ |
-| M4 | Deterministic WOMD cohort + Waymax parity | ✅ accepted; release pending | 🖥️ |
+| M4 | Deterministic WOMD cohort + Waymax parity | ✅ | 🖥️ |
 | M5 | Real-WOMD metrics + statistical scorecards | ⬜ | 🖥️ |
 | M6 | Counterfactual closed-loop reactivity | ⬜ | 🖥️ |
 | M7 | Evaluator red-team + metric governance | ⬜ | 🖥️ |
@@ -51,8 +51,8 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 
 **Tests:** 493 passing + 1 local-data skip with the Waymo extra; 418 passing + 22
 optional-runtime skips core-only; focused M4 CLI 110 passing; locked M4 matrix 421
-passing + 1 local-data skip · **Last updated:** 2026-07-28 (M4 implemented and locally
-accepted; release pending)
+passing + 1 local-data skip · **Last updated:** 2026-07-28 (M4 implemented, accepted,
+released, and post-release verified)
 
 ## Completed work
 

@@ -55,7 +55,7 @@ const requiredPatterns = [
   ["current core-only test evidence", /418 passed and 22 optional skips/],
   ["accepted M4 cohort evidence", /2,916 → 128/],
   ["M4 conditional-sample caveat", /conditional and nonrepresentative by design/],
-  ["M4 locally accepted status", /M0–M4 implemented and locally accepted/],
+  ["M4 completed status", /M0–M4 complete/],
   ["M4 cohort classification", /2,916 raw records: 1,527 eligible and 1,389 rejected/],
   ["locked M4 matrix evidence", /421 passed/],
   ["shared-decode limitation", /same pinned Waymax WOMD decoder/],

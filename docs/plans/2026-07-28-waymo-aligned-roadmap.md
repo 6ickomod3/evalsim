@@ -30,7 +30,7 @@ work.
 - **Implemented:** contracts, lossless scenario/rollout serialization, deterministic
   synthetic scenarios, visualization, log replay, constant velocity, IDM, closed-loop
   world-agent rollout, and the M3 one-record WOMD → pinned Waymax/JAX → EvalSim local
-  vertical slice. M4 is also implemented and locally accepted: an auditable
+  vertical slice. M4 is also implemented, locally accepted, and released: an auditable
   complete-case conditional cohort from exactly ten validation shards passed
   supported-field, exact-log, rollout-contract, bounded Waymax-reference, and batched
   JAX CPU gates. The verified Waymo-extra suite has 493 passing tests and one expected
@@ -40,7 +40,7 @@ work.
   Additional files in the directory do not expand the frozen M4 population.
 - **Not yet implemented:** real-WOMD metrics, statistical scorecards, counterfactual ego
   control, evaluator stress tests, learned evaluators, multimodal/video/VLM evaluation,
-  and a scalable resumable pipeline. M4 release is still pending.
+  and a scalable resumable pipeline.
 
 Plans and downloaded files do not count as implemented evidence.
 
@@ -128,7 +128,7 @@ artifacts remained local and ignored.
 
 ### M4 — Deterministic WOMD cohort and Waymax parity
 
-**Status:** ✅ Implemented and locally accepted on 2026-07-28; release pending.
+**Status:** ✅ Implemented, accepted, released, and post-release verified on 2026-07-28.
 
 **Question:** Does the one-scene adapter scale to an auditable population, and where do
 EvalSim and Waymax semantics agree or diverge?
@@ -195,6 +195,10 @@ parity; those remain M5 work.
 **Claim unlocked after acceptance:** cross-checked exact log-playback mapping and
 rollout-contract semantics against pinned Waymax/JAX on an auditable complete-case
 conditional WOMD cohort.
+
+**Release record:** evidence-closure commit `9e4012d` is on GitHub `main`, and that
+exact source state was deployed through the existing owner-only presentation as
+version 6. Raw data and all generated experiment artifacts remained local and ignored.
 
 ### M5 — Real-WOMD metric system and statistical scorecards
 
