@@ -1,9 +1,9 @@
 # M4 implementation plan — deterministic WOMD cohort and Waymax parity
 
 **Date:** 2026-07-28
-**Status:** ⚠️ Bound attempts failed during pre-selection representation validation;
-selector-v4 numerical dimension-contract correction and clean-commit rerun pending;
-payload gate closed
+**Status:** ⚠️ Selector-v4 terminal-privacy/raw-reader correction is
+implementation-ready; clean commit/push and fresh bound rerun pending; payload gate
+closed
 **Milestone:** M4 — exact ten-shard cohort → Waymax reference execution → EvalSim
 rollout contract
 
@@ -908,3 +908,236 @@ The payload gate therefore remains closed until this recorded snapshot passes th
 fresh full Waymo-extra/core-only suites, archive and installed-help audit, and final
 exact-diff numerical, invariant, and privacy reviews; is committed and pushed from a
 clean tree; and local `HEAD` is verified equal to `origin/main`.
+
+### Selector-v4 terminal-privacy execution deviation — 2026-07-28
+
+The clean, pushed selector-v4 bound attempt at commit
+`ef511b59cbaa925bc00d039dc8e91d2edac8985f` was stopped after the pinned
+TensorFlow runtime emitted a deprecation diagnostic for the compatibility TFRecord
+iterator. The diagnostic included the absolute checkout source path and therefore
+violated the pre-registered terminal-output privacy contract. It was generated from
+static API/call-site metadata and contained no WOMD path, identity, locator, digest,
+coordinate, trajectory, payload value, selection, policy output, metric, benchmark,
+or comparative result.
+
+The command exited `unexpected_failure`. The attempt left only ignored execution
+provenance: it completed no manifest, cohort selection, policy/reference execution,
+benchmark, metric, aggregate, or comparative result. It is excluded in full from M4
+acceptance evidence and unlocks no claim. Its ignored local directory and all three
+earlier failed-attempt directories remain retained unchanged; none may be reused,
+overwritten, deleted, published, or treated as evidence.
+
+Static inspection established that the prior CLI boundary sanitized raised exception
+text but did not mediate third-party logging, Python warnings or prints, direct native
+file-descriptor writes, or inherited child-process output. The earlier
+terminal-privacy implementation review is superseded for this boundary.
+
+Before further WOMD access, make only these executable-boundary corrections:
+
+1. Replace `tf.compat.v1.io.tf_record_iterator` with pinned
+   `tf.data.TFRecordDataset` using exactly one literal resolved filename,
+   `compression_type=""`, `buffer_size=None`, and `num_parallel_reads=None`.
+   Apply `tf.data.Options().deterministic = True`, then stream
+   `.as_numpy_iterator()` without `map`, shuffle, repeat, explicit prefetch,
+   interleave, wildcard, directory expansion, or parallel reads. At pinned
+   TensorFlow 2.18.1, `num_parallel_reads=None` uses sequential `flat_map`;
+   the ordinary byte-read buffer cannot reorder records.
+2. Preserve the existing ordinal enumeration and byte-type gate, physical record
+   order, raw/decode/event counters, clean-EOF rule, corrupt-tail fatality,
+   before/after file-identity checks, exact-path resolution, and grouped selected
+   reload.
+3. Freeze the command lifecycle in this order: safe argument/Git/data preflight;
+   creation and validation of the new ignored output directory and provenance;
+   exclusive transcript setup; captured optional-runtime execution returning only an
+   in-memory pending aggregate; capture finalization; transcript zero-byte gate;
+   `_publish_accepted_aggregate`; then official allowlisted status output. Refactor
+   the captured execution so it cannot call `_publish_accepted_aggregate`. No
+   accepted aggregate may exist while capture is active or before the finalized
+   transcript has passed its gate, and no optional TensorFlow, Waymax, or JAX
+   operation may run after that gate.
+4. Before any optional-runtime work, exclusively create the fixed child
+   `terminal-output.bin` directly under the already validated new ignored run
+   directory. Recheck containment and that exact path's Git-ignore status, then use
+   `os.open` with `O_WRONLY | O_CREAT | O_EXCL | O_APPEND | O_NOFOLLOW`,
+   `O_CLOEXEC` where available, and mode `0o600`; `fstat` must prove it is the same
+   regular file later finalized. Never accept a caller-selected transcript path,
+   reuse an existing file or symlink, overwrite it, or clean it up.
+5. Flush Python stdout/stderr before redirection; save original descriptors 1 and 2
+   plus dedicated original stdout/stderr status descriptors and mark every saved
+   descriptor non-inheritable. Redirect descriptors 1 and 2 to the same transcript
+   open-file description and mark only those installed terminal descriptors
+   inheritable, so the benchmark's spawned worker receives the capture boundary
+   while neither raw transcript nor original/status bypass descriptors cross the
+   spawn boundary. Keep capture active until every child is joined. Never regex-redact
+   or re-emit arbitrary captured text.
+6. In the normal fail-safe finalization path, flush Python stdout/stderr and native C
+   stdio with `fflush(NULL)`, fsync the transcript, independently attempt restoration
+   of both descriptors even after one restoration failure, validate transcript
+   identity and size, close the raw transcript descriptor, and confirm child
+   completion. A partial setup starts no optional-runtime callback; restore both
+   descriptors independently *before* any process-global Python/native flush and skip
+   those runtime flushes, because an unredirected descriptor could otherwise receive
+   buffered bytes. Then fsync, validate, and close through the same fail-closed gates.
+   Close every restoration-only saved descriptor before publication or status. Retain
+   only the dedicated non-inheritable status descriptors until the one official
+   success/failure status has been emitted; their final close is best-effort and
+   outside the acceptance predicate because status is already irrevocable. If normal
+   restoration failed, write only that stable status directly through the saved
+   original status descriptor rather than `parser.exit` through a possibly redirected
+   descriptor.
+7. Freeze failure precedence as: an existing trusted primary `M4CommandError`;
+   otherwise an existing untrusted primary as `unexpected_failure`; otherwise any
+   setup, Python/native flush, fsync, partial-redirection, restoration,
+   acceptance-critical transcript/restoration-descriptor close, stat, identity, or
+   child-completion defect as `terminal_capture_failed`; otherwise any nonzero
+   finalized transcript as `terminal_output_detected`; only otherwise may publication
+   proceed. The best-effort close of dedicated status descriptors after status
+   emission cannot revise the result. Add both terminal codes to
+   `_TRUSTED_COMMAND_CODES`.
+   Every failure blocks aggregate publication. Argument parsing remains outside this
+   post-output-directory boundary and retains `argument_error`.
+8. After successful restoration, closure, identity validation, and exact
+   `st_size == 0`, call `_publish_accepted_aggregate` with the in-memory pending
+   aggregate. The transcript is local-only, permanently retained, and never tracked,
+   pushed, deployed, exposed in the sanitized local accepted aggregate or official
+   output, inspected for result selection, or used as M4 evidence. Only its
+   empty/nonempty size participates in the acceptance decision; its contents are
+   never parsed or allowlisted.
+9. Do not add or strengthen any warning/log suppression. Retain the pre-existing
+   `TF_CPP_MIN_LOG_LEVEL=2` as a disclosed unchanged runtime constraint; it is not
+   evidence for, or part of, this terminal-privacy correction. Do not add a Python
+   warning filter or change TensorFlow's Python logger level.
+
+Synthetic contradiction tests must prove:
+
+- invented empty, binary (including NUL and high-byte values), and ordered records
+  return exactly once as physical-order `bytes`; a decoy file and literal wildcard
+  are never expanded;
+- clean EOF, corrupt-tail `DataLossError`, counters, repeat scans, early reload,
+  file identity, and manifest byte stability remain unchanged;
+- the deprecated iterator is a failing seam and is never called;
+- a fresh process with the pinned runtime emits no deprecated-reader text, checkout
+  path, synthetic TFRecord path, or other stdout/stderr while reading invented data
+  under the exact pre-existing `TF_CPP_MIN_LOG_LEVEL=2` environment and with no
+  Python warning filter or TensorFlow Python logger-level change; the same seam
+  proves the old deprecated iterator would fail the silence assertion;
+- the transcript's exact path is inside the validated ignored run directory, is
+  independently ignored, uses owner-only permissions, is created exclusively, and
+  refuses a symlink or pre-existing-file overwrite before optional work starts; its
+  path and contents enter neither aggregate JSON nor official output, and changing
+  content without changing empty/nonempty state cannot affect cohort or result
+  selection;
+- Python logging, warnings, `print`, native `os.write` to both descriptors, and an
+  inherited child-process write are retained only in the local transcript. The child
+  uses the benchmark's exact `multiprocessing.get_context("spawn")` boundary and
+  writes sentinels to both descriptors. Diagnostic-only failure leaves stdout empty,
+  writes stderr as exactly
+  `M4 local acceptance: FAIL (terminal_output_detected)\n`, and discloses no PASS,
+  arbitrary transcript byte, absolute canary, identifier-like sentinel, or
+  digest-like sentinel;
+- a trusted primary failure and an untrusted failure keep their existing stable codes
+  even when diagnostic bytes or an injected restoration failure also occurred;
+  stdout is empty and stderr is exactly the original trusted-code line or
+  `M4 local acceptance: FAIL (unexpected_failure)\n`, respectively;
+- capture setup and restoration failures without a primary execution error emit
+  stderr as exactly
+  `M4 local acceptance: FAIL (terminal_capture_failed)\n`, leave stdout empty,
+  disclose no injected detail, and best-effort restoration attempts both terminal
+  descriptors; injected
+  open, duplicate, partial-redirection, flush, acceptance-critical close, and
+  restoration failures prove that
+  partial setup is rolled back before process-global flushing and performs no final
+  Python/native flush, while normal execution flushes both Python streams and
+   `fflush(NULL)` before restoration; raw/saved/status descriptor inheritance matches
+   the frozen rules, the optional-runtime callback does not start after setup failure,
+   a callback completed before a restoration failure still cannot publish, both
+   original descriptor restorations are attempted, and every benchmark timeout, EOF,
+   ordinary exit, and exceptional post-start path terminates and then kills if needed,
+   joins, and confirms the captured spawn child is no longer alive before
+   finalization;
+- subprocess-isolated restoration contradictions fail before the real `dup2` for fd 1
+  and fd 2 independently, leave that descriptor genuinely attached to the transcript,
+  and prove the exact stable failure line reaches only the preserved original status
+  descriptor while captured sentinels and aggregate publication remain absent from
+  terminal output;
+- diagnostic bytes, capture setup failure, capture restoration failure, and primary
+  execution failures each prove `_publish_accepted_aggregate` is never reached and
+  no `aggregate-summary.json` is created; local provenance and the exclusive
+  transcript may remain;
+- spies prove capture is inactive, the transcript is fsynced, closed, identity-stable,
+  and exactly zero bytes before `_publish_accepted_aggregate`; no optional-runtime
+  seam is called after that point;
+- argument errors remain `argument_error`; and
+- clean success leaves an empty transcript and emits exactly the three allowlisted
+  PASS lines and one relative ignored aggregate path on stdout, with empty stderr.
+
+This correction is payload-independent and made before any completed selector or result
+artifact from the stopped attempt. Selector version 4 and fingerprint
+`6a0caa5b7467cbb0dfe92fe3a29d890eda9348c159b6491d1aaa9021e19d91b9`,
+the four rejection predicates and priority, ranking bytes/domains/vectors, quotas,
+redistribution, fallback floors, cohort target, tolerance rules, horizons, execution
+scopes, manifest schema, adapter schema, and reference fingerprint remain unchanged.
+The plan, loader, CLI, Git tree, and executable-source fingerprint change.
+
+The payload gate is closed until this amendment, implementation, synthetic
+contradictions, full Waymo-extra/core-only suites, package and installed-help audit,
+and independent semantic/privacy reviews are accepted; the exact snapshot is committed
+and pushed; and clean local `HEAD` equals `origin/main`. The next attempt must use a
+fifth fresh ignored directory and repeat both complete scans of exactly shards
+`00000`–`00009` from record zero through clean EOF.
+
+After the final readiness record or other executable/document edit, rerun the complete
+Waymo-extra and core-only suites, package/notices and installed-help audit, and
+exact-diff semantic, invariant, and privacy reviews before commit and push. No earlier
+test or review result may stand in for this final exact-snapshot gate.
+
+### Selector-v4 terminal-privacy implementation-readiness record
+
+The supported-reader and terminal-boundary correction was implemented without WOMD
+payload access or repository `data/`/`outputs/` access. It changes only the plan and
+crosswalk, raw-reader implementation, local M4 command, and their synthetic tests.
+Selector-v4 configuration/fingerprint, predicates, ranking, quotas, schemas,
+reference configuration, and public result claims remain unchanged.
+
+The exact implementation:
+
+- streams one literal file through the pinned deterministic sequential
+  `TFRecordDataset` contract and preserves bytes, ordinals, counters, EOF,
+  corruption, identity, and reload behavior;
+- captures Python, direct native, C-stdio, and spawned-worker terminal output at
+  descriptors 1 and 2 into the exclusive local transcript;
+- guarantees every started benchmark worker is closed and reaped across normal,
+  timeout, EOF, and exceptional paths, escalating through terminate and kill with a
+  blocking post-kill join before capture can finalize;
+- retains non-inheritable original status descriptors, including genuine
+  subprocess-tested fd 1 and fd 2 restoration failures that occur before the real
+  `dup2`; and
+- returns only an in-memory pending aggregate until the transcript is restored,
+  fsynced, identity-checked, closed, and exactly empty.
+
+Independent exact-diff reviews initially blocked release on missing child-reap and
+genuine restoration-failure proofs. After correction, independent reader/semantic,
+terminal architecture, and privacy reviews returned **ACCEPTED — no unresolved
+blocker**.
+
+Pre-record verification passed:
+
+- 38 supported-reader tests and 54 terminal-command tests; their combined rerun
+  passed 92 tests;
+- the locked 12-file M4/Waymax/rollout/policy matrix passed 365 tests with one
+  expected local-data skip;
+- the full locked Waymo-extra environment passed 437 tests with one expected
+  local-data skip;
+- the verified core-only environment, with JAX, jaxlib, TensorFlow, Flax, and Waymax
+  absent, passed 362 tests with 22 expected optional-runtime skips; and
+- a fresh wheel/sdist audit found byte-identical required notices and no raw data,
+  outputs, private material, TFRecords, Parquet, caches, real checkout paths, or
+  vendored Waymax; installed-wheel M4 help outside the checkout and the presentation
+  request-matrix check both passed.
+
+These are implementation-readiness facts, not M4 execution evidence. This record is
+itself an executable-fingerprint change. The payload gate therefore remains closed
+until this new exact snapshot repeats the complete Waymo-extra/core-only suites,
+package/notices/installed-help and site audits, and final exact-diff reviews; is
+committed and pushed from a clean tree; and local `HEAD` is verified equal to
+`origin/main`.

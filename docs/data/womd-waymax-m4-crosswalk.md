@@ -1,7 +1,8 @@
 # WOMD / Waymax M4 execution crosswalk
 
-**Status:** Selector-v4 numerical dimension-contract correction pending
-clean-commit rerun; payload gate closed; M4 metric parity is not run here
+**Status:** Selector-v4 terminal-privacy/raw-reader correction
+implementation-ready; clean commit/push and fresh bound rerun pending; payload gate
+closed; M4 metric parity is not run here
 **Dataset profile:** WOMD v1.3.1 TFExample validation, 10 past + 1 current +
 80 future frames
 **Waymax revision:** `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`
@@ -102,6 +103,51 @@ Selector v4 adds no observed variation threshold. Eligibility predicates,
 their priority, ranking domains and vectors, quotas, redistribution, fallback,
 and execution scopes remain unchanged. The payload gate remains closed, and
 this correction unlocks no M4 result claim.
+
+### Selector-v4 terminal-output correction
+
+The first clean selector-v4 bound attempt was stopped after the pinned TensorFlow
+runtime emitted a deprecation diagnostic containing the absolute checkout source
+path. The diagnostic was generated from static API/call-site metadata and exposed
+no WOMD path, identity, locator, digest, coordinate, payload value, or result. The
+attempt completed no manifest or acceptance result, is excluded in full from M4
+evidence, and unlocks no claim.
+
+Before another payload read, the deprecated compatibility iterator is replaced by
+the pinned supported eager `TFRecordDataset` reader over one literal resolved file,
+with uncompressed bytes, sequential reads, deterministic ordering, and no shuffle,
+repeat, map, explicit prefetch, interleave, parallel reads, wildcard, or directory
+expansion. Raw byte order, ordinals, counters, corruption fatality, clean EOF, file
+identity, and grouped reload semantics remain unchanged.
+
+Optional-runtime stdout and stderr—including native and child-process writes—are
+captured at the file-descriptor boundary into fixed child `terminal-output.bin`,
+created exclusively without symlink following and with mode `0o600` under the
+validated ignored run directory. The exact path must also pass containment,
+regular-file identity, and ignore gates; an existing file or symlink is refused.
+Captured execution returns only an in-memory pending aggregate. After every child is
+confirmed no longer alive—using terminate, kill, and join as needed on timeout, EOF,
+or exceptional exit—normal execution flushes Python and native output, both terminal
+descriptors undergo independent best-effort restoration, and the transcript is fsynced,
+identity-checked, closed, and proven exactly empty. Partial setup starts no optional
+work and restores both descriptors before skipping those process-global flushes, so
+an unredirected descriptor cannot receive buffered bytes. Only then may the sanitized
+local accepted aggregate be created; no optional runtime runs after the transcript
+gate.
+
+The transcript is never re-emitted, tracked, pushed, deployed, exposed in the
+aggregate, interpreted for selection, or used as result evidence; only whether it is
+empty participates in acceptance, and its contents are never parsed or allowlisted.
+Official PASS/FAIL output occurs after finalization. If normal restoration fails, the
+single stable failure line uses a preserved non-inheritable original status
+descriptor; an already-raised stable failure retains precedence.
+All acceptance-critical descriptors are closed before publication or status; only the
+dedicated status descriptor remains until output, and its final close is best-effort
+because the status is then irrevocable.
+The pre-existing `TF_CPP_MIN_LOG_LEVEL=2` constraint is unchanged and is not evidence
+for this correction; no Python warning filter or TensorFlow logger-level change is
+added. This changes the executable snapshot, not selector-v4 population, ranking,
+schemas, or metric scope.
 
 ### Population
 

@@ -851,8 +851,15 @@ def _iter_raw_serialized_records(
 ) -> Iterator[tuple[int, bytes]]:
     """Yield raw TFRecords in physical order without preprocessing or prefetch."""
 
-    raw_iterator = tf.compat.v1.io.tf_record_iterator(str(shard_path))
-    for ordinal, serialized in enumerate(raw_iterator):
+    options = tf.data.Options()
+    options.deterministic = True
+    dataset = tf.data.TFRecordDataset(
+        filenames=(str(shard_path),),
+        compression_type="",
+        buffer_size=None,
+        num_parallel_reads=None,
+    ).with_options(options)
+    for ordinal, serialized in enumerate(dataset.as_numpy_iterator()):
         if not isinstance(serialized, (bytes, bytearray, memoryview)):
             raise WaymaxDataError(
                 "raw_record_type",

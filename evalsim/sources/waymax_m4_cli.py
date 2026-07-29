@@ -15,6 +15,7 @@ does not import any of them.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import dataclasses
 import hashlib
 import importlib
@@ -24,6 +25,7 @@ import multiprocessing
 import os
 import re
 import resource
+import stat
 import subprocess
 import sys
 import tempfile
@@ -193,6 +195,8 @@ _TRUSTED_COMMAND_CODES = frozenset(
     source_fingerprint_failed
     source_not_tracked
     source_path_invalid
+    terminal_capture_failed
+    terminal_output_detected
     unexpected_failure
     vmap_pair_size
     vmap_parity
@@ -247,6 +251,58 @@ class _RunResult:
     """Only the relative ignored report path may leave the command boundary."""
 
     report_relative: Path
+    terminal_status: _TerminalStatus | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingAcceptance:
+    """An accepted in-memory aggregate that has not yet been published."""
+
+    aggregate: Mapping[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class _TerminalStatus:
+    """Non-inheritable duplicates of the original command status streams."""
+
+    stdout_fd: int
+    stderr_fd: int
+
+    def close_best_effort(self) -> None:
+        for descriptor in (self.stdout_fd, self.stderr_fd):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
+
+class _TerminalizedFailure(RuntimeError):
+    """A failure whose only safe output path is a preserved status descriptor."""
+
+    def __init__(
+        self,
+        primary: BaseException,
+        terminal_status: _TerminalStatus,
+    ) -> None:
+        self.primary = primary
+        self.terminal_status = terminal_status
+        super().__init__("M4 terminalized failure")
+
+
+@dataclass(slots=True)
+class _TerminalCapture:
+    """Mutable descriptor state for one optional-runtime capture."""
+
+    transcript_path: Path
+    transcript_fd: int
+    transcript_identity: tuple[int, int]
+    restore_stdout_fd: int
+    restore_stderr_fd: int
+    terminal_status: _TerminalStatus
+    stdout_inheritable: bool
+    stderr_inheritable: bool
+    stdout_redirected: bool = False
+    stderr_redirected: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1709,6 +1765,68 @@ def _benchmark_worker(connection: Any, states: tuple[Any, Any]) -> None:
         connection.close()
 
 
+def _close_benchmark_endpoint(endpoint: Any) -> bool:
+    try:
+        endpoint.close()
+    except BaseException:
+        return False
+    return True
+
+
+def _benchmark_process_alive(process: Any) -> bool | None:
+    try:
+        return bool(process.is_alive())
+    except BaseException:
+        try:
+            return False if process.exitcode is not None else None
+        except BaseException:
+            return None
+
+
+def _reap_benchmark_worker(process: Any, *, force_stop: bool) -> bool:
+    """Join one started worker, escalating terminate to kill when required."""
+
+    cleanup_ok = True
+    if force_stop and _benchmark_process_alive(process) is not False:
+        try:
+            process.terminate()
+        except BaseException:
+            cleanup_ok = False
+
+    try:
+        process.join(timeout=10.0)
+    except BaseException:
+        cleanup_ok = False
+    alive = _benchmark_process_alive(process)
+
+    if alive is not False:
+        try:
+            process.terminate()
+        except BaseException:
+            cleanup_ok = False
+        try:
+            process.join(timeout=10.0)
+        except BaseException:
+            cleanup_ok = False
+        alive = _benchmark_process_alive(process)
+
+    while alive is not False:
+        try:
+            process.kill()
+        except BaseException:
+            cleanup_ok = False
+        try:
+            # After an unconditional kill, wait without another timeout. Returning
+            # while the child still holds inherited capture descriptors would make
+            # terminal finalization unsafe.
+            process.join()
+        except BaseException:
+            cleanup_ok = False
+        alive = _benchmark_process_alive(process)
+
+    return cleanup_ok
+
+
 def _fresh_worker_benchmark(states: Sequence[Any]) -> dict[str, Any]:
     """Spawn one clean process and return only its sanitized benchmark facts."""
 
@@ -1726,48 +1844,80 @@ def _fresh_worker_benchmark(states: Sequence[Any]) -> dict[str, Any]:
         ) from exc
     host_states = tuple(jax.device_get(state) for state in states)
     context = multiprocessing.get_context("spawn")
-    receive, send = context.Pipe(duplex=False)
-    process = context.Process(
-        target=_benchmark_worker,
-        args=(send, host_states),
-        name="evalsim-m4-vmap-benchmark",
-    )
+    receive: Any | None = None
+    send: Any | None = None
+    try:
+        receive, send = context.Pipe(duplex=False)
+        process = context.Process(
+            target=_benchmark_worker,
+            args=(send, host_states),
+            name="evalsim-m4-vmap-benchmark",
+        )
+    except Exception as exc:
+        for endpoint in (receive, send):
+            if endpoint is not None:
+                _close_benchmark_endpoint(endpoint)
+        raise M4CommandError(
+            "benchmark_worker_start",
+            "the fresh benchmark worker could not be constructed",
+        ) from exc
+
     try:
         process.start()
     except Exception as exc:
-        receive.close()
-        send.close()
+        _close_benchmark_endpoint(receive)
+        _close_benchmark_endpoint(send)
         raise M4CommandError(
             "benchmark_worker_start",
             "the fresh benchmark worker could not start",
         ) from exc
-    send.close()
-    if not receive.poll(M4_BENCHMARK_TIMEOUT_SECONDS):
-        process.terminate()
-        process.join(timeout=10.0)
-        receive.close()
-        raise M4CommandError(
-            "benchmark_timeout",
-            "the fresh benchmark worker exceeded the resource gate",
-        )
+
+    message: Any = None
+    primary: BaseException | None = None
+    endpoints_closed = _close_benchmark_endpoint(send)
     try:
+        if not endpoints_closed:
+            raise M4CommandError(
+                "benchmark_worker_exit",
+                "the benchmark pipe endpoint could not be closed",
+            )
+        if not receive.poll(M4_BENCHMARK_TIMEOUT_SECONDS):
+            raise M4CommandError(
+                "benchmark_timeout",
+                "the fresh benchmark worker exceeded the resource gate",
+            )
         message = receive.recv()
     except EOFError as exc:
-        raise M4CommandError(
+        primary = M4CommandError(
             "benchmark_worker_eof",
             "the fresh benchmark worker exited without a result",
-        ) from exc
-    finally:
-        receive.close()
-    process.join(timeout=10.0)
-    if process.is_alive():
-        process.terminate()
-        process.join(timeout=10.0)
+        )
+        primary.__cause__ = exc
+    except BaseException as exc:
+        primary = exc
+
+    endpoints_closed = (
+        _close_benchmark_endpoint(receive) and endpoints_closed
+    )
+    worker_reaped = _reap_benchmark_worker(
+        process,
+        force_stop=primary is not None,
+    )
+    if not endpoints_closed or not worker_reaped:
         raise M4CommandError(
             "benchmark_worker_exit",
-            "the fresh benchmark worker did not exit cleanly",
-        )
-    if process.exitcode != 0 or not isinstance(message, Mapping):
+            "the fresh benchmark worker could not be safely reaped",
+        ) from primary
+    if primary is not None:
+        raise primary
+    try:
+        exitcode = process.exitcode
+    except BaseException as exc:
+        raise M4CommandError(
+            "benchmark_worker_exit",
+            "the fresh benchmark worker exit status is unavailable",
+        ) from exc
+    if exitcode != 0 or not isinstance(message, Mapping):
         raise M4CommandError(
             "benchmark_worker_exit",
             "the fresh benchmark worker failed",
@@ -1944,43 +2094,333 @@ def _publish_accepted_aggregate(
     return report_path
 
 
-def run_acceptance(args: argparse.Namespace) -> _RunResult:
-    """Execute the complete pre-registered M4 local acceptance."""
+_TERMINAL_TRANSCRIPT_NAME = "terminal-output.bin"
 
-    if os.environ.get(LOCAL_WAYMO_ENV_FLAG) != "1":
-        raise M4CommandError(
-            "local_opt_in_required",
-            f"set {LOCAL_WAYMO_ENV_FLAG}=1 to opt in to local WOMD access",
-        )
 
-    # Bind the pre-registered Apple-CPU runtime before its first optional import.
-    configured_jax_platforms = os.environ.get("JAX_PLATFORMS")
-    if configured_jax_platforms not in {None, "cpu"}:
-        raise M4CommandError(
-            "jax_platform_override",
-            "M4 requires JAX_PLATFORMS=cpu",
-        )
-    os.environ["JAX_PLATFORMS"] = "cpu"
-    os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
-    os.environ["TF_NUM_INTEROP_THREADS"] = "1"
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+def _terminal_open(path: Path, flags: int, mode: int) -> int:
+    return os.open(path, flags, mode)
 
-    root = _project_root(args.project_root)
-    _assert_running_checkout(root)
-    _assert_clean_worktree(root)
-    data_dir = _resolve_project_path(args.data_dir, root)
-    if not data_dir.is_dir():
-        raise M4CommandError(
-            "data_directory_missing",
-            "the explicit local validation directory does not exist",
-        )
-    output = _prepare_output_directory(
-        args.output_dir,
-        root=root,
-        data_dir=data_dir,
+
+def _terminal_dup(descriptor: int) -> int:
+    return os.dup(descriptor)
+
+
+def _terminal_dup2(
+    source: int,
+    target: int,
+    *,
+    inheritable: bool,
+) -> int:
+    return os.dup2(source, target, inheritable=inheritable)
+
+
+def _terminal_close(descriptor: int) -> None:
+    os.close(descriptor)
+
+
+def _terminal_fstat(descriptor: int) -> os.stat_result:
+    return os.fstat(descriptor)
+
+
+def _terminal_lstat(path: Path) -> os.stat_result:
+    return path.stat(follow_symlinks=False)
+
+
+def _terminal_fsync(descriptor: int) -> None:
+    os.fsync(descriptor)
+
+
+def _flush_python_streams() -> None:
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+
+def _flush_native_stdio() -> None:
+    libc = ctypes.CDLL(None, use_errno=True)
+    fflush = libc.fflush
+    fflush.argtypes = [ctypes.c_void_p]
+    fflush.restype = ctypes.c_int
+    if fflush(None) != 0:
+        error_number = ctypes.get_errno()
+        raise OSError(error_number, "native stdio flush failed")
+
+
+def _terminal_capture_error() -> M4CommandError:
+    return M4CommandError(
+        "terminal_capture_failed",
+        "the local terminal privacy boundary could not be established",
     )
-    provenance = _execution_provenance(root)
-    _write_json_exclusive(output / "execution-provenance.json", provenance)
+
+
+def _close_descriptors_best_effort(descriptors: Sequence[int]) -> None:
+    for descriptor in descriptors:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+
+
+def _open_terminal_transcript(
+    *,
+    root: Path,
+    output: Path,
+) -> tuple[Path, int, tuple[int, int]]:
+    """Exclusively create and validate the fixed ignored local transcript."""
+
+    transcript_path = output / _TERMINAL_TRANSCRIPT_NAME
+    try:
+        if output.resolve(strict=True) != output:
+            raise OSError("the output directory identity changed")
+        if transcript_path.parent != output:
+            raise OSError("the transcript escaped its output directory")
+        if not _is_git_ignored(root, transcript_path):
+            raise OSError("the transcript is not ignored")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_APPEND
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        flags |= getattr(os, "O_CLOEXEC", 0)
+        descriptor = _terminal_open(transcript_path, flags, 0o600)
+    except (OSError, ValueError) as exc:
+        raise _terminal_capture_error() from exc
+
+    try:
+        os.set_inheritable(descriptor, False)
+        os.fchmod(descriptor, 0o600)
+        descriptor_stat = _terminal_fstat(descriptor)
+        path_stat = _terminal_lstat(transcript_path)
+        identity = (descriptor_stat.st_dev, descriptor_stat.st_ino)
+        if (
+            not stat.S_ISREG(descriptor_stat.st_mode)
+            or not stat.S_ISREG(path_stat.st_mode)
+            or identity != (path_stat.st_dev, path_stat.st_ino)
+            or descriptor_stat.st_nlink != 1
+            or stat.S_IMODE(descriptor_stat.st_mode) != 0o600
+            or not _is_git_ignored(root, transcript_path)
+        ):
+            raise OSError("the transcript identity or permissions are invalid")
+    except (OSError, ValueError) as exc:
+        _close_descriptors_best_effort((descriptor,))
+        raise _terminal_capture_error() from exc
+    return transcript_path, descriptor, identity
+
+
+def _duplicate_terminal_descriptors(
+    transcript_path: Path,
+    transcript_fd: int,
+    transcript_identity: tuple[int, int],
+) -> _TerminalCapture:
+    """Create non-inheritable restoration and status descriptors."""
+
+    descriptors: list[int] = []
+    try:
+        stdout_inheritable = os.get_inheritable(1)
+        stderr_inheritable = os.get_inheritable(2)
+        for source in (1, 2, 1, 2):
+            duplicate = _terminal_dup(source)
+            descriptors.append(duplicate)
+            os.set_inheritable(duplicate, False)
+    except OSError as exc:
+        _close_descriptors_best_effort(tuple(descriptors))
+        _close_descriptors_best_effort((transcript_fd,))
+        raise _terminal_capture_error() from exc
+
+    return _TerminalCapture(
+        transcript_path=transcript_path,
+        transcript_fd=transcript_fd,
+        transcript_identity=transcript_identity,
+        restore_stdout_fd=descriptors[0],
+        restore_stderr_fd=descriptors[1],
+        terminal_status=_TerminalStatus(
+            stdout_fd=descriptors[2],
+            stderr_fd=descriptors[3],
+        ),
+        stdout_inheritable=stdout_inheritable,
+        stderr_inheritable=stderr_inheritable,
+    )
+
+
+def _begin_terminal_capture(
+    *,
+    root: Path,
+    output: Path,
+) -> tuple[_TerminalCapture, BaseException | None]:
+    """Set up fd-level capture, returning partial-state failure for rollback."""
+
+    transcript_path, transcript_fd, identity = _open_terminal_transcript(
+        root=root,
+        output=output,
+    )
+    try:
+        _flush_python_streams()
+    except BaseException as exc:
+        _close_descriptors_best_effort((transcript_fd,))
+        raise _terminal_capture_error() from exc
+
+    capture = _duplicate_terminal_descriptors(
+        transcript_path,
+        transcript_fd,
+        identity,
+    )
+    try:
+        _terminal_dup2(
+            capture.transcript_fd,
+            1,
+            inheritable=True,
+        )
+        capture.stdout_redirected = True
+        _terminal_dup2(
+            capture.transcript_fd,
+            2,
+            inheritable=True,
+        )
+        capture.stderr_redirected = True
+    except BaseException as exc:
+        return capture, exc
+    return capture, None
+
+
+def _same_transcript_identity(
+    capture: _TerminalCapture,
+    descriptor_stat: os.stat_result,
+) -> bool:
+    try:
+        path_stat = _terminal_lstat(capture.transcript_path)
+    except OSError:
+        return False
+    return (
+        stat.S_ISREG(descriptor_stat.st_mode)
+        and stat.S_ISREG(path_stat.st_mode)
+        and capture.transcript_identity
+        == (descriptor_stat.st_dev, descriptor_stat.st_ino)
+        == (path_stat.st_dev, path_stat.st_ino)
+        and descriptor_stat.st_nlink == 1
+        and stat.S_IMODE(descriptor_stat.st_mode) == 0o600
+    )
+
+
+def _finalize_terminal_capture(
+    capture: _TerminalCapture,
+    *,
+    setup_failure: BaseException | None,
+) -> tuple[int | None, bool]:
+    """Restore terminals and close every acceptance-critical descriptor."""
+
+    failed = setup_failure is not None
+    transcript_size: int | None = None
+
+    restorations = (
+        (
+            capture.restore_stdout_fd,
+            1,
+            capture.stdout_inheritable,
+        ),
+        (
+            capture.restore_stderr_fd,
+            2,
+            capture.stderr_inheritable,
+        ),
+    )
+
+    # A partial setup never starts the optional-runtime callback. Restore both
+    # standard descriptors before any native flush so an unredirected descriptor
+    # cannot receive bytes from a process-global C stdio buffer.
+    if setup_failure is None:
+        for operation in (_flush_python_streams, _flush_native_stdio):
+            try:
+                operation()
+            except BaseException:
+                failed = True
+        try:
+            _terminal_fsync(capture.transcript_fd)
+        except OSError:
+            failed = True
+
+    for source, target, inheritable in restorations:
+        try:
+            _terminal_dup2(
+                source,
+                target,
+                inheritable=inheritable,
+            )
+        except BaseException:
+            failed = True
+
+    if setup_failure is not None:
+        try:
+            _terminal_fsync(capture.transcript_fd)
+        except OSError:
+            failed = True
+
+    try:
+        descriptor_stat = _terminal_fstat(capture.transcript_fd)
+        transcript_size = int(descriptor_stat.st_size)
+        if not _same_transcript_identity(capture, descriptor_stat):
+            failed = True
+    except (OSError, ValueError, OverflowError):
+        failed = True
+
+    for descriptor in (
+        capture.transcript_fd,
+        capture.restore_stdout_fd,
+        capture.restore_stderr_fd,
+    ):
+        try:
+            _terminal_close(descriptor)
+        except OSError:
+            failed = True
+
+    return transcript_size, failed
+
+
+def _run_captured_phase(
+    *,
+    root: Path,
+    output: Path,
+    callback: Callable[[], _PendingAcceptance],
+) -> tuple[_PendingAcceptance, _TerminalStatus]:
+    """Execute optional-runtime work without allowing terminal bytes to escape."""
+
+    capture, setup_failure = _begin_terminal_capture(
+        root=root,
+        output=output,
+    )
+    pending: _PendingAcceptance | None = None
+    primary: BaseException | None = None
+    if setup_failure is None:
+        try:
+            pending = callback()
+        except BaseException as exc:
+            primary = exc
+
+    transcript_size, capture_failed = _finalize_terminal_capture(
+        capture,
+        setup_failure=setup_failure,
+    )
+    if primary is not None:
+        raise _TerminalizedFailure(primary, capture.terminal_status)
+    if capture_failed or pending is None or transcript_size is None:
+        raise _TerminalizedFailure(
+            _terminal_capture_error(),
+            capture.terminal_status,
+        )
+    if transcript_size != 0:
+        raise _TerminalizedFailure(
+            M4CommandError(
+                "terminal_output_detected",
+                "optional runtime emitted unexpected terminal output",
+            ),
+            capture.terminal_status,
+        )
+    return pending, capture.terminal_status
+
+
+def _execute_captured_acceptance(
+    *,
+    root: Path,
+    data_dir: Path,
+    output: Path,
+    provenance: Mapping[str, Any],
+) -> _PendingAcceptance:
+    """Execute optional-runtime M4 work and return an unpublished aggregate."""
 
     # The exact resolver is called only after all environment, Git, and output
     # safety gates. Its implementation resolves suffixes 00000 through 00009 only.
@@ -2201,16 +2641,73 @@ def run_acceptance(args: argparse.Namespace) -> _RunResult:
             "EvalSim and Waymax reference paths share the pinned Waymax WOMD decode"
         ),
     }
-    # Do not create an artifact claiming acceptance until every final release gate
-    # has passed. A failed gate leaves manifests/provenance for local diagnosis but
-    # no valid aggregate with ``accepted: true``.
-    report_path = _publish_accepted_aggregate(
+    return _PendingAcceptance(aggregate=aggregate)
+
+
+def run_acceptance(args: argparse.Namespace) -> _RunResult:
+    """Execute the complete pre-registered M4 local acceptance."""
+
+    if os.environ.get(LOCAL_WAYMO_ENV_FLAG) != "1":
+        raise M4CommandError(
+            "local_opt_in_required",
+            f"set {LOCAL_WAYMO_ENV_FLAG}=1 to opt in to local WOMD access",
+        )
+
+    # Bind the pre-registered Apple-CPU runtime before its first optional import.
+    configured_jax_platforms = os.environ.get("JAX_PLATFORMS")
+    if configured_jax_platforms not in {None, "cpu"}:
+        raise M4CommandError(
+            "jax_platform_override",
+            "M4 requires JAX_PLATFORMS=cpu",
+        )
+    os.environ["JAX_PLATFORMS"] = "cpu"
+    os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+    os.environ["TF_NUM_INTEROP_THREADS"] = "1"
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
+    root = _project_root(args.project_root)
+    _assert_running_checkout(root)
+    _assert_clean_worktree(root)
+    data_dir = _resolve_project_path(args.data_dir, root)
+    if not data_dir.is_dir():
+        raise M4CommandError(
+            "data_directory_missing",
+            "the explicit local validation directory does not exist",
+        )
+    output = _prepare_output_directory(
+        args.output_dir,
+        root=root,
+        data_dir=data_dir,
+    )
+    provenance = _execution_provenance(root)
+    _write_json_exclusive(output / "execution-provenance.json", provenance)
+
+    pending, terminal_status = _run_captured_phase(
         root=root,
         output=output,
-        provenance=provenance,
-        aggregate=aggregate,
+        callback=lambda: _execute_captured_acceptance(
+            root=root,
+            data_dir=data_dir,
+            output=output,
+            provenance=provenance,
+        ),
     )
-    return _RunResult(report_relative=report_path.relative_to(root))
+    try:
+        # The accepted report is created only after terminal capture has been
+        # restored, finalized, closed, identity-checked, and proven empty.
+        report_path = _publish_accepted_aggregate(
+            root=root,
+            output=output,
+            provenance=provenance,
+            aggregate=pending.aggregate,
+        )
+        report_relative = report_path.relative_to(root)
+    except BaseException as exc:
+        raise _TerminalizedFailure(exc, terminal_status) from None
+    return _RunResult(
+        report_relative=report_relative,
+        terminal_status=terminal_status,
+    )
 
 
 def _failure_code(exc: BaseException) -> str:
@@ -2219,18 +2716,69 @@ def _failure_code(exc: BaseException) -> str:
     return "unexpected_failure"
 
 
+def _write_all(descriptor: int, payload: bytes) -> None:
+    remaining = memoryview(payload)
+    while remaining:
+        try:
+            written = os.write(descriptor, remaining)
+        except InterruptedError:
+            continue
+        if written <= 0:
+            raise OSError("status descriptor accepted no bytes")
+        remaining = remaining[written:]
+
+
+def _failure_line(code: str) -> bytes:
+    return f"M4 local acceptance: FAIL ({code})\n".encode("ascii")
+
+
+def _success_output(result: _RunResult) -> bytes:
+    return (
+        "M4 local acceptance: PASS\n"
+        "Native WOMD identities, locators, digests, and coordinates were not printed.\n"
+        f"Ignored aggregate report: {result.report_relative.as_posix()}\n"
+    ).encode("ascii")
+
+
+def _emit_terminalized_failure(failure: _TerminalizedFailure) -> None:
+    try:
+        _write_all(
+            failure.terminal_status.stderr_fd,
+            _failure_line(_failure_code(failure.primary)),
+        )
+    except OSError:
+        # The preserved status channel itself is unavailable. Fail without a
+        # traceback, which could disclose this source path or exception details.
+        pass
+    finally:
+        failure.terminal_status.close_best_effort()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     try:
         result = run_acceptance(args)
+    except _TerminalizedFailure as exc:
+        _emit_terminalized_failure(exc)
+        raise SystemExit(1) from None
     except BaseException as exc:
         # Third-party data/runtime exceptions may embed native values or local paths.
         # Deliberately emit only a stable code/type and keep details local.
         parser.exit(1, f"M4 local acceptance: FAIL ({_failure_code(exc)})\n")
-    print("M4 local acceptance: PASS")
-    print("Native WOMD identities, locators, digests, and coordinates were not printed.")
-    print(f"Ignored aggregate report: {result.report_relative.as_posix()}")
+    if result.terminal_status is None:
+        sys.stdout.write(_success_output(result).decode("ascii"))
+        sys.stdout.flush()
+    else:
+        try:
+            _write_all(
+                result.terminal_status.stdout_fd,
+                _success_output(result),
+            )
+        except OSError:
+            raise SystemExit(1) from None
+        finally:
+            result.terminal_status.close_best_effort()
     return 0
 
 

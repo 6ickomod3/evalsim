@@ -5,6 +5,9 @@ persist source-derived identities, coordinates, trajectories, or artifacts.
 """
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from types import MappingProxyType
 
 import numpy as np
@@ -339,6 +342,142 @@ def test_m4_locator_rejects_out_of_scope_or_noncanonical_values(
 ) -> None:
     with pytest.raises(ValueError):
         M4ShardLocator(shard_suffix=suffix, record_ordinal=ordinal)
+
+
+def test_raw_reader_uses_supported_sequential_dataset_contract(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "selected.tfrecord"
+    payloads = (b"", b"\x00middle\xff", b"tail")
+    tf = _write_tfrecord(path, payloads)
+    original_dataset = tf.data.TFRecordDataset
+    observed: dict[str, object] = {}
+
+    def deprecated_reader(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("deprecated TFRecord iterator was called")
+
+    def observed_dataset(*args, **kwargs):
+        observed["args"] = args
+        observed["kwargs"] = kwargs
+        dataset = original_dataset(*args, **kwargs)
+
+        class _OptionsObserver:
+            def with_options(self, options):
+                observed["deterministic"] = options.deterministic
+                return dataset.with_options(options)
+
+        return _OptionsObserver()
+
+    monkeypatch.setattr(
+        tf.compat.v1.io,
+        "tf_record_iterator",
+        deprecated_reader,
+    )
+    monkeypatch.setattr(tf.data, "TFRecordDataset", observed_dataset)
+
+    records = tuple(loader._iter_raw_serialized_records(path, tf))
+
+    assert records == tuple(enumerate(payloads))
+    assert all(type(serialized) is bytes for _, serialized in records)
+    assert observed == {
+        "args": (),
+        "kwargs": {
+            "filenames": (str(path),),
+            "compression_type": "",
+            "buffer_size": None,
+            "num_parallel_reads": None,
+        },
+        "deterministic": True,
+    }
+
+
+def test_raw_reader_does_not_read_decoy_or_expand_literal_wildcard(
+    tmp_path,
+) -> None:
+    selected = tmp_path / "selected.tfrecord"
+    decoy = tmp_path / "decoy.tfrecord"
+    tf = _write_tfrecord(selected, (b"selected-first", b"selected-last"))
+    _write_tfrecord(decoy, (b"decoy",))
+
+    assert tuple(loader._iter_raw_serialized_records(selected, tf)) == (
+        (0, b"selected-first"),
+        (1, b"selected-last"),
+    )
+    with pytest.raises(tf.errors.NotFoundError):
+        tuple(
+            loader._iter_raw_serialized_records(
+                tmp_path / "*.tfrecord",
+                tf,
+            )
+        )
+
+
+def test_supported_raw_reader_is_terminal_silent_in_fresh_process(
+    tmp_path,
+) -> None:
+    path = tmp_path / "invented.tfrecord"
+    _write_tfrecord(path, (b"", bytes((0, 255))))
+    code = (
+        "import os\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "if os.environ.get('TF_CPP_MIN_LOG_LEVEL') != '2':\n"
+        "    raise SystemExit(20)\n"
+        "import tensorflow as tf\n"
+        "from evalsim.sources.waymax_loader import "
+        "_iter_raw_serialized_records\n"
+        "observed = tuple("
+        "_iter_raw_serialized_records(Path(sys.argv[1]), tf))\n"
+        "expected = ((0, b''), (1, bytes((0, 255))))\n"
+        "if observed != expected:\n"
+        "    raise SystemExit(21)\n"
+    )
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "JAX_PLATFORMS": "cpu",
+            "TF_CPP_MIN_LOG_LEVEL": "2",
+            "TF_NUM_INTEROP_THREADS": "1",
+            "TF_NUM_INTRAOP_THREADS": "1",
+        }
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", code, str(path)],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+    )
+
+    assert completed.returncode == 0
+    terminal_silent = completed.stdout == b"" and completed.stderr == b""
+    assert terminal_silent is True
+
+    deprecated_code = (
+        "import sys\n"
+        "import tensorflow as tf\n"
+        "records = tuple("
+        "tf.compat.v1.io.tf_record_iterator(sys.argv[1]))\n"
+        "expected = (b'', bytes((0, 255)))\n"
+        "if records != expected:\n"
+        "    raise SystemExit(22)\n"
+    )
+    deprecated = subprocess.run(
+        [sys.executable, "-c", deprecated_code, str(path)],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+    )
+
+    assert deprecated.returncode == 0
+    deprecated_terminal_silent = (
+        deprecated.stdout == b"" and deprecated.stderr == b""
+    )
+    assert deprecated_terminal_silent is False
 
 
 def test_m4_stream_counts_raw_decode_and_events_at_clean_eof(
