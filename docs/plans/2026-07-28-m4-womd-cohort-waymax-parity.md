@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-28
 **Status:** ⚠️ Bound attempts failed during pre-selection representation validation;
-selector-v3 padding correction and clean-commit rerun pending
+selector-v4 numerical dimension-contract correction and clean-commit rerun pending;
+payload gate closed
 **Milestone:** M4 — exact ten-shard cohort → Waymax reference execution → EvalSim
 rollout contract
 
@@ -142,9 +143,13 @@ The source predicate reads exactly these fields: object `id`, `type`, `is_sdc`, 
 91-frame `valid`; valid-frame `x`, `y`, `velocity_x`, `velocity_y`, `bbox_yaw`,
 `timestamp_micros`, `length`, and `width`; `state/which_time`; and roadgraph `xyz`,
 `dir`, `type`, `id`, and `valid`. Shape/dtype drift, duplicate retained object IDs,
-invalid/nonconstant dimensions, non-finite valid motion, timestamp absence/disagreement,
-non-increasing time, unexpected `which_time`, or any other source/contract invariant
-failure is fatal.
+non-finite valid motion, timestamp absence/disagreement, non-increasing time,
+unexpected `which_time`, or any other source/contract invariant failure is fatal. The
+original selector versions also treated nonconstant valid-frame dimensions as fatal;
+selector v4 supersedes only that representation invariant as recorded below.
+Valid dimension samples that are non-finite, non-positive, or subnormal; a source
+sum that fails the pre-registered order-independent overflow guard; or a pinned-factory
+scalar that is non-finite, non-positive, or not broadcast remain fatal.
 
 Every source-eligible record must then pass adapter conversion, the `Scenario` contract,
 and the independent M3 parity check. Any failure is fatal to M4; it can never exclude a
@@ -353,10 +358,12 @@ M4 requires and reports only this matrix:
 | Waymax waypoint-following IDM | nested 16 scenes, 20 transitions | deterministic finite output, declared control/fallback accounting, contract conversion |
 | sequential vs `jit(vmap(...))` exact-log kernel | fixed batch 2 | common output equality and permutation invariance |
 
-For valid float32 source/reference values, the only allowed numerical tolerance is
-`rtol=0`, `atol=1e-6`; integer identities, masks, ordering, timestamps in canonical
-microseconds, and selection are exact. A wider tolerance requires a pre-result plan
-amendment.
+For valid float32 source/reference values other than dimensions, the only allowed
+numerical tolerance is `rtol=0`, `atol=1e-6`. A dimension scalar instead uses
+`rtol=0` and the pre-registered high-accuracy-sum analytic absolute bound in the
+selector-v4 correction record below. Integer identities, masks, ordering, timestamps
+in canonical microseconds, and selection are exact. A wider or differently derived
+tolerance requires a pre-result plan amendment.
 
 Every discrepancy is assigned one stable category with these proof rules:
 
@@ -368,8 +375,10 @@ Every discrepancy is assigned one stable category with these proof rules:
   the resulting agent/frame equals the direct log fallback;
 - `initialized_overlap_exclusion`: the independent frame-0 overlap oracle agrees with
   the pinned mask and the excluded agent/frame equals log fallback;
-- `float32_representation`: only a declared valid float field differs within
-  `rtol=0, atol=1e-6`; identity, mask, time, order, and selection never use this category;
+- `float32_representation`: only a declared valid non-dimension float field differs
+  within `rtol=0, atol=1e-6`, or a dimension scalar differs within its pre-registered
+  high-accuracy-sum analytic bound with `rtol=0`; identity, mask, time, order, and
+  selection never use this category;
 - `policy_definition_difference`: the comparison is explicitly between EvalSim IDM/CV
   and the differently defined Waymax IDM, not within a parity gate; or
 - `defect`: anything else.
@@ -479,6 +488,10 @@ coordinates, trajectories, map values, or absolute paths.
   invalid fill, current boundary, circular yaw, and provenance;
 - exact-log synthetic fixture is contradicted one field at a time, including emitted
   `timestamp_micros`, to prove the oracle is independent;
+- a 91-step adversarial dimension fixture executes the actual pinned factory and covers
+  reduction ordering, magnitude and normal/subnormal boundaries, ignored invalid
+  payload, finite/positive scalar output, full-time broadcast, and the independent
+  high-accuracy-sum analytic parity bound;
 - waypoint-following IDM control/fallback masks exclude SDC, nonvehicles, invalid
   transitions, and initialized overlaps;
 - an independent NumPy overlap oracle matches the pinned frame-0, no-validity-mask
@@ -763,3 +776,135 @@ No WOMD payload was accessed during selector-v3 implementation, testing, packagi
 or review. These are implementation-readiness facts, not M4 acceptance evidence. The
 payload gate remains closed until this exact final snapshot is committed, pushed,
 clean, and verified equal to `origin/main`.
+
+### Selector-v3 bound attempt and selector-v4 numerical correction — 2026-07-28
+
+The selector-v3 correction received independent implementation-readiness acceptance,
+passed its locked Waymo-extra and core-only suites, and was committed and pushed as
+`c226c9414637e513ff4c25a9818685e8a683f529`. Local `HEAD`, `origin/main`, and
+the clean worktree matched before its bound acceptance attempt.
+
+That attempt failed during source-representation validation with fatal code
+`dimension_not_constant`. It produced only ignored execution provenance; no
+completed manifest, cohort selection, policy/reference execution, benchmark, metric,
+or comparative result was produced. Per-record progress and failure location remain
+local-only. The attempt is excluded from M4 acceptance evidence, and no public result
+claim was unlocked.
+
+Independent review of the pinned decoder and factory contracts established that raw
+WOMD length and width are per-frame fields, while the pinned Waymax factory computes a
+validity-masked float32 mean for each object and broadcasts that scalar across time.
+Selector v3's exact valid-frame constancy rule was therefore stricter than the pinned
+upstream representation contract.
+
+The initial selector-v4 exact diff removed constancy, admitted every finite, strictly
+positive float32 valid sample, reproduced a float32 mean in NumPy, and used fixed
+`rtol=0, atol=1e-6` dimension parity. Adversarial semantic review **BLOCKED** that exact
+diff before any further WOMD payload access. Invented synthetic counterexamples exposed
+two unsupported assumptions: NumPy and JAX may reduce the same float32 values in
+different orders and disagree by more than a fixed absolute tolerance, while a positive
+subnormal source value can flush to zero in the pinned JAX path. No dataset value,
+selection, policy output, metric, or comparative result informed this correction.
+
+Selector v4 removes only that unsupported constancy requirement. For every retained
+object and each of length and width it:
+
+- ignores invalid-frame payload;
+- requires every valid-frame float32 value to be finite, positive, and normal—at least
+  `finfo(float32).tiny`;
+- lets `n` be the valid-sample count, `k = n - 1`, `eps` the float32 machine epsilon,
+  `max` the largest finite float32, and `S = math.fsum(valid_samples)` the
+  high-accuracy reference sum, whose binary64 rounding is dominated by the analytic
+  float32 margin;
+- defines `gamma_k = k * eps / (1 - k * eps)`;
+- applies the order-independent conservative overflow gate
+  `S * (1 + gamma_k) <= max`; and
+- separately requires the actual pinned factory output to be finite, strictly positive,
+  and one scalar broadcast across all 91 trajectory steps.
+
+The stable fatal codes are `dimension_valid_value_invalid` for an invalid valid-frame
+sample and `dimension_scalar_invalid` for an invalid masked scalar.
+
+Independent dimension parity defines
+`mean = math.fsum(valid_samples) / n`, uses `rtol=0`, and permits only
+`abs_tol = mean * (gamma_k + eps * (1 + gamma_k))`. The bound conservatively covers
+float32 reduction and division error; it is an analytic machine-error bound, not an
+observed-data threshold, result-tuned tolerance, or assertion of bitwise NumPy/JAX
+reduction identity. The fixed `atol=1e-6` rule continues to govern unrelated supported
+float32 fields but makes no dimension claim.
+
+Before payload access, an adversarial synthetic oracle must execute the actual pinned
+factory across all 91 steps and cover ordering, magnitude-boundary, normal/subnormal
+boundary, and ignored-invalid-payload counterexamples. It must prove finite, positive,
+fully broadcast factory output and agreement with the independent high-accuracy-sum
+mean within the analytic dimension bound.
+
+No observed variation magnitude, percentile, metric, or policy result is used. This is
+a source-to-scalar representation correction made before any eligibility verdict or
+result. It does not change the four rejection predicates or their priority, map rule,
+ranking bytes/domains and vectors, quotas, redistribution, fallback floor, cohort
+target, or execution scopes. Selector version and selector/executable fingerprints
+change; the dataset configuration, manifest schema, adapter schema, and ranking domains
+do not.
+
+The payload gate is closed again until the selector-v4 plan, code, contradiction
+fixtures, pinned-factory scalarization oracle, crosswalk, and locked Waymo-extra/core
+suites pass independent adversarial review; the exact snapshot is committed and pushed
+from a clean tree; and local `HEAD` is verified equal to `origin/main`. All three prior
+ignored failure-artifact directories and provenance files remain retained locally,
+unchanged, and excluded from acceptance evidence. The next attempt must use a new
+ignored directory, must neither overwrite nor reuse a prior attempt, and must repeat
+both complete exact ten-shard scans through clean EOF. Any executable,
+selector-fingerprint, or reviewed-tree change requires another clean commit,
+adversarial review, and fresh full rerun.
+
+### Selector-v4 corrected implementation-readiness record
+
+The first selector-v4 implementation diff was rejected before any further payload
+access. The corrected implementation now:
+
+- gates raw valid dimension samples to finite positive-normal float32 values while
+  ignoring invalid-frame payload;
+- uses the pre-registered high-accuracy reference sum and conservative float32
+  `gamma_k` overflow guard without assuming a NumPy/JAX reduction order;
+- compares the pinned factory scalar with the independent reference mean using only
+  the analytic float32 reduction/division bound, with no fixed `1e-6` dimension
+  floor;
+- retains the adapter's finite, positive, exact-broadcast post-factory gate; and
+- freezes selector-v4 fingerprint
+  `6a0caa5b7467cbb0dfe92fe3a29d890eda9348c159b6491d1aaa9021e19d91b9`
+  while leaving the manifest and adapter schema versions unchanged.
+
+The synthetic proof suite executes the actual pinned 91-step factory and covers the
+NumPy/JAX reduction-order counterexample, minimum-normal preservation, positive
+subnormal flush-to-zero, a varied input at 99% of the source overflow guard, repeated
+float32-maximum overflow, ignored invalid payload, and full-time broadcast. Separate
+contradictions prove that dimension parity rejects a drift below `1e-6` but above the
+analytic bound, and that the one-sample endpoint uses `k = n - 1 = 0`, admits the
+inclusive float32-maximum source boundary, and rejects a drift that an erroneous
+`k = 1` bound would accept.
+
+Independent numerical and invariant reviews returned **ACCEPTED — no unresolved
+blocker** on the corrected pre-record diff. The reviewers found no change to the four
+eligibility predicates or their priority, ranking bytes/domains/vectors, quotas,
+redistribution, fallback floors, execution scopes, manifest schema, or adapter schema.
+A separate privacy/release review accepted the corrected method and documentation:
+no WOMD identity, locator, digest, coordinate, trajectory, absolute path, payload, or
+result is exposed, and no M4 result claim is unlocked.
+
+That corrected pre-record snapshot passed 405 tests with one expected local-data skip
+in the locked Waymo-extra environment and 333 tests with 19 expected optional-runtime
+skips in the verified core-only environment. The locked seven-suite M4 matrix passed
+268 tests. Independent eager/jitted JAX stress over 3,276 invented safe cases spanning
+`n = 1..91`, order reversal, near-overflow scaling, minimum-normal values, wide
+exponents, and invalid payload found zero finite, positivity, overflow-guard, or
+analytic-bound violation.
+
+No WOMD payload or ignored run artifact was accessed during selector-v4 planning,
+implementation, testing, packaging pre-audit, or review. These are
+implementation-readiness facts, not M4 acceptance evidence. Because this plan is an
+executable-fingerprint input, adding this record changes the exact execution snapshot.
+The payload gate therefore remains closed until this recorded snapshot passes the
+fresh full Waymo-extra/core-only suites, archive and installed-help audit, and final
+exact-diff numerical, invariant, and privacy reviews; is committed and pushed from a
+clean tree; and local `HEAD` is verified equal to `origin/main`.

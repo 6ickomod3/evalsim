@@ -28,11 +28,19 @@ def _invented_pre_jax_example() -> dict[str, np.ndarray]:
         ],
         dtype=np.float32,
     )
-    dimensions = np.asarray(
+    length = np.asarray(
         [
-            [4.0, 4.0, -1.0, -1.0],
-            [2.0, -1.0, 2.0, -1.0],
-            [-1.0, -1.0, -1.0, -1.0],
+            [4.0, 6.0, np.nan, -8.0],
+            [2.0, np.inf, 4.0, -9.0],
+            [np.nan, np.inf, -3.0, 99.0],
+        ],
+        dtype=np.float32,
+    )
+    width = np.asarray(
+        [
+            [2.0, 4.0, np.inf, -3.0],
+            [1.0, np.nan, 2.0, -7.0],
+            [np.inf, np.nan, -5.0, 101.0],
         ],
         dtype=np.float32,
     )
@@ -55,9 +63,16 @@ def _invented_pre_jax_example() -> dict[str, np.ndarray]:
         "state/all/velocity_y": np.zeros_like(float_values),
         "state/all/bbox_yaw": np.zeros_like(float_values),
         "state/all/valid": valid,
-        "state/all/length": dimensions,
-        "state/all/width": (dimensions / np.float32(2.0)).astype(np.float32),
-        "state/all/height": (dimensions / np.float32(4.0)).astype(np.float32),
+        "state/all/length": length,
+        "state/all/width": width,
+        "state/all/height": np.asarray(
+            [
+                [1.0, 1.0, np.nan, -1.0],
+                [2.0, np.inf, 2.0, -1.0],
+                [np.nan, np.inf, -1.0, -2.0],
+            ],
+            dtype=np.float32,
+        ),
         "state/all/timestamp_micros": np.asarray(
             [
                 [int32_min, -1, 0, int32_max],
@@ -236,6 +251,24 @@ def test_pinned_waymax_factory_preserves_pre_jax_discrete_semantics() -> None:
     )
     assert np.asarray(trajectory.valid).dtype == np.bool_
     assert np.asarray(trajectory.timestamp_micros).dtype == np.int32
+    expected_length = np.broadcast_to(
+        np.asarray([5.0, 3.0, -1.0], dtype=np.float32)[:, np.newaxis],
+        raw["state/all/length"].shape,
+    )
+    expected_width = np.broadcast_to(
+        np.asarray([3.0, 1.5, -1.0], dtype=np.float32)[:, np.newaxis],
+        raw["state/all/width"].shape,
+    )
+    np.testing.assert_array_equal(
+        np.asarray(trajectory.length),
+        expected_length,
+    )
+    np.testing.assert_array_equal(
+        np.asarray(trajectory.width),
+        expected_width,
+    )
+    assert np.asarray(trajectory.length).dtype == np.float32
+    assert np.asarray(trajectory.width).dtype == np.float32
 
     # The simulator trajectory starts with the exact first logged frame and
     # uses typed zero padding for every later frame.

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import math
 
 import numpy as np
 import pytest
@@ -34,6 +35,7 @@ pytest.importorskip(
     reason="Waymax adapter fixtures require the optional waymo dependencies",
 )
 
+from waymax.dataloader import womd_factories
 from waymax.datatypes.object_state import ObjectMetadata, Trajectory
 from waymax.datatypes.roadgraph import RoadgraphPoints
 from waymax.datatypes.simulator_state import SimulatorState
@@ -231,6 +233,133 @@ def _record_from_state(state: SimulatorState) -> WaymaxRecord:
     )
 
 
+def _float32_masked_mean(values: np.ndarray, valid: np.ndarray) -> np.float32:
+    selected = np.asarray(values, dtype=np.float32)[valid]
+    if selected.size == 0:
+        return np.float32(-1.0)
+    return np.float32(
+        np.sum(selected, dtype=np.float32) / np.float32(selected.size)
+    )
+
+
+def _reference_dimension_mean_and_bound(
+    values: np.ndarray,
+    valid: np.ndarray,
+) -> tuple[float, float]:
+    selected = np.asarray(values, dtype=np.float32)[valid]
+    reference_mean = (
+        math.fsum(float(value) for value in selected) / selected.size
+    )
+    epsilon = float(np.finfo(np.float32).eps)
+    reduction_steps = int(selected.size) - 1
+    gamma = (
+        reduction_steps
+        * epsilon
+        / (1.0 - reduction_steps * epsilon)
+    )
+    return reference_mean, reference_mean * (
+        gamma + epsilon * (1.0 + gamma)
+    )
+
+
+def _base_factory_dimension_tensors() -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]:
+    trajectory = _make_state().log_trajectory
+    return (
+        np.array(trajectory.valid, dtype=bool, copy=True),
+        np.array(trajectory.length, dtype=np.float32, copy=True),
+        np.array(trajectory.width, dtype=np.float32, copy=True),
+    )
+
+
+def _factory_state_and_record(
+    *,
+    raw_length: np.ndarray,
+    raw_width: np.ndarray,
+    valid: np.ndarray,
+) -> tuple[SimulatorState, WaymaxRecord]:
+    """Build the adapter boundary through the actual pinned WOMD factory."""
+    state = _make_state()
+    source = state.log_trajectory
+    trajectory = womd_factories.trajectory_from_womd_dict(
+        {
+            "state/all/x": np.asarray(source.x),
+            "state/all/y": np.asarray(source.y),
+            "state/all/z": np.asarray(source.z),
+            "state/all/velocity_x": np.asarray(source.vel_x),
+            "state/all/velocity_y": np.asarray(source.vel_y),
+            "state/all/bbox_yaw": np.asarray(source.yaw),
+            "state/all/valid": valid,
+            "state/all/length": raw_length,
+            "state/all/width": raw_width,
+            "state/all/height": np.asarray(source.height),
+            "state/all/timestamp_micros": np.asarray(
+                source.timestamp_micros
+            ),
+        }
+    )
+    state = state.replace(
+        log_trajectory=trajectory,
+        sim_trajectory=trajectory,
+    )
+    audit = _audit_from_state(state)
+    audit["state/all/length"] = raw_length
+    audit["state/all/width"] = raw_width
+    record = dataclasses.replace(_record_from_state(state), audit=audit)
+    return state, record
+
+
+@pytest.fixture
+def varied_raw_dimension_record() -> tuple[SimulatorState, WaymaxRecord]:
+    """Exercise the actual pinned factory with invented raw dimensions."""
+    valid, _, _ = _base_factory_dimension_tensors()
+    valid[2] &= np.arange(valid.shape[1]) % 3 != 0
+    shape = valid.shape
+    raw_length = np.full(shape, np.nan, dtype=np.float32)
+    raw_width = np.full(shape, np.inf, dtype=np.float32)
+    target_length = np.asarray([4.5, 0.8, 2.0, -1.0], dtype=np.float32)
+    target_width = np.asarray([2.0, 0.5, 0.8, -1.0], dtype=np.float32)
+
+    for source_index in range(shape[0]):
+        valid_indices = np.flatnonzero(valid[source_index])
+        if valid_indices.size == 0:
+            continue
+        for values, target in (
+            (raw_length, target_length[source_index]),
+            (raw_width, target_width[source_index]),
+        ):
+            values[source_index, valid_indices] = target
+            values[source_index, valid_indices[0]] = target - np.float32(0.25)
+            values[source_index, valid_indices[1]] = target + np.float32(0.25)
+
+    raw_length[2] = (
+        np.float32(5.0)
+        + np.arange(shape[1], dtype=np.float32) * np.float32(0.0037)
+    )
+
+    # These values exercise the fact that invalid raw dimension payloads do not
+    # contribute to the factory's masked mean.
+    raw_length[1, 0:3] = np.asarray([np.inf, -17.0, np.nan], dtype=np.float32)
+    raw_width[1, 0:3] = np.asarray([np.nan, -19.0, np.inf], dtype=np.float32)
+    raw_length[3, 0:4] = np.asarray(
+        [np.nan, np.inf, -23.0, 101.0],
+        dtype=np.float32,
+    )
+    raw_width[3, 0:4] = np.asarray(
+        [np.inf, np.nan, -29.0, 103.0],
+        dtype=np.float32,
+    )
+
+    return _factory_state_and_record(
+        raw_length=raw_length,
+        raw_width=raw_width,
+        valid=valid,
+    )
+
+
 def _assert_same_scenario(left, right) -> None:
     assert left.scenario_id == right.scenario_id
     assert left.ego_index == right.ego_index
@@ -267,6 +396,422 @@ def test_independent_parity_checks_real_time_partition_and_contradiction() -> No
             dataclasses.replace(record, audit=drifted_audit),
             scenario,
         )
+
+
+def test_pinned_factory_preserves_minimum_normal_dimension_at_91_steps() -> None:
+    valid, raw_length, raw_width = _base_factory_dimension_tensors()
+    minimum_normal = np.finfo(np.float32).tiny
+    assert valid.shape[1] == 91
+    assert np.all(valid[0])
+    raw_length[0] = minimum_normal
+
+    state, record = _factory_state_and_record(
+        raw_length=raw_length,
+        raw_width=raw_width,
+        valid=valid,
+    )
+    factory_length = np.asarray(state.log_trajectory.length[0])
+    assert factory_length.dtype == np.float32
+    assert np.all(np.isfinite(factory_length))
+    assert np.all(factory_length > 0.0)
+    np.testing.assert_array_equal(
+        factory_length,
+        np.full(91, minimum_normal, dtype=np.float32),
+    )
+
+    scenario = _convert(state)
+    assert scenario.agents[0].length == float(minimum_normal)
+    assert validate_record_parity(record, scenario)["agents"] is True
+
+    expected, analytic_bound = _reference_dimension_mean_and_bound(
+        record.audit["state/all/length"][0],
+        np.asarray(record.audit["state/all/valid"][0], dtype=bool),
+    )
+    fixed_atol_counterexample = 5.0e-7
+    assert analytic_bound < fixed_atol_counterexample < 1.0e-6
+    contradicted_agents = list(scenario.agents)
+    contradicted_agents[0] = dataclasses.replace(
+        contradicted_agents[0],
+        length=expected + fixed_atol_counterexample,
+    )
+    contradicted = dataclasses.replace(
+        scenario,
+        agents=contradicted_agents,
+    )
+    with pytest.raises(WaymaxDataError, match="parity_dimensions"):
+        validate_record_parity(record, contradicted)
+
+
+def test_pinned_factory_flushes_positive_subnormal_dimension_at_91_steps() -> None:
+    valid, raw_length, raw_width = _base_factory_dimension_tensors()
+    minimum_normal = np.finfo(np.float32).tiny
+    positive_subnormal = np.nextafter(
+        minimum_normal,
+        np.float32(0.0),
+    )
+    assert np.float32(0.0) < positive_subnormal < minimum_normal
+    assert np.all(valid[0])
+    raw_length[0] = positive_subnormal
+
+    state, _ = _factory_state_and_record(
+        raw_length=raw_length,
+        raw_width=raw_width,
+        valid=valid,
+    )
+    factory_length = np.asarray(state.log_trajectory.length[0])
+    np.testing.assert_array_equal(
+        factory_length,
+        np.zeros(91, dtype=np.float32),
+    )
+
+    with pytest.raises(WaymaxConversionError) as error:
+        _convert(state)
+    assert error.value.code == "dimension_not_constant"
+
+
+def test_pinned_factory_preserves_guarded_high_magnitude_dimension() -> None:
+    valid, raw_length, raw_width = _base_factory_dimension_tensors()
+    float32 = np.finfo(np.float32)
+    sample_count = 91
+    epsilon = float(float32.eps)
+    reduction_steps = sample_count - 1
+    gamma = (
+        reduction_steps
+        * epsilon
+        / (1.0 - reduction_steps * epsilon)
+    )
+    weights = np.linspace(
+        np.float32(0.5),
+        np.float32(1.5),
+        91,
+        dtype=np.float32,
+    )
+    guarded_sum_target = float(float32.max) * 0.99 / (1.0 + gamma)
+    scale = np.float32(
+        guarded_sum_target
+        / math.fsum(float(value) for value in weights)
+    )
+    safe_values = (weights * scale).astype(np.float32)
+    assert np.all(valid[0])
+    raw_length[0] = safe_values
+
+    reference_sum = math.fsum(float(value) for value in safe_values)
+    guard_ratio = (
+        reference_sum * (1.0 + gamma) / float(float32.max)
+    )
+    assert 0.98 < guard_ratio < 1.0
+
+    state, record = _factory_state_and_record(
+        raw_length=raw_length,
+        raw_width=raw_width,
+        valid=valid,
+    )
+    factory_length = np.asarray(state.log_trajectory.length[0])
+    assert factory_length.dtype == np.float32
+    assert np.all(np.isfinite(factory_length))
+    assert np.all(factory_length > 0.0)
+    np.testing.assert_array_equal(
+        factory_length,
+        np.full(91, factory_length[0], dtype=np.float32),
+    )
+
+    scenario = _convert(state)
+    assert validate_record_parity(record, scenario)["agents"] is True
+
+
+def test_pinned_factory_rejects_repeated_float32_max_dimension() -> None:
+    valid, raw_length, raw_width = _base_factory_dimension_tensors()
+    maximum = np.finfo(np.float32).max
+    assert np.all(valid[0])
+    raw_length[0] = maximum
+
+    state, _ = _factory_state_and_record(
+        raw_length=raw_length,
+        raw_width=raw_width,
+        valid=valid,
+    )
+    factory_length = np.asarray(state.log_trajectory.length[0])
+    assert np.all(np.isinf(factory_length))
+
+    with pytest.raises(WaymaxConversionError) as error:
+        _convert(state)
+    assert error.value.code == "dimension_not_constant"
+
+
+def test_pinned_factory_single_sample_locks_k_zero_and_max_boundary() -> None:
+    valid, raw_length, raw_width = _base_factory_dimension_tensors()
+    source_index = 1
+    source_step = 10
+    valid[source_index] = False
+    valid[source_index, source_step] = True
+    maximum = np.finfo(np.float32).max
+    raw_length[source_index] = np.nan
+    raw_length[source_index, source_step] = maximum
+
+    state, record = _factory_state_and_record(
+        raw_length=raw_length,
+        raw_width=raw_width,
+        valid=valid,
+    )
+    factory_length = np.asarray(
+        state.log_trajectory.length[source_index],
+        dtype=np.float32,
+    )
+    np.testing.assert_array_equal(
+        factory_length,
+        np.full(91, maximum, dtype=np.float32),
+    )
+
+    scenario = _convert(state)
+    assert validate_record_parity(record, scenario)["agents"] is True
+    expected, correct_bound = _reference_dimension_mean_and_bound(
+        record.audit["state/all/length"][source_index],
+        valid[source_index],
+    )
+    epsilon = float(np.finfo(np.float32).eps)
+    wrong_gamma = epsilon / (1.0 - epsilon)
+    wrong_k_one_bound = expected * (
+        wrong_gamma + epsilon * (1.0 + wrong_gamma)
+    )
+    contradiction = (correct_bound + wrong_k_one_bound) / 2.0
+    assert correct_bound < contradiction < wrong_k_one_bound
+
+    contradicted_agents = list(scenario.agents)
+    contradicted_agents[source_index] = dataclasses.replace(
+        contradicted_agents[source_index],
+        length=expected + contradiction,
+    )
+    contradicted = dataclasses.replace(
+        scenario,
+        agents=contradicted_agents,
+    )
+    with pytest.raises(WaymaxDataError, match="parity_dimensions"):
+        validate_record_parity(record, contradicted)
+
+
+def test_varied_raw_dimensions_match_factory_broadcast_and_parity(
+    varied_raw_dimension_record,
+) -> None:
+    state, record = varied_raw_dimension_record
+    valid = np.asarray(record.audit["state/all/valid"], dtype=bool)
+    trajectory = state.log_trajectory
+
+    for source_index in np.flatnonzero(np.any(valid, axis=1)):
+        raw_length = record.audit["state/all/length"][source_index]
+        raw_width = record.audit["state/all/width"][source_index]
+        assert np.unique(raw_length[valid[source_index]]).size > 1
+        assert np.unique(raw_width[valid[source_index]]).size > 1
+        expected_length, length_bound = _reference_dimension_mean_and_bound(
+            raw_length,
+            valid[source_index],
+        )
+        expected_width, width_bound = _reference_dimension_mean_and_bound(
+            raw_width,
+            valid[source_index],
+        )
+        actual_length = np.asarray(trajectory.length[source_index])
+        actual_width = np.asarray(trajectory.width[source_index])
+        np.testing.assert_array_equal(
+            actual_length,
+            np.full(trajectory.num_timesteps, actual_length[0]),
+        )
+        np.testing.assert_array_equal(
+            actual_width,
+            np.full(trajectory.num_timesteps, actual_width[0]),
+        )
+        assert math.isclose(
+            float(actual_length[0]),
+            expected_length,
+            rel_tol=0.0,
+            abs_tol=length_bound,
+        )
+        assert math.isclose(
+            float(actual_width[0]),
+            expected_width,
+            rel_tol=0.0,
+            abs_tol=width_bound,
+        )
+
+    counterexample_index = 2
+    assert np.count_nonzero(valid[counterexample_index]) == 54
+    np.testing.assert_array_equal(
+        record.audit["state/all/length"][counterexample_index],
+        np.float32(5.0)
+        + np.arange(91, dtype=np.float32) * np.float32(0.0037),
+    )
+    numpy_mean = _float32_masked_mean(
+        record.audit["state/all/length"][counterexample_index],
+        valid[counterexample_index],
+    )
+    factory_mean = np.asarray(
+        trajectory.length[counterexample_index],
+        dtype=np.float32,
+    )[0]
+    assert abs(float(numpy_mean) - float(factory_mean)) > 1e-6
+
+    scenario = _convert(state)
+    assert validate_record_parity(record, scenario)["agents"] is True
+
+
+def test_dimension_parity_rejects_raw_valid_sample_mean_drift(
+    varied_raw_dimension_record,
+) -> None:
+    state, record = varied_raw_dimension_record
+    valid = np.asarray(record.audit["state/all/valid"], dtype=bool)
+    source_index = 0
+    source_step = int(np.flatnonzero(valid[source_index])[0])
+    drifted_audit = dict(record.audit)
+    drifted_length = np.array(
+        drifted_audit["state/all/length"],
+        copy=True,
+    )
+    before, before_bound = _reference_dimension_mean_and_bound(
+        drifted_length[source_index],
+        valid[source_index],
+    )
+    drifted_length[source_index, source_step] += np.float32(0.01)
+    after, after_bound = _reference_dimension_mean_and_bound(
+        drifted_length[source_index],
+        valid[source_index],
+    )
+    actual = _convert(state).agents[source_index].length
+    assert math.isclose(
+        actual,
+        before,
+        rel_tol=0.0,
+        abs_tol=before_bound,
+    )
+    assert not math.isclose(
+        actual,
+        after,
+        rel_tol=0.0,
+        abs_tol=after_bound,
+    )
+    drifted_audit["state/all/length"] = drifted_length
+
+    with pytest.raises(WaymaxDataError, match="parity_dimensions"):
+        validate_record_parity(
+            dataclasses.replace(record, audit=drifted_audit),
+            _convert(state),
+        )
+
+
+def test_dimension_parity_ignores_invalid_raw_payload(
+    varied_raw_dimension_record,
+) -> None:
+    state, record = varied_raw_dimension_record
+    valid = np.asarray(record.audit["state/all/valid"], dtype=bool)
+    source_index = 1
+    source_step = int(np.flatnonzero(~valid[source_index])[0])
+    drifted_audit = dict(record.audit)
+    drifted_length = np.array(
+        drifted_audit["state/all/length"],
+        copy=True,
+    )
+    drifted_width = np.array(
+        drifted_audit["state/all/width"],
+        copy=True,
+    )
+    expected_length = _reference_dimension_mean_and_bound(
+        drifted_length[source_index],
+        valid[source_index],
+    )
+    expected_width = _reference_dimension_mean_and_bound(
+        drifted_width[source_index],
+        valid[source_index],
+    )
+    drifted_length[source_index, source_step] = np.float32(-1.0e20)
+    drifted_width[source_index, source_step] = np.float32(np.nan)
+    assert (
+        _reference_dimension_mean_and_bound(
+            drifted_length[source_index],
+            valid[source_index],
+        )
+        == expected_length
+    )
+    assert (
+        _reference_dimension_mean_and_bound(
+            drifted_width[source_index],
+            valid[source_index],
+        )
+        == expected_width
+    )
+    drifted_audit["state/all/length"] = drifted_length
+    drifted_audit["state/all/width"] = drifted_width
+
+    assert (
+        validate_record_parity(
+            dataclasses.replace(record, audit=drifted_audit),
+            _convert(state),
+        )["agents"]
+        is True
+    )
+
+
+@pytest.mark.parametrize(
+    "invalid_sample",
+    [
+        pytest.param(np.float32(np.nan), id="nan"),
+        pytest.param(np.float32(np.inf), id="positive-infinity"),
+        pytest.param(np.float32(-np.inf), id="negative-infinity"),
+        pytest.param(np.float32(0.0), id="zero"),
+        pytest.param(np.float32(-1.0), id="negative"),
+        pytest.param(
+            np.nextafter(np.float32(0.0), np.float32(1.0)),
+            id="positive-subnormal",
+        ),
+    ],
+)
+def test_dimension_parity_rejects_invalid_valid_raw_samples(
+    varied_raw_dimension_record,
+    invalid_sample: np.float32,
+) -> None:
+    state, record = varied_raw_dimension_record
+    valid = np.asarray(record.audit["state/all/valid"], dtype=bool)
+    source_index = 0
+    source_step = int(np.flatnonzero(valid[source_index])[0])
+    invalid_audit = dict(record.audit)
+    invalid_length = np.array(
+        invalid_audit["state/all/length"],
+        copy=True,
+    )
+    invalid_length[source_index, source_step] = invalid_sample
+    invalid_audit["state/all/length"] = invalid_length
+
+    with pytest.raises(WaymaxDataError, match="parity_dimensions"):
+        validate_record_parity(
+            dataclasses.replace(record, audit=invalid_audit),
+            _convert(state),
+        )
+
+
+def test_dimension_parity_rejects_scalar_beyond_analytic_bound(
+    varied_raw_dimension_record,
+) -> None:
+    state, record = varied_raw_dimension_record
+    scenario = _convert(state)
+    valid = np.asarray(record.audit["state/all/valid"], dtype=bool)
+    source_index = 2
+    expected, absolute_tolerance = _reference_dimension_mean_and_bound(
+        record.audit["state/all/length"][source_index],
+        valid[source_index],
+    )
+    contradicted_agents = list(scenario.agents)
+    contradicted_agents[source_index] = dataclasses.replace(
+        contradicted_agents[source_index],
+        length=expected + 2.0 * absolute_tolerance,
+    )
+    contradicted = dataclasses.replace(
+        scenario,
+        agents=contradicted_agents,
+    )
+
+    assert (
+        abs(contradicted.agents[source_index].length - expected)
+        > absolute_tolerance
+    )
+    with pytest.raises(WaymaxDataError, match="parity_dimensions"):
+        validate_record_parity(record, contradicted)
 
 
 def test_conversion_preserves_supported_agents_time_dimensions_and_order() -> None:

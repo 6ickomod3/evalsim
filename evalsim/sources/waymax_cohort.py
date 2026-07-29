@@ -30,7 +30,7 @@ from .waymax import (
     WOMD_DATASET_VERSION,
 )
 
-M4_SELECTOR_VERSION = "3"
+M4_SELECTOR_VERSION = "4"
 M4_MANIFEST_SCHEMA_VERSION = "1"
 
 M4_SHARD_SUFFIXES = tuple(f"{index:05d}" for index in range(10))
@@ -97,6 +97,10 @@ _VALID_MOTION_FIELDS = (
     "state/all/bbox_yaw",
 )
 _DIMENSION_FIELDS = ("state/all/length", "state/all/width")
+_FLOAT32_TINY = float(np.finfo(np.float32).tiny)
+_FLOAT32_EPS = float(np.finfo(np.float32).eps)
+_FLOAT32_MAX = float(np.finfo(np.float32).max)
+_MAX_DIMENSION_SAMPLE_COUNT = 91
 _LANE_TYPE_IDS = frozenset({0, 1, 2, 3})
 _ROAD_EDGE_TYPE_IDS = frozenset({14, 15, 16})
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
@@ -240,10 +244,44 @@ def selector_config_payload() -> dict[str, Any]:
             "valid_motion_fields": list(_VALID_MOTION_FIELDS),
             "dimensions": {
                 "fields": list(_DIMENSION_FIELDS),
-                "rule": (
-                    "finite_positive_exactly_constant_valid_frames_only_"
-                    "ignore_invalid_payload"
-                ),
+                "sample_gate": {
+                    "scope": "retained_objects_valid_frames_only",
+                    "source_dtype": "float32",
+                    "invalid_frame_payload": "ignored",
+                    "requirements": [
+                        "finite",
+                        "greater_than_or_equal_to_float32_tiny",
+                    ],
+                    "minimum_normal_inclusive": {
+                        "expression": "float(numpy_finfo_float32_tiny)",
+                        "value": _FLOAT32_TINY,
+                    },
+                    "fatal_code": "dimension_valid_value_invalid",
+                },
+                "scalar_safety": {
+                    "selected": "raw_float32_values_at_valid_frames",
+                    "n": "valid_sample_count",
+                    "n_inclusive": [1, _MAX_DIMENSION_SAMPLE_COUNT],
+                    "reference_sum": (
+                        "math.fsum(float(value) for value in selected)"
+                    ),
+                    "eps": {
+                        "expression": "float(numpy_finfo_float32_eps)",
+                        "value": _FLOAT32_EPS,
+                    },
+                    "k": "n-1",
+                    "gamma": "(k*eps)/(1-k*eps)",
+                    "float32_max": {
+                        "expression": "float(numpy_finfo_float32_max)",
+                        "value": _FLOAT32_MAX,
+                    },
+                    "overflow_guard": (
+                        "reference_sum*(1+gamma)<=float32_max"
+                    ),
+                    "fatal_code": "dimension_scalar_invalid",
+                },
+                "valid_frame_constancy_required": False,
+                "variation_tolerance": None,
             },
             "timestamps": {
                 "field": "state/all/timestamp_micros",
@@ -357,6 +395,34 @@ def selector_config_payload() -> dict[str, Any]:
         "parity": {
             "float_rtol": 0.0,
             "float_atol": 1e-6,
+            "float_atol_applies_to_dimensions": False,
+            "dimensions": {
+                "selected": "raw_float32_values_at_valid_frames",
+                "source_dtype": "float32",
+                "sample_requirements": [
+                    "finite",
+                    "greater_than_or_equal_to_float32_tiny",
+                ],
+                "minimum_normal_inclusive": {
+                    "expression": "float(numpy_finfo_float32_tiny)",
+                    "value": _FLOAT32_TINY,
+                },
+                "n": "valid_sample_count",
+                "reference_sum": (
+                    "math.fsum(float(value) for value in selected)"
+                ),
+                "reference_mean": "reference_sum/n",
+                "eps": {
+                    "expression": "float(numpy_finfo_float32_eps)",
+                    "value": _FLOAT32_EPS,
+                },
+                "k": "n-1",
+                "gamma": "(k*eps)/(1-k*eps)",
+                "comparison": {
+                    "rtol": 0.0,
+                    "abs_tol": "reference_mean*(gamma+eps*(1+gamma))",
+                },
+            },
             "exact_fields": [
                 "native_identity",
                 "agent_order",
@@ -1195,16 +1261,27 @@ def _validated_audit_arrays(
             )
     for name in _DIMENSION_FIELDS:
         for source_index in np.flatnonzero(retained):
-            values = arrays[name][source_index, valid[source_index]]
-            if (
-                not np.all(np.isfinite(values))
-                or np.any(values <= 0.0)
-                or not np.all(values == values[0])
+            source_valid = valid[source_index]
+            valid_values = arrays[name][source_index, source_valid]
+            if not np.all(np.isfinite(valid_values)) or np.any(
+                valid_values < np.float32(_FLOAT32_TINY)
             ):
                 _fail(
-                    "dimension_not_constant",
-                    f"{name} must be finite, positive, and exactly constant "
-                    "over valid frames",
+                    "dimension_valid_value_invalid",
+                    f"{name} must be finite and at least the smallest normal "
+                    "float32 value at every valid frame",
+                )
+            n = int(valid_values.size)
+            k = n - 1
+            gamma = (k * _FLOAT32_EPS) / (1.0 - k * _FLOAT32_EPS)
+            # For n > 1 the float32 gamma margin dominates binary64 ``fsum``
+            # rounding; for n == 1 a float32 input is exact in binary64.
+            reference_sum = math.fsum(float(value) for value in valid_values)
+            if reference_sum * (1.0 + gamma) > _FLOAT32_MAX:
+                _fail(
+                    "dimension_scalar_invalid",
+                    f"{name} can overflow a float32 validity-masked sum under "
+                    "the frozen worst-case rounding bound",
                 )
 
     canonical_timestamps = np.empty(91, dtype=np.int64)

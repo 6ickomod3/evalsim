@@ -5,10 +5,12 @@ import dataclasses
 import hashlib
 import json
 import math
+import warnings
 
 import numpy as np
 import pytest
 
+from evalsim.sources.waymax import WAYMAX_ADAPTER_SCHEMA_VERSION
 from evalsim.sources.waymax_cohort import (
     CohortInvariantError,
     CohortSelectionError,
@@ -16,6 +18,7 @@ from evalsim.sources.waymax_cohort import (
     M4_COHORT_TARGET,
     M4_IDM_SUBSET_DOMAIN,
     M4_INITIAL_QUOTAS,
+    M4_MANIFEST_SCHEMA_VERSION,
     M4_REDISTRIBUTION_DOMAIN,
     M4_SELECTOR_CONFIG_FINGERPRINT,
     M4_SELECTOR_VERSION,
@@ -43,6 +46,9 @@ _SELECTOR_V2_CONFIG_FINGERPRINT = (
 )
 _SELECTOR_V3_CONFIG_FINGERPRINT = (
     "0d91228261c9da99cd88f3c069e0d6db9a905c144f6b2d2ad075709002c68b93"
+)
+_SELECTOR_V4_CONFIG_FINGERPRINT = (
+    "6a0caa5b7467cbb0dfe92fe3a29d890eda9348c159b6491d1aaa9021e19d91b9"
 )
 
 
@@ -346,8 +352,8 @@ def test_source_map_rule_matches_m3_boundaries(mutate, expected) -> None:
             "nonfinite_valid_motion",
         ),
         (
-            lambda audit: audit["state/all/length"].__setitem__((0, 5), 4.1),
-            "dimension_not_constant",
+            lambda audit: audit["state/all/length"].__setitem__((0, 5), np.nan),
+            "dimension_valid_value_invalid",
         ),
         (
             lambda audit: audit["state/all/timestamp_micros"].__setitem__(
@@ -552,22 +558,90 @@ def test_source_int64_normalization_accepts_signed_int32_boundaries(
     assert source_rejection_code(audit) is None
 
 
-def test_source_dimensions_ignore_invalid_frame_lifecycle_payload() -> None:
+def test_source_dimensions_allow_varied_positive_valid_length_and_width() -> None:
     audit = _audit()
-    lifecycle_slot = 2
-    audit["state/id"][lifecycle_slot] = 303.0
-    audit["state/type"][lifecycle_slot] = 2.0
-    audit["state/all/valid"][lifecycle_slot, (10, 12)] = 1
-    audit["state/all/length"][lifecycle_slot] = np.nan
-    audit["state/all/width"][lifecycle_slot] = -123.0
-    audit["state/all/length"][lifecycle_slot, (10, 12)] = 4.5
-    audit["state/all/width"][lifecycle_slot, (10, 12)] = 1.75
+    audit["state/all/length"][0] = np.linspace(
+        np.float32(3.0),
+        np.float32(5.0),
+        91,
+        dtype=np.float32,
+    )
+    audit["state/all/width"][1] = np.linspace(
+        np.float32(1.5),
+        np.float32(2.5),
+        91,
+        dtype=np.float32,
+    )
 
     assert source_rejection_code(audit) is None
 
 
 @pytest.mark.parametrize("name", ("state/all/length", "state/all/width"))
-@pytest.mark.parametrize("value", (np.nan, 0.0, -1.0, 9.0))
+def test_source_dimensions_accept_smallest_normal_valid_sample(name) -> None:
+    audit = _audit()
+    audit[name][1, 20] = np.finfo(np.float32).tiny
+
+    assert source_rejection_code(audit) is None
+
+
+def test_source_dimension_single_sample_accepts_float32_max_boundary() -> None:
+    audit = _audit()
+    source_index = 2
+    source_step = 10
+    audit["state/id"][source_index] = 303.0
+    audit["state/type"][source_index] = 2.0
+    audit["state/all/valid"][source_index, source_step] = 1
+    for name in ("state/all/length", "state/all/width"):
+        audit[name][source_index] = np.nan
+        audit[name][source_index, source_step] = np.finfo(np.float32).max
+    before = _copy_audit(audit)
+
+    assert source_rejection_code(audit) is None
+    for name in audit:
+        np.testing.assert_array_equal(audit[name], before[name])
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        np.float32(np.nan),
+        np.float32(np.inf),
+        np.float32(-np.inf),
+        np.float32(0.0),
+        np.float32(-1.0),
+        np.nextafter(
+            np.finfo(np.float32).tiny,
+            np.float32(0.0),
+        ),
+    ),
+)
+def test_source_dimensions_ignore_every_invalid_frame_payload(value) -> None:
+    audit = _audit()
+    audit["state/all/valid"][1, 20] = 0
+    audit["state/all/length"][1, 20] = value
+    audit["state/all/width"][1, 20] = value
+    before = _copy_audit(audit)
+
+    assert source_rejection_code(audit) is None
+    for name in audit:
+        np.testing.assert_array_equal(audit[name], before[name])
+
+
+@pytest.mark.parametrize("name", ("state/all/length", "state/all/width"))
+@pytest.mark.parametrize(
+    "value",
+    (
+        np.float32(np.nan),
+        np.float32(np.inf),
+        np.float32(-np.inf),
+        np.float32(0.0),
+        np.float32(-1.0),
+        np.nextafter(
+            np.finfo(np.float32).tiny,
+            np.float32(0.0),
+        ),
+    ),
+)
 def test_source_dimensions_reject_invalid_valid_frame_values(
     name,
     value,
@@ -576,7 +650,56 @@ def test_source_dimensions_reject_invalid_valid_frame_values(
     audit[name][1, 20] = value
     with pytest.raises(CohortInvariantError) as error:
         source_rejection_code(audit)
-    assert error.value.code == "dimension_not_constant"
+    assert error.value.code == "dimension_valid_value_invalid"
+
+
+@pytest.mark.parametrize("name", ("state/all/length", "state/all/width"))
+def test_source_dimension_float32_sum_overflow_risk_is_fatal_without_warning(
+    name,
+) -> None:
+    audit = _audit()
+    audit[name][1] = np.finfo(np.float32).max
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        with pytest.raises(CohortInvariantError) as error:
+            source_rejection_code(audit)
+    assert error.value.code == "dimension_scalar_invalid"
+
+
+@pytest.mark.parametrize("name", ("state/all/length", "state/all/width"))
+def test_source_dimension_scalar_safety_is_order_independent(name) -> None:
+    float32 = np.finfo(np.float32)
+    sample_count = 91
+    epsilon = float(float32.eps)
+    reduction_steps = sample_count - 1
+    gamma = (
+        reduction_steps
+        * epsilon
+        / (1.0 - reduction_steps * epsilon)
+    )
+    weights = np.linspace(
+        np.float32(0.5),
+        np.float32(1.5),
+        91,
+        dtype=np.float32,
+    )
+    guarded_sum_target = float(float32.max) * 0.99 / (1.0 + gamma)
+    scale = np.float32(
+        guarded_sum_target
+        / math.fsum(float(value) for value in weights)
+    )
+    safe_values = (weights * scale).astype(np.float32)
+    reference_sum = math.fsum(float(value) for value in safe_values)
+    guard_ratio = (
+        reference_sum * (1.0 + gamma) / float(float32.max)
+    )
+    assert 0.98 < guard_ratio < 1.0
+
+    for values in (safe_values, safe_values[::-1]):
+        audit = _audit()
+        audit[name][1] = values
+        assert source_rejection_code(audit) is None
 
 
 @pytest.mark.parametrize(
@@ -593,7 +716,7 @@ def test_source_config_shapes_require_exact_128_and_30000(mutate) -> None:
         source_rejection_code(audit)
 
 
-def test_ranking_messages_and_v2_vectors_are_unchanged_in_v3() -> None:
+def test_ranking_messages_and_prior_selector_vectors_are_unchanged_in_v4() -> None:
     vectors = {
         M4_COHORT_DOMAIN: (
             "edaac9ea4b0e5e50b630f38dd833004169e0141b7714b626241d796f1d112a57"
@@ -899,7 +1022,9 @@ def test_manifest_scalars_are_normalized_to_json_native_ints() -> None:
     json.dumps(counts.to_dict(), allow_nan=False)
 
 
-def test_manifest_is_byte_stable_immutable_and_exclusive_create(tmp_path) -> None:
+def test_v4_manifest_roundtrip_is_byte_stable_immutable_and_exclusive_create(
+    tmp_path,
+) -> None:
     eligible_counts = dict(M4_INITIAL_QUOTAS)
     events, counts = _events_with_counts(
         eligible_counts,
@@ -912,6 +1037,8 @@ def test_manifest_is_byte_stable_immutable_and_exclusive_create(tmp_path) -> Non
 
     restored = WaymaxCohortManifest.from_json(manifest.to_json())
     assert restored == manifest
+    assert restored.selector_version == "4"
+    assert restored.selector_config_fingerprint == _SELECTOR_V4_CONFIG_FINGERPRINT
     assert restored.canonical_bytes() == manifest.canonical_bytes()
     assert restored.sha256 == manifest.sha256
     assert manifest.to_json() == manifest.to_json()
@@ -991,14 +1118,24 @@ def test_manifest_rejects_noncanonical_schema_and_duplicate_json_keys() -> None:
         WaymaxCohortManifest.from_json(duplicate)
 
 
-def test_manifest_rejects_v2_selector_identity() -> None:
+@pytest.mark.parametrize(
+    ("selector_version", "selector_fingerprint"),
+    (
+        ("2", _SELECTOR_V2_CONFIG_FINGERPRINT),
+        ("3", _SELECTOR_V3_CONFIG_FINGERPRINT),
+    ),
+)
+def test_manifest_rejects_prior_selector_identity(
+    selector_version,
+    selector_fingerprint,
+) -> None:
     events, counts = _events_with_counts(dict(M4_INITIAL_QUOTAS))
     manifest = WaymaxCohortManifest.build(events=events, shard_counts=counts)
     payload = manifest.to_dict()
-    payload["selector_config_fingerprint"] = _SELECTOR_V2_CONFIG_FINGERPRINT
-    payload["selector_version"] = "2"
+    payload["selector_config_fingerprint"] = selector_fingerprint
+    payload["selector_version"] = selector_version
     for event in payload["events"]:
-        event["selector_version"] = "2"
+        event["selector_version"] = selector_version
 
     with pytest.raises(CohortInvariantError) as error:
         WaymaxCohortManifest.from_json(_canonical_text(payload))
@@ -1031,10 +1168,15 @@ def test_manifest_requires_exact_ordinal_sequence_and_unique_identity() -> None:
 def test_selector_payload_fingerprint_freezes_every_rule_and_is_defensive() -> None:
     payload = selector_config_payload()
     assert selector_config_fingerprint() == M4_SELECTOR_CONFIG_FINGERPRINT
-    assert M4_SELECTOR_CONFIG_FINGERPRINT == _SELECTOR_V3_CONFIG_FINGERPRINT
+    assert M4_SELECTOR_CONFIG_FINGERPRINT == _SELECTOR_V4_CONFIG_FINGERPRINT
     assert M4_SELECTOR_CONFIG_FINGERPRINT != _SELECTOR_V2_CONFIG_FINGERPRINT
-    assert M4_SELECTOR_VERSION == "3"
-    assert payload["selector_version"] == "3"
+    assert M4_SELECTOR_CONFIG_FINGERPRINT != _SELECTOR_V3_CONFIG_FINGERPRINT
+    assert M4_SELECTOR_VERSION == "4"
+    assert M4_MANIFEST_SCHEMA_VERSION == "1"
+    assert WAYMAX_ADAPTER_SCHEMA_VERSION == "1"
+    assert payload["selector_version"] == "4"
+    assert payload["manifest"]["schema_version"] == "1"
+    assert payload["versions"]["adapter_schema_version"] == "1"
     assert payload["source_predicate"]["audit_boundary"] == (
         "after_pinned_waymax_tensorflow_preprocess_"
         "before_jax_waymax_factory"
@@ -1122,10 +1264,43 @@ def test_selector_payload_fingerprint_freezes_every_rule_and_is_defensive() -> N
             "preserve_original_case_and_length",
         ],
     }
-    assert payload["source_predicate"]["dimensions"]["rule"] == (
-        "finite_positive_exactly_constant_valid_frames_only_"
-        "ignore_invalid_payload"
-    )
+    assert payload["source_predicate"]["dimensions"] == {
+        "fields": ["state/all/length", "state/all/width"],
+        "sample_gate": {
+            "scope": "retained_objects_valid_frames_only",
+            "source_dtype": "float32",
+            "invalid_frame_payload": "ignored",
+            "requirements": [
+                "finite",
+                "greater_than_or_equal_to_float32_tiny",
+            ],
+            "minimum_normal_inclusive": {
+                "expression": "float(numpy_finfo_float32_tiny)",
+                "value": float(np.finfo(np.float32).tiny),
+            },
+            "fatal_code": "dimension_valid_value_invalid",
+        },
+        "scalar_safety": {
+            "selected": "raw_float32_values_at_valid_frames",
+            "n": "valid_sample_count",
+            "n_inclusive": [1, 91],
+            "reference_sum": "math.fsum(float(value) for value in selected)",
+            "eps": {
+                "expression": "float(numpy_finfo_float32_eps)",
+                "value": float(np.finfo(np.float32).eps),
+            },
+            "k": "n-1",
+            "gamma": "(k*eps)/(1-k*eps)",
+            "float32_max": {
+                "expression": "float(numpy_finfo_float32_max)",
+                "value": float(np.finfo(np.float32).max),
+            },
+            "overflow_guard": "reference_sum*(1+gamma)<=float32_max",
+            "fatal_code": "dimension_scalar_invalid",
+        },
+        "valid_frame_constancy_required": False,
+        "variation_tolerance": None,
+    }
     assert payload["ranking"]["domains"] == {
         "cohort": M4_COHORT_DOMAIN,
         "redistribution": M4_REDISTRIBUTION_DOMAIN,
@@ -1166,6 +1341,32 @@ def test_selector_payload_fingerprint_freezes_every_rule_and_is_defensive() -> N
     assert payload["vmap"]["pair_size"] == 2
     assert payload["parity"]["float_rtol"] == 0.0
     assert payload["parity"]["float_atol"] == 1e-6
+    assert payload["parity"]["float_atol_applies_to_dimensions"] is False
+    assert payload["parity"]["dimensions"] == {
+        "selected": "raw_float32_values_at_valid_frames",
+        "source_dtype": "float32",
+        "sample_requirements": [
+            "finite",
+            "greater_than_or_equal_to_float32_tiny",
+        ],
+        "minimum_normal_inclusive": {
+            "expression": "float(numpy_finfo_float32_tiny)",
+            "value": float(np.finfo(np.float32).tiny),
+        },
+        "n": "valid_sample_count",
+        "reference_sum": "math.fsum(float(value) for value in selected)",
+        "reference_mean": "reference_sum/n",
+        "eps": {
+            "expression": "float(numpy_finfo_float32_eps)",
+            "value": float(np.finfo(np.float32).eps),
+        },
+        "k": "n-1",
+        "gamma": "(k*eps)/(1-k*eps)",
+        "comparison": {
+            "rtol": 0.0,
+            "abs_tol": "reference_mean*(gamma+eps*(1+gamma))",
+        },
+    }
     assert payload["manifest"]["clean_eof_required"] is True
 
     payload["cohort"]["target"] = 1

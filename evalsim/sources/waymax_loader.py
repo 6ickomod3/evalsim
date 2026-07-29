@@ -1301,11 +1301,13 @@ def validate_record_parity(
                 "invalid heading payloads are not deterministic zeroes",
             )
 
-        expected_length = _reference_masked_mean(
-            raw_length[source_index],
-            source_valid,
+        expected_length, length_abs_tol = (
+            _reference_dimension_mean_and_tolerance(
+                raw_length[source_index],
+                source_valid,
+            )
         )
-        expected_width = _reference_masked_mean(
+        expected_width, width_abs_tol = _reference_dimension_mean_and_tolerance(
             raw_width[source_index],
             source_valid,
         )
@@ -1313,12 +1315,12 @@ def validate_record_parity(
             agent.length,
             expected_length,
             rel_tol=0.0,
-            abs_tol=1e-6,
+            abs_tol=length_abs_tol,
         ) or not math.isclose(
             agent.width,
             expected_width,
             rel_tol=0.0,
-            abs_tol=1e-6,
+            abs_tol=width_abs_tol,
         ):
             raise WaymaxDataError(
                 "parity_dimensions",
@@ -1396,14 +1398,45 @@ def validate_record_parity(
     )
 
 
-def _reference_masked_mean(values: np.ndarray, valid: np.ndarray) -> float:
+def _reference_dimension_mean_and_tolerance(
+    values: np.ndarray,
+    valid: np.ndarray,
+) -> tuple[float, float]:
+    """Return a high-accuracy raw mean and float32 arithmetic error bound."""
     selected = np.asarray(values, dtype=np.float32)[valid]
     if selected.size == 0:
         raise WaymaxDataError(
             "parity_dimensions",
             "a retained reference object has no valid dimension samples",
         )
-    return float(np.sum(selected, dtype=np.float32) / np.float32(selected.size))
+    minimum_normal = np.finfo(np.float32).tiny
+    if not np.all(np.isfinite(selected)) or np.any(selected < minimum_normal):
+        raise WaymaxDataError(
+            "parity_dimensions",
+            "valid reference dimensions must be finite, normal, and positive",
+        )
+
+    sample_count = int(selected.size)
+    # Binary64 ``fsum`` rounding is dominated by the conservative float32
+    # reduction/division bound below; every selected input is already float32.
+    reference_mean = (
+        math.fsum(float(value) for value in selected) / sample_count
+    )
+    epsilon = float(np.finfo(np.float32).eps)
+    reduction_steps = sample_count - 1
+    denominator = 1.0 - reduction_steps * epsilon
+    if denominator <= 0.0:
+        raise WaymaxDataError(
+            "parity_dimensions",
+            "the reference dimension reduction exceeds its analytic error domain",
+        )
+    gamma = reduction_steps * epsilon / denominator
+    # ``gamma`` bounds a float32 reduction of positive samples; the second
+    # epsilon term conservatively includes the final float32 division.
+    absolute_tolerance = reference_mean * (
+        gamma + epsilon * (1.0 + gamma)
+    )
+    return reference_mean, absolute_tolerance
 
 
 def _independent_reference_map(

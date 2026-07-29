@@ -1,7 +1,7 @@
 # WOMD / Waymax M4 execution crosswalk
 
-**Status:** Selector-v3 padding correction pending clean-commit rerun; M4 metric
-parity is not run here
+**Status:** Selector-v4 numerical dimension-contract correction pending
+clean-commit rerun; payload gate closed; M4 metric parity is not run here
 **Dataset profile:** WOMD v1.3.1 TFExample validation, 10 past + 1 current +
 80 future frames
 **Waymax revision:** `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`
@@ -47,7 +47,7 @@ driving, geography, or any broader population.
 
 ## Selector and source boundary
 
-### Selector-v2/v3 representation corrections
+### Selector-v2/v3/v4 representation corrections
 
 The first bound attempt exposed an implementation mismatch between the
 pre-registered source boundary and the arrays used by the selector. Selector
@@ -66,6 +66,42 @@ not a per-record observation or result. Selector v3 admits only exact int64
 maps only exact `1` to semantic true as the pinned Waymax factory does. Validity
 masks remain strictly binary. Eligibility predicates and ranking are still
 unchanged, and this correction unlocks no M4 result claim.
+
+Independent review of the pinned factory contract also established that raw
+per-frame length and width are reduced to a validity-masked float32 mean and
+broadcast across time. An initial selector-v4 exact diff admitted every finite,
+strictly positive float32 sample and compared an independently reduced NumPy mean
+with fixed `atol=1e-6`. Adversarial semantic review **BLOCKED** that diff before
+any further payload access: invented synthetic counterexamples exposed
+NumPy/JAX reduction-order disagreement outside a fixed absolute tolerance and
+showed that a positive subnormal input can flush to zero in the pinned JAX path.
+Those counterexamples are numerical-contract evidence only, not WOMD evidence.
+
+Corrected selector v4 ignores invalid-frame payload and requires each valid-frame
+dimension sample to be a finite, positive **normal** float32 value, at least
+`finfo(float32).tiny`. For `n` valid samples, let `k = n - 1`, define float32
+machine epsilon `eps` and maximum finite value `max`, and let
+`S = math.fsum(valid_samples)` be the high-accuracy reference sum. The analytic
+float32 margin dominates its binary64 rounding. Define
+`gamma_k = k * eps / (1 - k * eps)`. The source gate requires
+`S * (1 + gamma_k) <= max`; this is an order-independent conservative overflow
+guard for any positive-sample reduction order.
+
+The actual pinned factory must still emit one finite, strictly positive scalar
+broadcast across all 91 trajectory steps. A 91-step adversarial synthetic oracle
+must exercise the actual pinned factory, including ordering, magnitude-boundary,
+normal-boundary, and ignored-invalid-payload cases. Independent dimension parity
+uses `mean = math.fsum(valid_samples) / n`, `rtol=0`, and
+`abs_tol = mean * (gamma_k + eps * (1 + gamma_k))`. This analytic
+machine-error bound is derived from the float32 reduction and division operations;
+it is not an observed-data threshold, result-tuned tolerance, or claim of bitwise
+NumPy/JAX reduction identity. Unrelated supported float32 fields retain
+`rtol=0, atol=1e-6`.
+
+Selector v4 adds no observed variation threshold. Eligibility predicates,
+their priority, ranking domains and vectors, quotas, redistribution, fallback,
+and execution scopes remain unchanged. The payload gate remains closed, and
+this correction unlocks no M4 result claim.
 
 ### Population
 
@@ -202,8 +238,10 @@ agree on the same wrong value. Synthetic contradiction fixtures alter one
 supported field at a time, including timestamp, and must be rejected.
 
 Integer identities, ordering, masks, timestamps, and timesteps are exact.
-Supported valid float32 fields use `rtol=0, atol=1e-6`. Only values under a
-false validity mask may be canonicalized before comparison.
+Supported valid float32 fields other than dimensions use
+`rtol=0, atol=1e-6`. Dimension scalar parity uses the pre-registered
+high-accuracy-sum analytic bound above with `rtol=0`. Only values under a false
+validity mask may be canonicalized before comparison.
 
 ## Waymax privileged logged-trajectory waypoint-following IDM reference
 
@@ -369,7 +407,7 @@ Every observed difference must have exactly one stable category:
 | `invalid_fill_normalization` | Validity masks are exactly equal and only numeric payload under `valid=false` differs before zero canonicalization. |
 | `lifecycle_fallback` | The precomputed current/next validity request mask is false and the resulting agent/frame equals direct logged fallback. |
 | `initialized_overlap_exclusion` | The independent frame-zero overlap oracle matches Waymax and the excluded agent/frame equals logged fallback. |
-| `float32_representation` | Only a declared valid float field differs within `rtol=0, atol=1e-6`; identity, mask, time, order, and selection cannot use this category. |
+| `float32_representation` | Only a declared valid non-dimension float field differs within `rtol=0, atol=1e-6`, or a dimension scalar differs within its pre-registered high-accuracy-sum analytic bound with `rtol=0`; identity, mask, time, order, and selection cannot use this category. |
 | `policy_definition_difference` | The comparison is explicitly between differently defined EvalSim CV/IDM and Waymax IDM, outside an exact-parity gate. |
 | `defect` | Every other difference. |
 
