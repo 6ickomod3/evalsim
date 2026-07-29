@@ -23,13 +23,16 @@ Dataset License Agreement for Non-Commercial Use is instantiated below as
 
 Complete terms: <https://waymo.com/open/terms/>
 
-No Waymo Open Dataset data, TFRecord shard, dataset extract, or generated
-real-data output is included in this repository or its distributions. Dataset
-access and use remain governed by the complete terms above. Among other
-conditions, those terms limit use to Non-commercial Purposes and prohibit use or
-deployment of the Dataset, applicable models, weights, or biases in operating or
-assisting the operation of a vehicle, in Production Systems, or for other
-primarily commercial purposes. This is only a non-exhaustive summary.
+No Waymo Open Dataset data, TFRecord shard, dataset extract, per-scene/component
+result table, local run table, or generated experiment artifact is included in
+this repository or its distributions. The repository may include deliberately
+reviewed aggregate research results. Those aggregates are still results made
+using the governed materials; their access, use, and distribution remain subject
+to the complete upstream terms and this notice. Among other conditions, those
+terms limit use to Non-commercial Purposes and prohibit use or deployment of the
+Dataset, applicable models, weights, or biases in operating or assisting the
+operation of a vehicle, in Production Systems, or for other primarily commercial
+purposes. This is only a non-exhaustive summary.
 
 ## Waymax
 

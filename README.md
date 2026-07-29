@@ -41,13 +41,18 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M2 | Simulator adapters + rollout engine | ✅ | 🖥️ |
 | M3 | Local WOMD → Waymax/JAX → EvalSim vertical slice | ✅ | 🖥️ |
 | M4 | Deterministic WOMD cohort + Waymax parity | ✅ | 🖥️ |
-| M5 | Real-WOMD metrics + statistical scorecards | ⬜ | 🖥️ |
+| M5 | Real-WOMD metrics + statistical scorecards | 🚧 | 🖥️ |
 | M6 | Counterfactual closed-loop reactivity | ⬜ | 🖥️ |
 | M7 | Evaluator red-team + metric governance | ⬜ | 🖥️ |
 | M8 | JAX/Flax learned realism discriminator | ⬜ | 🖥️/☁️ |
 | M9 | Semantic-video and real camera/VLM bridge | ⬜ | 🖥️/☁️ |
 | M10 | Scalable, resumable evaluation pipeline | ⬜ | 🖥️/☁️ |
 | M11 | Decision package + staff-caliber communication | ⬜ | 🖥️ |
+
+M5 now has an
+[accepted, data-free pre-registration](docs/plans/2026-07-28-m5-real-womd-metrics-scorecards.md)
+after four adversarial review tracks. No M5 metric outcome has been inspected or
+claimed; implementation and real-cohort acceptance remain ahead.
 
 **Tests:** 493 passing + 1 local-data skip with the Waymo extra; 418 passing + 22
 optional-runtime skips core-only; focused M4 CLI 110 passing; locked M4 matrix 421
@@ -386,7 +391,8 @@ one-scenario vertical slice; M4 now supports the narrower substantive claim that
 log-playback mapping and rollout-contract semantics were cross-checked on a
 deterministic 128-scenario complete-case conditional cohort from ten WOMD validation
 shards, with bounded Waymax reference execution and a measured batch-two JAX CPU
-microbenchmark. Metrics, slices, confidence intervals, counterfactuals, stress tests,
-learned evaluators, scalable execution, and video/VLM work each remain unavailable as
-claims until their evidence gate passes. See the
+microbenchmark. Metrics, slices, paired finite-cohort effects and scene-reweighting
+stability analysis, counterfactuals, stress tests, learned evaluators, scalable
+execution, and video/VLM work each remain unavailable as claims until their evidence
+gate passes. See the
 [claim-to-evidence ledger](docs/interview/claim-evidence-ledger.md).

@@ -202,41 +202,57 @@ version 6. Raw data and all generated experiment artifacts remained local and ig
 
 ### M5 — Real-WOMD metric system and statistical scorecards
 
+**Status:** 🚧 Pre-registration accepted after four adversarial review tracks; data-free
+implementation is next. No M5 WOMD metric outcome has been inspected. The
+[`accepted M5 pre-registration`](2026-07-28-m5-real-womd-metrics-scorecards.md)
+supersedes the less-specific build bullets below.
+
 **Question:** Can independent metrics expose materially different simulator failures on
-real scenes without hiding uncertainty or collapsing realism into one score?
+the frozen real-scene cohort without hiding scene-level variation or collapsing motion
+quality into one score?
 
 **Build**
 
 - Implement the metric registry and per-scenario local result store.
 - Kinematics: speed, acceleration, jerk, yaw rate, feasibility, and distributional log
   divergence.
-- Interaction: overlap/collision, minimum distance, TTC, headway, and response latency
-  where eligible.
-- Map/route: offroad, wrong-way, lane distance, route progress, and condition adherence
-  where the source provides a condition.
+- Interaction: overlapping-target-frame rate, minimum center distance, and a capped
+  constant-velocity TTC proxy. Lane headway and response latency require stronger
+  lane/reactivity context and are deferred to M6.
+- Map/route: implement clearly named lane-proximity and lane-heading diagnostics from
+  retained 2-D contract geometry. Native offroad, path-distance, route, signal, and
+  condition semantics require typed context absent from the current contract and move
+  to the M6 context/ego-control design; do not reuse misleading upstream names for
+  approximations.
 - Temporal consistency: discontinuities, lifecycle flicker, and implausible state
   changes. These are motion-domain analogues, not camera-video metrics.
 - Validate custom definitions with analytic synthetic oracles and cross-check overlapping
   definitions against Waymax.
-- Pre-register WOMD slices for density, modeled-object count, vulnerable-road-user
-  presence, low TTC, maneuver/context proxies, signalization, and validity quality.
-- Add paired per-scenario effects, scenario-cluster bootstrap confidence intervals,
-  effect sizes, eligibility/missingness counts, small-slice warnings, and exploratory
-  multiple-testing controls.
+- Pre-register source-only slices for current density, a clearly labeled retained-world
+  count proxy, vulnerable-road-user presence, current low-TTC proxy, observed ego
+  maneuver, future lifecycle change, and retained-lane availability. Signalization is
+  deferred because the current contract lacks its typed timeline.
+- Add exact paired finite-cohort effects, deterministic scenario-resampling stability
+  bands, effect sizes, eligibility/missingness counts, small/sparse warnings, a fixed
+  complete comparison ledger, and adjusted primary stability bands. Do not present
+  fixed-cohort resampling as WOMD-population confidence or generate exploratory
+  significance claims.
 
 **Evidence gate**
 
 - All three EvalSim policies and at least one Waymax path run over the frozen cohort.
 - Every metric publishes its unit, direction, eligibility, invalid reasons, and retained
   component distribution.
-- Scorecards show paired effects and 95% confidence intervals; null and contradictory
-  results are retained.
+- Scorecards show exact paired effects and 95% scenario-resampling stability bands;
+  null and contradictory results are retained.
 - Equivalent Waymax/custom metrics meet documented tolerances or have an explained
   semantic mismatch.
 - No headline composite realism score is introduced.
 
-**Claim unlocked after acceptance:** built a sliced simulation-realism evaluation
-framework on WOMD with paired scenario-level uncertainty.
+**Claim unlocked after acceptance:** built a sliced motion-simulation evaluation
+framework on a locally auditable complete-case conditional WOMD cohort, with paired
+scenario-resampling stability analysis and pinned Waymax semantic cross-checks; this
+does not imply WOMD-population or simulator-superiority evidence.
 
 ### M6 — Counterfactual closed-loop reactivity
 
