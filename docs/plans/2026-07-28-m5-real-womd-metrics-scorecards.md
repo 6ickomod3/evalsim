@@ -3,9 +3,10 @@
 **Date:** 2026-07-28
 **Status:** Accepted pre-registration, data-free overlap-boundary amendment, data-free
 implementation, and official-runner implementation; both implementations are committed
-and pushed, the private-repository authentication amendment is accepted and awaiting
-its release commit, the bound real-WOMD acceptance remains pending, and no M5 WOMD
-outcome or native M5 WOMD parity result has been computed
+and pushed, the private-repository authentication amendment is accepted and released
+at `828f01524e5bdcd6bbf1932fdea31c2d242e9bae`, the bound real-WOMD acceptance
+remains pending, and no M5 WOMD outcome or native M5 WOMD parity result has been
+computed
 **Depends on:** accepted M4 execution snapshot
 `a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`
 **Population:** the unchanged accepted M4 complete-case conditional cohort of
@@ -958,4 +959,7 @@ configuration, or changing repository access. The implementation passed 69 focus
 official-CLI/runner tests, the full repository suite with 869 passing tests and one
 expected local-data skip, an exact live private-ref probe matching local `HEAD`, and
 three independent adversarial reviews with **ACCEPT** and no remaining P1/P2. A fresh
-committed and pushed runner snapshot remains required before a new WOMD invocation.
+runner snapshot was committed and pushed as
+`828f01524e5bdcd6bbf1932fdea31c2d242e9bae`; local `HEAD`, `origin/main`, the
+independent remote ref, and the amended live-ref probe all matched that commit. No
+WOMD or M5 output was accessed while closing this gate.
