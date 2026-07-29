@@ -3,8 +3,9 @@
 **Date:** 2026-07-28
 **Status:** Accepted pre-registration, data-free overlap-boundary amendment, data-free
 implementation, and official-runner implementation; both implementations are committed
-and pushed, the bound real-WOMD acceptance remains pending, and no M5 WOMD outcome or
-native M5 WOMD parity result has been computed
+and pushed, the private-repository authentication amendment is accepted and awaiting
+its release commit, the bound real-WOMD acceptance remains pending, and no M5 WOMD
+outcome or native M5 WOMD parity result has been computed
 **Depends on:** accepted M4 execution snapshot
 `a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`
 **Population:** the unchanged accepted M4 complete-case conditional cohort of
@@ -917,3 +918,44 @@ release-surface audits.
 - [x] Accepted official-runner implementation committed and pushed before WOMD
       execution (`c155d0d199b827a56417f288a41ea2437ea65127`).
 - [ ] Bound real-WOMD M5 execution, native metric parity, and result reviews completed.
+
+## 14. Pre-data private-repository transport amendment
+
+The first official invocation on 2026-07-29 rejected during the live-Git binding gate
+with `remote_main_mismatch`. The repository is private, while the accepted runner's
+isolated HTTPS probe intentionally removed every credential helper. The failure
+occurred inside `_git_binding`, before output-boundary creation, shard resolution,
+accepted-M4 verification, optional Waymo imports, or WOMD access. It created no M5
+result directory and unlocks no empirical claim.
+
+This amendment changes authentication transport only. It does not change the cohort,
+metrics, slices, statistics, parity rules, row domains, result schema, run profile, or
+claim gates. The live probe continues to use the literal canonical HTTPS URL and
+`refs/heads/main`, disables redirects, requires TLS verification, permits only HTTPS,
+uses `/` as its working directory, forbids prompts, and excludes inherited Git config,
+URL rewrites, askpass, proxy/CA overrides, and token environment variables.
+
+For the private repository, the amendment requires the probe to:
+
+1. expose only one canonical `GH_CONFIG_DIR`—not `HOME`, token variables, or general
+   credential configuration—so `gh` can find its credential store without enabling
+   Git's `.netrc` or global-config fallbacks;
+2. resolve the installed `gh` executable from the same bounded `PATH` already needed
+   to resolve Git, then requires its canonical target to be a regular executable;
+3. explicitly clear all generic credential helpers;
+4. inject only a fixed, host-scoped `github.com` helper invoking
+   `gh auth git-credential`; and
+5. discard helper/Git stderr at the operating-system boundary and keep credential
+   exchange outside Python values, terminal status, failure artifacts, and result
+   provenance.
+
+Missing or failed authentication remains the same privacy-safe
+`remote_main_mismatch`. No separate or direct token, URL, helper command, or fallback
+is accepted from the user; resolving Git and `gh` from the existing `PATH` remains an
+explicit trusted-local-toolchain assumption. Pre-implementation plan/security reviews
+selected this host-scoped bridge over embedding a token, enabling SSH, inheriting Git
+configuration, or changing repository access. The implementation passed 69 focused
+official-CLI/runner tests, the full repository suite with 869 passing tests and one
+expected local-data skip, an exact live private-ref probe matching local `HEAD`, and
+three independent adversarial reviews with **ACCEPT** and no remaining P1/P2. A fresh
+committed and pushed runner snapshot remains required before a new WOMD invocation.

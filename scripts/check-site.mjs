@@ -51,7 +51,7 @@ const requiredPatterns = [
   ["Waymax full citation", /Waymax: An Accelerated, Data-Driven Simulator for Large-Scale Autonomous Driving Research/],
   ["pinned Waymax license", /a64dfec9be8576b60d9cecc94f406d9812d4a7d0\/LICENSE/],
   ["non-commercial scope", /personal, non-commercial interview-preparation purpose/],
-  ["current full-suite evidence", /862 passed/],
+  ["current full-suite evidence", /869 passed/],
   ["current full-suite local skip", /1 expected local-data skip/],
   ["current core-only evidence", /779 passed with 25 expected optional\/local skips/],
   ["accepted M4 cohort evidence", /2,916 → 128/],

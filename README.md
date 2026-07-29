@@ -63,7 +63,7 @@ cases, 14 runner tests, and final adversarial review. No M5 WOMD/Waymax metric o
 has been computed or accepted, and no policy-quality result, ranking, or winner is
 claimed.
 
-**Tests:** current full repository suite: 862 passed + 1 expected local-data skip;
+**Tests:** current full repository suite: 869 passed + 1 expected local-data skip;
 fresh clean core-only environment: 779 passed + 25 expected optional/local skips ·
 **Last updated:** 2026-07-29 (M5 official runner accepted and pushed; real-WOMD/Waymax
 execution and acceptance pending)
@@ -239,7 +239,7 @@ and accepted at the software boundary:
   lifecycle, 18 injected failure boundaries, and 34 adversarial lifecycle cases. The
   final independent review returned **ACCEPT**.
 
-The current full repository suite reports **862 passed and 1 expected local-data
+The current full repository suite reports **869 passed and 1 expected local-data
 skip**. A fresh clean core-only environment without JAX, jaxlib, TensorFlow, Flax, or
 Waymax reports **779 passed and 25 expected optional/local skips**. These are
 implementation and contract evidence only. The bound M5 real-WOMD/Waymax metric
@@ -261,7 +261,7 @@ uv run pytest                          # run the test suite
 
 A fresh clean core-only environment without JAX, jaxlib, TensorFlow, Flax, or Waymax
 reports **779 passed, 25 expected optional/local skips**. With the licensed Waymo
-runtime configured, the latest full repository verification reports **862 passed and
+runtime configured, the latest full repository verification reports **869 passed and
 1 expected local-data skip**. Historical milestone-scoped acceptance counts remain
 recorded in their milestone sections.
 

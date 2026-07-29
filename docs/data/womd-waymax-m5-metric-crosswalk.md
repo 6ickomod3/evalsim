@@ -43,7 +43,7 @@ The accepted official-runner boundary adds a source-only 16-case selector, exact
 reference execution, one-case-at-a-time native parity evaluation, pre-metric parity
 order receipt, post-evaluation determinism receipt, and exact official result-store
 domains. It passed 14 runner tests, a public mocked 128-case lifecycle, 18 injected
-failure boundaries, 34 adversarial lifecycle cases, the full repository suite with 862
+failure boundaries, 34 adversarial lifecycle cases, the full repository suite with 869
 passing tests and one expected local-data skip, and final adversarial review with
 **ACCEPT**. The mocked lifecycle enforces 6,656 metric rows, 1,024 slice rows, 312
 scorecard rows, and 144 parity-summary rows.

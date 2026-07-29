@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -357,6 +358,19 @@ def test_live_main_uses_bounded_https_only_nonredirected_git(
     monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
     monkeypatch.setenv("GIT_CONFIG_KEY_0", "url.https://evil.invalid/.insteadOf")
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", "https://github.com/")
+    monkeypatch.setenv("GIT_ASKPASS", "/private/askpass")
+    monkeypatch.setenv("GH_TOKEN", "secret-token-sentinel")
+    monkeypatch.setenv("HTTPS_PROXY", "https://proxy.invalid")
+    monkeypatch.setattr(
+        cli,
+        "_github_credential_helper",
+        lambda _: "!/trusted/gh auth git-credential",
+    )
+    monkeypatch.setattr(
+        cli,
+        "_github_config_dir",
+        lambda: "/trusted/gh-config",
+    )
 
     def run(command: Any, **kwargs: Any) -> Any:
         observed["command"] = tuple(command)
@@ -374,19 +388,143 @@ def test_live_main_uses_bounded_https_only_nonredirected_git(
     assert cli._live_main(tmp_path) == "a" * 40
     assert observed["timeout"] == 30
     assert observed["cwd"] == os.sep
+    assert observed["stderr"] is subprocess.DEVNULL
     assert observed["command"][-2:] == (
         cli._CANONICAL_REMOTE,
         "refs/heads/main",
     )
     assert "http.followRedirects=false" in observed["command"]
     assert "http.sslVerify=true" in observed["command"]
+    assert "credential.helper=" in observed["command"]
+    assert (
+        "credential.https://github.com.helper="
+        "!/trusted/gh auth git-credential"
+    ) in observed["command"]
+    helper_reset = observed["command"].index("credential.helper=")
+    host_helper = observed["command"].index(
+        "credential.https://github.com.helper="
+        "!/trusted/gh auth git-credential"
+    )
+    assert helper_reset < host_helper
     environment = observed["env"]
     assert environment["GIT_ALLOW_PROTOCOL"] == "https"
     assert environment["GIT_TERMINAL_PROMPT"] == "0"
     assert environment["GIT_CONFIG_NOSYSTEM"] == "1"
     assert environment["GIT_CONFIG_GLOBAL"] == os.devnull
+    assert environment["GH_CONFIG_DIR"] == "/trusted/gh-config"
+    assert "HOME" not in environment
     assert "GIT_DIR" not in environment
+    assert "GIT_ASKPASS" not in environment
+    assert "GH_TOKEN" not in environment
+    assert "HTTPS_PROXY" not in environment
     assert "evil.invalid" not in repr(environment)
+    assert "secret-token-sentinel" not in repr(observed)
+
+
+def test_github_credential_helper_is_resolved_and_shell_quoted(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable = tmp_path / "trusted tools" / "gh"
+    executable.parent.mkdir()
+    executable.write_bytes(b"")
+    executable.chmod(0o700)
+    monkeypatch.setattr(
+        cli.shutil,
+        "which",
+        lambda name, path=None: (
+            os.fspath(executable) if name == "gh" and path == "/trusted/bin" else None
+        ),
+    )
+
+    helper = cli._github_credential_helper({"PATH": "/trusted/bin"})
+
+    assert helper == (
+        f"!{shlex.quote(os.fspath(executable.resolve()))} auth git-credential"
+    )
+
+
+@pytest.mark.parametrize("kind", ("empty_path", "missing", "non_executable"))
+def test_github_credential_helper_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    kind: str,
+) -> None:
+    candidate = tmp_path / "gh"
+    if kind == "non_executable":
+        candidate.write_bytes(b"")
+        candidate.chmod(0o600)
+    monkeypatch.setattr(
+        cli.shutil,
+        "which",
+        lambda name, path=None: (
+            None if kind == "missing" else os.fspath(candidate)
+        ),
+    )
+    environment = {"PATH": "" if kind == "empty_path" else "/trusted/bin"}
+
+    with pytest.raises(
+        cli.M5OfficialCommandError,
+        match="remote_main_mismatch",
+    ):
+        cli._github_credential_helper(environment)
+
+
+def test_github_config_dir_is_canonical_and_dedicated(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "credential config" / "gh"
+    config_dir.mkdir(parents=True)
+    monkeypatch.setenv("GH_CONFIG_DIR", os.fspath(config_dir))
+    monkeypatch.setenv("HOME", "/private/home-must-not-be-forwarded")
+
+    assert cli._github_config_dir() == os.fspath(config_dir.resolve())
+
+
+def test_github_config_dir_fails_closed_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("GH_CONFIG_DIR", os.fspath(tmp_path / "missing"))
+
+    with pytest.raises(
+        cli.M5OfficialCommandError,
+        match="remote_main_mismatch",
+    ):
+        cli._github_config_dir()
+
+
+def test_live_main_auth_failure_does_not_disclose_helper_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        cli,
+        "_github_credential_helper",
+        lambda _: "!/trusted/gh auth git-credential",
+    )
+    monkeypatch.setattr(
+        cli,
+        "_github_config_dir",
+        lambda: "/trusted/gh-config",
+    )
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0],
+            128,
+            stdout=b"",
+            stderr=None,
+        ),
+    )
+
+    with pytest.raises(cli.M5OfficialCommandError) as captured:
+        cli._live_main(tmp_path)
+
+    assert captured.value.code == "remote_main_mismatch"
+    assert "credential" not in str(captured.value).lower()
 
 
 @dataclass

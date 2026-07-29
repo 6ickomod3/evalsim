@@ -41,7 +41,7 @@ work.
   official runner with exact-log reference and a bounded native metric-parity adapter.
   The official-runner boundary passed a public mocked 128-case lifecycle, 18 injected
   failure boundaries, 34 adversarial lifecycle cases, 14 runner tests, and final
-  adversarial review with **ACCEPT**. The current full repository suite has 862 passing
+  adversarial review with **ACCEPT**. The current full repository suite has 869 passing
   tests and one expected local-data skip; a fresh environment without JAX, jaxlib,
   TensorFlow, Flax, or Waymax has 779 passing tests and 25 expected optional/local
   skips.
@@ -235,7 +235,7 @@ slice rows, 312 scorecard rows, and 144 parity-summary rows.
 
 Software verification includes 14 runner tests, a public mocked 128-case lifecycle,
 18 injected failure boundaries, 34 adversarial lifecycle cases, the full repository
-suite with 862 passing tests and one expected local-data skip, and final adversarial
+suite with 869 passing tests and one expected local-data skip, and final adversarial
 **ACCEPT**. No M5 WOMD/Waymax metric outcome has been computed or accepted. There is
 therefore no observed native WOMD parity result, policy-quality effect, winner,
 ranking, simulator-superiority result, or WOMD-population claim. Both the synthetic

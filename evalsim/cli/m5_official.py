@@ -15,6 +15,8 @@ import json
 import os
 import platform
 import re
+import shlex
+import shutil
 import stat
 import subprocess
 import sys
@@ -537,12 +539,21 @@ def _assert_running_checkout(root: Path) -> None:
 def _live_main(root: Path) -> str:
     del root
     git_env = _isolated_git_environment()
+    git_env["GH_CONFIG_DIR"] = _github_config_dir()
+    credential_helper = _github_credential_helper(git_env)
     try:
         completed = subprocess.run(
             (
                 "git",
                 "-c",
                 "credential.interactive=never",
+                "-c",
+                "credential.helper=",
+                "-c",
+                (
+                    "credential.https://github.com.helper="
+                    f"{credential_helper}"
+                ),
                 "-c",
                 "http.followRedirects=false",
                 "-c",
@@ -558,7 +569,7 @@ def _live_main(root: Path) -> str:
             ),
             check=False,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             timeout=30,
             env=git_env,
             cwd=os.sep,
@@ -591,6 +602,72 @@ def _live_main(root: Path) -> str:
             "GitHub returned an unexpected main ref",
         )
     return fields[0]
+
+
+def _github_config_dir() -> str:
+    """Resolve the one gh credential-store directory exposed to live Git."""
+
+    configured = os.environ.get("GH_CONFIG_DIR")
+    if configured:
+        candidate = Path(configured)
+    elif (xdg_config := os.environ.get("XDG_CONFIG_HOME")):
+        candidate = Path(xdg_config) / "gh"
+    elif os.name == "nt" and (app_data := os.environ.get("APPDATA")):
+        candidate = Path(app_data) / "GitHub CLI"
+    else:
+        try:
+            candidate = Path.home() / ".config" / "gh"
+        except RuntimeError as exc:
+            raise M5OfficialCommandError(
+                "remote_main_mismatch",
+                "the fixed GitHub credential store is unavailable",
+            ) from exc
+    try:
+        config_dir = candidate.resolve(strict=True)
+        config_text = os.fspath(config_dir)
+        if (
+            not config_dir.is_dir()
+            or any(character in config_text for character in ("\0", "\n", "\r"))
+        ):
+            raise OSError("unsafe GitHub credential store")
+    except OSError as exc:
+        raise M5OfficialCommandError(
+            "remote_main_mismatch",
+            "the fixed GitHub credential store is unavailable",
+        ) from exc
+    return config_text
+
+
+def _github_credential_helper(git_env: Mapping[str, str]) -> str:
+    """Resolve one fixed GitHub-only helper without importing Git config."""
+
+    search_path = git_env.get("PATH")
+    if not search_path:
+        raise M5OfficialCommandError(
+            "remote_main_mismatch",
+            "the fixed GitHub credential helper is unavailable",
+        )
+    candidate = shutil.which("gh", path=search_path)
+    if candidate is None:
+        raise M5OfficialCommandError(
+            "remote_main_mismatch",
+            "the fixed GitHub credential helper is unavailable",
+        )
+    try:
+        executable = Path(candidate).resolve(strict=True)
+        executable_text = os.fspath(executable)
+        if (
+            not executable.is_file()
+            or not os.access(executable, os.X_OK)
+            or any(character in executable_text for character in ("\0", "\n", "\r"))
+        ):
+            raise OSError("unsafe GitHub credential helper")
+    except OSError as exc:
+        raise M5OfficialCommandError(
+            "remote_main_mismatch",
+            "the fixed GitHub credential helper is unavailable",
+        ) from exc
+    return f"!{shlex.quote(executable_text)} auth git-credential"
 
 
 def _git_binding(root: Path) -> _GitBinding:
