@@ -98,6 +98,8 @@ M4_RANDOM_SEED = 2026
 M4_BENCHMARK_RUNS = 20
 M4_BENCHMARK_BATCH_SIZE = 2
 M4_BENCHMARK_TIMEOUT_SECONDS = 3600.0
+_BENCHMARK_P95_KEY = "nearest_rank_p95_seconds"
+_SELECTED_RELOAD_CHECK_KEY = "selected_locator_reload_complete"
 
 _PLAN_PATH = "docs/plans/2026-07-28-m4-womd-cohort-waymax-parity.md"
 _EXECUTABLE_PATHS = (
@@ -643,19 +645,24 @@ def _execution_provenance(root: Path) -> dict[str, Any]:
     }
 
 
-def _write_json_exclusive(path: Path, payload: Mapping[str, Any]) -> None:
+def _encode_json_bytes(payload: Mapping[str, Any]) -> bytes:
+    return (
+        json.dumps(
+            payload,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def _write_bytes_exclusive(path: Path, encoded: bytes) -> None:
     temporary: Path | None = None
     try:
-        encoded = (
-            json.dumps(
-                payload,
-                indent=2,
-                sort_keys=True,
-                ensure_ascii=False,
-                allow_nan=False,
-            )
-            + "\n"
-        ).encode("utf-8")
+        if type(encoded) is not bytes:
+            raise TypeError("exclusive evidence payload must be exact bytes")
         descriptor, temporary_text = tempfile.mkstemp(
             prefix=f".{path.name}.",
             suffix=".pending",
@@ -688,6 +695,17 @@ def _write_json_exclusive(path: Path, payload: Mapping[str, Any]) -> None:
                 # best-effort pending-file cleanup must not turn success into a
                 # failed command that nevertheless left accepted evidence.
                 pass
+
+
+def _write_json_exclusive(path: Path, payload: Mapping[str, Any]) -> None:
+    try:
+        encoded = _encode_json_bytes(payload)
+    except (TypeError, ValueError) as exc:
+        raise M4CommandError(
+            "artifact_write_failed",
+            "an M4 artifact could not be written canonically",
+        ) from exc
+    _write_bytes_exclusive(path, encoded)
 
 
 def _record_provenance(record: WaymaxRecord) -> dict[str, Any]:
@@ -1671,6 +1689,49 @@ def _peak_rss_bytes() -> int:
     return raw if sys.platform == "darwin" else raw * 1024
 
 
+def _build_benchmark_report(
+    *,
+    compile_seconds: float,
+    durations: Sequence[float],
+    peak_rss_bytes: int,
+) -> dict[str, Any]:
+    """Build the canonical public benchmark mapping from scalar measurements."""
+
+    if len(durations) != M4_BENCHMARK_RUNS:
+        raise M4CommandError(
+            "benchmark_worker_protocol",
+            "the benchmark returned the wrong number of measured runs",
+        )
+    ordered = sorted(durations)
+    median = float(np.median(np.asarray(durations, dtype=np.float64)))
+    p95_index = math.ceil(0.95 * len(ordered)) - 1
+    p95 = float(ordered[p95_index])
+    if median <= 0.0 or p95 <= 0.0:
+        raise M4CommandError(
+            "benchmark_clock",
+            "the synchronized benchmark produced a non-positive duration",
+        )
+    return {
+        "batch_size": M4_BENCHMARK_BATCH_SIZE,
+        "compile_seconds": float(compile_seconds),
+        "device_transfer_before_timing": True,
+        "eager_sequential_parity": True,
+        "fresh_worker_process": True,
+        "horizon_transitions": M4_EXACT_LOG_TRANSITIONS,
+        "jit_vmap": True,
+        "memory_measurement": "process_high_water_rss_not_jax_device_memory",
+        "median_seconds": median,
+        _BENCHMARK_P95_KEY: p95,
+        "peak_rss_bytes": int(peak_rss_bytes),
+        "permutation_invariance": True,
+        "runs": M4_BENCHMARK_RUNS,
+        "scenarios_per_second_at_median": (
+            M4_BENCHMARK_BATCH_SIZE / median
+        ),
+        "warm_durations_seconds": list(durations),
+    }
+
+
 def _benchmark_in_worker(states: tuple[Any, Any]) -> dict[str, Any]:
     """Run the explicit two-scene JIT/vmap gate in the fresh worker process."""
 
@@ -1723,34 +1784,11 @@ def _benchmark_in_worker(states: tuple[Any, Any]) -> dict[str, Any]:
     restored = jax.tree.map(lambda value: value[::-1], reversed_output)
     _assert_batched_compact_equal(warmup, restored)
 
-    ordered = sorted(durations)
-    median = float(np.median(np.asarray(durations, dtype=np.float64)))
-    p95_rank = math.ceil(0.95 * len(ordered)) - 1
-    p95 = float(ordered[p95_rank])
-    if median <= 0.0 or p95 <= 0.0:
-        raise M4CommandError(
-            "benchmark_clock",
-            "the synchronized benchmark produced a non-positive duration",
-        )
-    return {
-        "batch_size": M4_BENCHMARK_BATCH_SIZE,
-        "compile_seconds": float(compile_seconds),
-        "device_transfer_before_timing": True,
-        "eager_sequential_parity": True,
-        "fresh_worker_process": True,
-        "horizon_transitions": M4_EXACT_LOG_TRANSITIONS,
-        "jit_vmap": True,
-        "memory_measurement": "process_high_water_rss_not_jax_device_memory",
-        "median_seconds": median,
-        "nearest_rank_p95_seconds": p95,
-        "peak_rss_bytes": _peak_rss_bytes(),
-        "permutation_invariance": True,
-        "runs": M4_BENCHMARK_RUNS,
-        "scenarios_per_second_at_median": (
-            M4_BENCHMARK_BATCH_SIZE / median
-        ),
-        "warm_durations_seconds": durations,
-    }
+    return _build_benchmark_report(
+        compile_seconds=compile_seconds,
+        durations=durations,
+        peak_rss_bytes=_peak_rss_bytes(),
+    )
 
 
 def _benchmark_worker(connection: Any, states: tuple[Any, Any]) -> None:
@@ -1985,8 +2023,27 @@ def _construction_report(
     }
 
 
-def _assert_sanitized_aggregate(payload: Mapping[str, Any]) -> None:
-    """Fail closed if a public-safe aggregate accidentally contains private fields."""
+def _is_safe_aggregate_key_collision(
+    path: tuple[str | int, ...],
+    value: Any,
+) -> bool:
+    """Admit only the two typed schema labels that collide with private fragments."""
+
+    if path == ("benchmark", _BENCHMARK_P95_KEY):
+        return (
+            type(value) is float
+            and math.isfinite(value)
+            and value > 0.0
+        )
+    if path == ("checks", _SELECTED_RELOAD_CHECK_KEY):
+        return value is True
+    return False
+
+
+def _canonical_sanitized_aggregate(
+    payload: Mapping[str, Any],
+) -> tuple[dict[str, Any], bytes]:
+    """Return one owned, validated JSON tree and its exact canonical encoding."""
 
     forbidden_key_fragments = (
         "coordinate",
@@ -1999,26 +2056,62 @@ def _assert_sanitized_aggregate(payload: Mapping[str, Any]) -> None:
         "sha256",
         "trajectory",
     )
+    active_containers: set[int] = set()
 
-    def inspect(value: Any, *, key: str = "") -> None:
-        lowered = key.lower()
-        if any(fragment in lowered for fragment in forbidden_key_fragments):
+    def snapshot(
+        value: Any,
+        *,
+        path: tuple[str | int, ...] = (),
+    ) -> Any:
+        key = path[-1] if path else ""
+        lowered = key.lower() if type(key) is str else ""
+        if (
+            any(fragment in lowered for fragment in forbidden_key_fragments)
+            and not _is_safe_aggregate_key_collision(path, value)
+        ):
             raise M4CommandError(
                 "aggregate_privacy_key",
                 "the aggregate report contains a forbidden private field",
             )
-        if isinstance(value, Mapping):
-            for child_key, child_value in value.items():
-                if not isinstance(child_key, str):
-                    raise M4CommandError(
-                        "aggregate_privacy_key",
-                        "aggregate report keys must be strings",
+        if type(value) is dict:
+            identity = id(value)
+            if identity in active_containers:
+                raise M4CommandError(
+                    "aggregate_json",
+                    "the aggregate report contains a container cycle",
+                )
+            active_containers.add(identity)
+            try:
+                owned: dict[str, Any] = {}
+                for child_key, child_value in value.items():
+                    if type(child_key) is not str:
+                        raise M4CommandError(
+                            "aggregate_privacy_key",
+                            "aggregate report keys must be exact built-in strings",
+                        )
+                    owned[child_key] = snapshot(
+                        child_value,
+                        path=(*path, child_key),
                     )
-                inspect(child_value, key=child_key)
-        elif isinstance(value, (list, tuple)):
-            for child in value:
-                inspect(child, key=key)
-        elif isinstance(value, str):
+            finally:
+                active_containers.remove(identity)
+            return owned
+        if type(value) is list:
+            identity = id(value)
+            if identity in active_containers:
+                raise M4CommandError(
+                    "aggregate_json",
+                    "the aggregate report contains a container cycle",
+                )
+            active_containers.add(identity)
+            try:
+                owned_list: list[Any] = []
+                for index, child in enumerate(value):
+                    owned_list.append(snapshot(child, path=(*path, index)))
+            finally:
+                active_containers.remove(identity)
+            return owned_list
+        if type(value) is str:
             if (
                 Path(value).is_absolute()
                 or PureWindowsPath(value).is_absolute()
@@ -2028,15 +2121,103 @@ def _assert_sanitized_aggregate(payload: Mapping[str, Any]) -> None:
                     "aggregate_privacy_value",
                     "the aggregate report contains a path or digest",
                 )
+            return value
+        if type(value) is bool or type(value) is int or value is None:
+            return value
+        if type(value) is float:
+            if not math.isfinite(value):
+                raise M4CommandError(
+                    "aggregate_json",
+                    "the aggregate report is not finite JSON-native data",
+                )
+            return value
+        raise M4CommandError(
+            "aggregate_json",
+            "the aggregate report is not exact built-in JSON-native data",
+        )
 
-    inspect(payload)
     try:
-        json.dumps(payload, sort_keys=True, allow_nan=False)
-    except (TypeError, ValueError) as exc:
+        canonical = snapshot(payload)
+    except RecursionError as exc:
+        raise M4CommandError(
+            "aggregate_json",
+            "the aggregate report exceeds the supported nesting depth",
+        ) from exc
+    if type(canonical) is not dict:
+        raise M4CommandError(
+            "aggregate_json",
+            "the aggregate report root must be an exact built-in mapping",
+        )
+    try:
+        encoded = _encode_json_bytes(canonical)
+    except (RecursionError, TypeError, ValueError) as exc:
         raise M4CommandError(
             "aggregate_json",
             "the aggregate report is not finite JSON-native data",
         ) from exc
+    return canonical, encoded
+
+
+def _assert_sanitized_aggregate(payload: Mapping[str, Any]) -> None:
+    """Fail closed if a public-safe aggregate accidentally contains private fields."""
+
+    _canonical_sanitized_aggregate(payload)
+
+
+def _build_acceptance_aggregate(
+    *,
+    benchmark: Mapping[str, Any],
+    cohort: Mapping[str, Any],
+    idm: Mapping[str, Any],
+    runtime: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build and validate the canonical schema-v1 accepted aggregate."""
+
+    reports = {
+        "benchmark": benchmark,
+        "cohort": cohort,
+        "idm": idm,
+        "runtime": runtime,
+    }
+    if any(type(report) is not dict for report in reports.values()):
+        raise M4CommandError(
+            "aggregate_json",
+            "aggregate subreports must be exact built-in mappings",
+        )
+    aggregate = {
+        "accepted": True,
+        "benchmark": benchmark,
+        "checks": {
+            "adapter_and_independent_parity_full_cohort": True,
+            "evalsim_cv_full_80": True,
+            "evalsim_idm_full_80": True,
+            "evalsim_log_replay_full_80": True,
+            "exact_log_direct_oracle_full_80": True,
+            "exact_log_rollout_conversion_full_cohort": True,
+            "manifest_repeat_byte_identical": True,
+            _SELECTED_RELOAD_CHECK_KEY: True,
+            "stock_waymax_first_selected_one_step": True,
+            "waymax_idm_jit_one_scene": True,
+            "waymax_idm_repeat_byte_identical": True,
+        },
+        "cohort": cohort,
+        "idm": idm,
+        "privacy": {
+            "absolute_local_values_absent": True,
+            "motion_samples_absent": True,
+            "private_manifests_remain_local": True,
+            "source_hashes_absent": True,
+            "source_identifiers_absent": True,
+        },
+        "purpose": "personal_non_commercial_interview_preparation",
+        "runtime": runtime,
+        "schema_version": M4_COMMAND_SCHEMA_VERSION,
+        "shared_decode_limitation": (
+            "EvalSim and Waymax reference paths share the pinned Waymax WOMD decode"
+        ),
+    }
+    canonical, _ = _canonical_sanitized_aggregate(aggregate)
+    return canonical
 
 
 def _assert_output_ignored(root: Path, output: Path) -> None:
@@ -2071,12 +2252,12 @@ def _publish_accepted_aggregate(
 ) -> Path:
     """Create the accepted report only after every final local gate passes."""
 
-    if aggregate.get("accepted") is not True:
+    canonical, encoded = _canonical_sanitized_aggregate(aggregate)
+    if canonical.get("accepted") is not True:
         raise M4CommandError(
             "aggregate_json",
             "the final aggregate must explicitly record accepted true",
         )
-    _assert_sanitized_aggregate(aggregate)
     report_path = output / "aggregate-summary.json"
     _assert_clean_worktree(root)
     if _execution_provenance(root) != provenance:
@@ -2090,7 +2271,7 @@ def _publish_accepted_aggregate(
             "output_not_ignored",
             "the final aggregate report path is not ignored by Git",
         )
-    _write_json_exclusive(report_path, aggregate)
+    _write_bytes_exclusive(report_path, encoded)
     return report_path
 
 
@@ -2585,62 +2766,37 @@ def _execute_captured_acceptance(
             "M4 local acceptance is pre-registered to the JAX CPU backend",
         )
 
-    aggregate = {
-        "accepted": True,
-        "benchmark": benchmark,
-        "checks": {
-            "adapter_and_independent_parity_full_cohort": True,
-            "evalsim_cv_full_80": True,
-            "evalsim_idm_full_80": True,
-            "evalsim_log_replay_full_80": True,
-            "exact_log_direct_oracle_full_80": True,
-            "exact_log_rollout_conversion_full_cohort": True,
-            "manifest_repeat_byte_identical": True,
-            "selected_locator_reload_complete": True,
-            "stock_waymax_first_selected_one_step": True,
-            "waymax_idm_jit_one_scene": True,
-            "waymax_idm_repeat_byte_identical": True,
-        },
-        "cohort": _construction_report(first_manifest),
-        "idm": {
-            "effective_controlled_transitions": idm_totals["effective"],
-            "horizon_transitions": M4_IDM_TRANSITIONS,
-            "initialized_overlap_fallback_transitions": idm_totals[
-                "overlap_fallback"
-            ],
-            "initialized_overlap_fallback_vehicles": idm_totals[
-                "overlap_excluded_vehicles"
-            ],
-            "initialized_overlap_vehicle_exclusions_full_cohort": (
-                initialized_overlap_vehicle_exclusions
-            ),
-            "lifecycle_fallback_transitions": idm_totals[
-                "lifecycle_fallback"
-            ],
-            "nonfallback_motion_observed": idm_nonfallback,
-            "minimum_qualifying_vehicle_effective_transitions": min(
-                qualifying_vehicle_effective
-            ),
-            "qualifying_scenarios": sum(
-                facts.qualifies for facts in qualification.values()
-            ),
-            "requested_controlled_transitions": idm_totals["requested"],
-            "subset_scenarios": len(idm_events),
-        },
-        "privacy": {
-            "absolute_local_values_absent": True,
-            "motion_samples_absent": True,
-            "private_manifests_remain_local": True,
-            "source_hashes_absent": True,
-            "source_identifiers_absent": True,
-        },
-        "purpose": "personal_non_commercial_interview_preparation",
-        "runtime": runtime,
-        "schema_version": M4_COMMAND_SCHEMA_VERSION,
-        "shared_decode_limitation": (
-            "EvalSim and Waymax reference paths share the pinned Waymax WOMD decode"
+    idm_report = {
+        "effective_controlled_transitions": idm_totals["effective"],
+        "horizon_transitions": M4_IDM_TRANSITIONS,
+        "initialized_overlap_fallback_transitions": idm_totals[
+            "overlap_fallback"
+        ],
+        "initialized_overlap_fallback_vehicles": idm_totals[
+            "overlap_excluded_vehicles"
+        ],
+        "initialized_overlap_vehicle_exclusions_full_cohort": (
+            initialized_overlap_vehicle_exclusions
         ),
+        "lifecycle_fallback_transitions": idm_totals[
+            "lifecycle_fallback"
+        ],
+        "nonfallback_motion_observed": idm_nonfallback,
+        "minimum_qualifying_vehicle_effective_transitions": min(
+            qualifying_vehicle_effective
+        ),
+        "qualifying_scenarios": sum(
+            facts.qualifies for facts in qualification.values()
+        ),
+        "requested_controlled_transitions": idm_totals["requested"],
+        "subset_scenarios": len(idm_events),
     }
+    aggregate = _build_acceptance_aggregate(
+        benchmark=benchmark,
+        cohort=_construction_report(first_manifest),
+        idm=idm_report,
+        runtime=runtime,
+    )
     return _PendingAcceptance(aggregate=aggregate)
 
 

@@ -1,8 +1,8 @@
 # WOMD / Waymax M4 execution crosswalk
 
-**Status:** Fifth clean bound attempt manually interrupted and excluded; sixth
-fresh clean-commit rerun pending; payload gate closed; M4 metric parity is not run
-here
+**Status:** Aggregate-privacy correction implementation-ready; final
+exact-snapshot gates and clean commit/push pending; seventh fresh rerun pending;
+payload gate closed; M4 metric parity is not run here
 **Dataset profile:** WOMD v1.3.1 TFExample validation, 10 past + 1 current +
 80 future frames
 **Waymax revision:** `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`
@@ -171,6 +171,78 @@ tree and executable-source fingerprint. The payload gate remains closed until th
 snapshot passes its required gates, is independently reviewed, committed, and
 pushed, and clean local `HEAD` equals `origin/main`. A sixth fresh attempt must then
 repeat both complete scans from record zero through clean EOF.
+
+### Sixth bound attempt aggregate-privacy deviation
+
+The sixth fresh bound attempt ran from verified clean, pushed commit
+`cb4e2c981194a22400f8e56a375c44390aaf9c12` and exited only with
+`FAIL (aggregate_privacy_key)`. Privacy validation precedes exclusive accepted-report
+creation, so no accepted aggregate was created. No ignored run artifact or content
+was inspected after execution. The code establishes no accepted scan, manifest,
+cohort, reference, policy, metric, benchmark, or comparative result; the attempt is
+excluded in full and unlocks no claim.
+
+Tracked-source inspection, without WOMD or ignored-output access, found two independent
+schema-label collisions: `benchmark.nearest_rank_p95_seconds` contains the forbidden
+fragment `rank`, and `checks.selected_locator_reload_complete` contains
+`locator`. No claim is made about which collision the runtime encountered first.
+
+Schema version 1 and both field names remain fixed. The broad case-insensitive
+forbidden-fragment gate remains fail-closed, with only two exact path-and-type
+exceptions: the benchmark label must be a finite, strictly positive built-in `float`,
+and the reload-check label must be exactly `True`. The same key at another path, a
+wrong value or type, a case variant or near-collision, a private child key, or any
+other private-key fragment remains rejected. Absolute paths, digest-like values,
+non-string keys, and non-finite JSON remain rejected.
+
+Validation deep-copies only exact built-in JSON containers, keys, and scalar types
+into an owned plain tree while applying every privacy gate. Tuples, subclasses,
+mapping proxies, and other objects are rejected without calling overridable methods.
+The owned tree is canonically encoded once, and the publisher writes those exact
+validated bytes through its exclusive atomic seam; it never serializes the
+caller-owned object after validation.
+
+Pure production benchmark and aggregate builders plus a complete invented canonical
+aggregate must prove the exact schema passes. Adversarial mutations must prove every
+near-collision and private field still fails without publication. Hostile key,
+mapping, list, and scalar subclasses must prove that masked spellings and
+state-switching observations cannot bypass the snapshot or change serialized bytes.
+Self-referential exact dictionaries/lists must be detected by active-container
+identity, and any remaining excessive-depth `RecursionError` must become stable
+`aggregate_json`; neither case may reach the exclusive writer.
+Selector-v4 population, fingerprint, ranking, schemas, execution scopes, estimator,
+and metric scope remain unchanged; only the plan, companion crosswalk, CLI, tests, Git
+tree, and executable-source fingerprint change.
+
+All six attempt directories remain local, ignored, retained unchanged, and excluded.
+They may not be inspected for evidence, resumed, reused, overwritten, deleted,
+published, or combined. The payload gate remains closed until the exact correction,
+tests, package/site audits, and independent reviews pass; the final snapshot is
+committed and pushed cleanly; and local and remote refs match. A seventh fresh attempt
+must then repeat both complete scans from record zero through clean EOF.
+
+### Aggregate-privacy implementation readiness
+
+The correction now uses the two exact schema-v1 path/type exceptions, pure production
+benchmark and aggregate builders, an exact-built-in deeply owned JSON snapshot,
+active-container cycle detection, stable snapshot/encoder recursion failures, and
+single-encoding exclusive byte publication. Hostile key/container/scalar subclasses,
+wrong paths and values, private children, cycles, excessive depth, non-finite values,
+absolute paths, 64-hex strings, and mutation at the byte-write seam all fail without
+publication.
+
+Final independent semantic, stable-error, privacy-bypass, and evidence reviews
+accepted the implementation with no unresolved blocker. Before this record, the
+focused CLI suite passed 110 tests; the locked matrix passed 421 tests with one
+expected local-data skip; full Waymo-extra passed 493 tests with one expected
+local-data skip; and core-only passed 418 tests with 22 expected optional-runtime
+skips. Fresh package/notices, installed-help, forbidden-content, and presentation
+checks also passed.
+
+No WOMD or ignored output was accessed for this correction. These are readiness facts,
+not M4 execution evidence. Because this record changes the executable snapshot, all
+exact-snapshot gates must repeat before a clean commit/push and verified local/remote
+ref equality can open the seventh-run payload gate.
 
 ### Population
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import logging
 import os
 from pathlib import Path
@@ -1063,28 +1064,661 @@ def test_final_gate_failure_leaves_no_accepted_report(
     assert not (output / "aggregate-summary.json").exists()
 
 
-def test_aggregate_privacy_gate_rejects_private_fields_and_paths() -> None:
-    cli._assert_sanitized_aggregate(
-        {
-            "accepted": True,
-            "per_shard": [{"shard_suffix": "00000", "raw": 5}],
-            "privacy": {
-                "absolute_local_values_absent": True,
-                "motion_samples_absent": True,
-                "private_manifests_remain_local": True,
-                "source_hashes_absent": True,
-                "source_identifiers_absent": True,
-            },
-        }
+def _production_shaped_aggregate() -> dict[str, object]:
+    benchmark = cli._build_benchmark_report(
+        compile_seconds=1.25,
+        durations=[0.01 + index * 0.001 for index in range(20)],
+        peak_rss_bytes=123_456,
     )
-    for payload in (
-        {"native_scenario_id": "invented"},
-        {"shard_digest": "not-even-a-real-digest"},
-        {"output": "/absolute/local/path"},
-        {"value": "a" * 64},
-    ):
-        with pytest.raises(cli.M4CommandError, match="aggregate_privacy"):
-            cli._assert_sanitized_aggregate(payload)
+    cohort = {
+        "cohort_label": "invented complete-case conditional sample",
+        "fallback_used": False,
+        "per_shard": [
+            {
+                "eligible": 8,
+                "raw": 10,
+                "rejected": 2,
+                "selected": 8,
+                "shard_suffix": "00000",
+            }
+        ],
+        "quota_deficits": {"00000": 0},
+        "redistributed_count": 0,
+        "rejection_counts": {
+            code: 0 for code in cli.SOURCE_REJECTION_CODES
+        },
+        "selected": 8,
+        "total_eligible": 8,
+        "total_raw": 10,
+        "total_rejected": 2,
+    }
+    idm = {
+        "effective_controlled_transitions": 20,
+        "horizon_transitions": 20,
+        "initialized_overlap_fallback_transitions": 0,
+        "initialized_overlap_fallback_vehicles": 0,
+        "initialized_overlap_vehicle_exclusions_full_cohort": 0,
+        "lifecycle_fallback_transitions": 1,
+        "nonfallback_motion_observed": True,
+        "minimum_qualifying_vehicle_effective_transitions": 20,
+        "qualifying_scenarios": 8,
+        "requested_controlled_transitions": 21,
+        "subset_scenarios": 1,
+    }
+    runtime = {
+        "platform": "invented-platform",
+        "python": "3.11.0",
+        "numpy": "2.0.0",
+        "jax": "0.0.0",
+        "jaxlib": "0.0.0",
+        "tensorflow": "0.0.0",
+        "flax": "0.0.0",
+        "waymo_waymax": "0.0.0",
+        "jax_backend": "cpu",
+        "jax_devices": ["cpu"],
+    }
+    return cli._build_acceptance_aggregate(
+        benchmark=benchmark,
+        cohort=cohort,
+        idm=idm,
+        runtime=runtime,
+    )
+
+
+def _mock_aggregate_publication(
+    monkeypatch,
+    tmp_path,
+    aggregate,
+) -> tuple[Path, list[tuple[Path, bytes]]]:
+    output = tmp_path / "outputs" / "m4" / "invented"
+    output.mkdir(parents=True)
+    provenance = {"invented": True}
+    writes: list[tuple[Path, bytes]] = []
+    monkeypatch.setattr(cli, "_assert_clean_worktree", lambda _: None)
+    monkeypatch.setattr(cli, "_execution_provenance", lambda _: provenance)
+    monkeypatch.setattr(cli, "_assert_output_ignored", lambda *args: None)
+    monkeypatch.setattr(cli, "_is_git_ignored", lambda *args: True)
+    monkeypatch.setattr(
+        cli,
+        "_write_bytes_exclusive",
+        lambda path, encoded: writes.append((path, encoded)),
+    )
+    report_path = cli._publish_accepted_aggregate(
+        root=tmp_path,
+        output=output,
+        provenance=provenance,
+        aggregate=aggregate,
+    )
+    return report_path, writes
+
+
+def _assert_aggregate_publication_rejected(
+    monkeypatch,
+    tmp_path,
+    aggregate,
+    *,
+    code: str,
+) -> None:
+    writes: list[tuple[Path, bytes]] = []
+    monkeypatch.setattr(
+        cli,
+        "_write_bytes_exclusive",
+        lambda path, encoded: writes.append((path, encoded)),
+    )
+    with pytest.raises(cli.M4CommandError) as caught:
+        cli._publish_accepted_aggregate(
+            root=tmp_path,
+            output=tmp_path / "outputs" / "m4" / "invented",
+            provenance={"invented": True},
+            aggregate=aggregate,
+        )
+    assert caught.value.code == code
+    assert writes == []
+    assert not (
+        tmp_path / "outputs" / "m4" / "invented" / "aggregate-summary.json"
+    ).exists()
+
+
+def test_production_aggregate_schema_passes_privacy_and_publication(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    aggregate = _production_shaped_aggregate()
+
+    assert set(aggregate) == {
+        "accepted",
+        "benchmark",
+        "checks",
+        "cohort",
+        "idm",
+        "privacy",
+        "purpose",
+        "runtime",
+        "schema_version",
+        "shared_decode_limitation",
+    }
+    assert set(aggregate["benchmark"]) == {
+        "batch_size",
+        "compile_seconds",
+        "device_transfer_before_timing",
+        "eager_sequential_parity",
+        "fresh_worker_process",
+        "horizon_transitions",
+        "jit_vmap",
+        "memory_measurement",
+        "median_seconds",
+        "nearest_rank_p95_seconds",
+        "peak_rss_bytes",
+        "permutation_invariance",
+        "runs",
+        "scenarios_per_second_at_median",
+        "warm_durations_seconds",
+    }
+    assert set(aggregate["checks"]) == {
+        "adapter_and_independent_parity_full_cohort",
+        "evalsim_cv_full_80",
+        "evalsim_idm_full_80",
+        "evalsim_log_replay_full_80",
+        "exact_log_direct_oracle_full_80",
+        "exact_log_rollout_conversion_full_cohort",
+        "manifest_repeat_byte_identical",
+        "selected_locator_reload_complete",
+        "stock_waymax_first_selected_one_step",
+        "waymax_idm_jit_one_scene",
+        "waymax_idm_repeat_byte_identical",
+    }
+    assert set(aggregate["cohort"]) == {
+        "cohort_label",
+        "fallback_used",
+        "per_shard",
+        "quota_deficits",
+        "redistributed_count",
+        "rejection_counts",
+        "selected",
+        "total_eligible",
+        "total_raw",
+        "total_rejected",
+    }
+    assert set(aggregate["cohort"]["per_shard"][0]) == {
+        "eligible",
+        "raw",
+        "rejected",
+        "selected",
+        "shard_suffix",
+    }
+    assert set(aggregate["cohort"]["rejection_counts"]) == set(
+        cli.SOURCE_REJECTION_CODES
+    )
+    assert set(aggregate["idm"]) == {
+        "effective_controlled_transitions",
+        "horizon_transitions",
+        "initialized_overlap_fallback_transitions",
+        "initialized_overlap_fallback_vehicles",
+        "initialized_overlap_vehicle_exclusions_full_cohort",
+        "lifecycle_fallback_transitions",
+        "minimum_qualifying_vehicle_effective_transitions",
+        "nonfallback_motion_observed",
+        "qualifying_scenarios",
+        "requested_controlled_transitions",
+        "subset_scenarios",
+    }
+    assert set(aggregate["privacy"]) == {
+        "absolute_local_values_absent",
+        "motion_samples_absent",
+        "private_manifests_remain_local",
+        "source_hashes_absent",
+        "source_identifiers_absent",
+    }
+    assert set(aggregate["runtime"]) == {
+        "flax",
+        "jax",
+        "jax_backend",
+        "jax_devices",
+        "jaxlib",
+        "numpy",
+        "platform",
+        "python",
+        "tensorflow",
+        "waymo_waymax",
+    }
+    assert type(aggregate["benchmark"]["nearest_rank_p95_seconds"]) is float
+    assert aggregate["benchmark"]["nearest_rank_p95_seconds"] > 0.0
+    assert aggregate["checks"]["selected_locator_reload_complete"] is True
+    assert cli.M4_COMMAND_SCHEMA_VERSION == "1"
+    assert type(aggregate["schema_version"]) is str
+    assert aggregate["schema_version"] == "1"
+
+    cli._assert_sanitized_aggregate(aggregate)
+    report_path, writes = _mock_aggregate_publication(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+    )
+    assert report_path.name == "aggregate-summary.json"
+    assert len(writes) == 1
+    written_path, encoded = writes[0]
+    assert written_path == report_path
+    assert type(encoded) is bytes
+    assert json.loads(encoded) == aggregate
+    assert json.loads(encoded)["schema_version"] == "1"
+    assert encoded == cli._encode_json_bytes(aggregate)
+
+
+@pytest.mark.parametrize(
+    "private_key",
+    (
+        "private_coordinate",
+        "shard_digest",
+        "record_locator",
+        "native_id",
+        "record_ordinal",
+        "selection_rank",
+        "scenario_id",
+        "source_sha256",
+        "sample_trajectory",
+    ),
+)
+def test_production_aggregate_rejects_every_private_key_fragment(
+    monkeypatch,
+    tmp_path,
+    private_key,
+) -> None:
+    aggregate = _production_shaped_aggregate()
+    aggregate["cohort"]["per_shard"][0][private_key] = "invented"
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+        code="aggregate_privacy_key",
+    )
+
+
+@pytest.mark.parametrize(
+    ("parent", "key", "value"),
+    (
+        ("top", "nearest_rank_p95_seconds", 0.1),
+        ("runtime", "nearest_rank_p95_seconds", 0.1),
+        ("benchmark_list", "nearest_rank_p95_seconds", 0.1),
+        ("benchmark", "NEAREST_RANK_P95_SECONDS", 0.1),
+        ("benchmark", "nearest_rank_p95_seconds_extra", 0.1),
+        ("top", "selected_locator_reload_complete", True),
+        ("runtime", "selected_locator_reload_complete", True),
+        ("checks_list", "selected_locator_reload_complete", True),
+        ("checks", "SELECTED_LOCATOR_RELOAD_COMPLETE", True),
+        ("checks", "selected_locator_reload_complete_extra", True),
+    ),
+)
+def test_aggregate_collision_exceptions_reject_wrong_paths_and_near_matches(
+    monkeypatch,
+    tmp_path,
+    parent,
+    key,
+    value,
+) -> None:
+    aggregate = _production_shaped_aggregate()
+    if parent == "top":
+        aggregate[key] = value
+    elif parent == "benchmark_list":
+        aggregate["benchmark"] = [{key: value}]
+    elif parent == "checks_list":
+        aggregate["checks"] = [{key: value}]
+    else:
+        aggregate[parent][key] = value
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+        code="aggregate_privacy_key",
+    )
+
+
+class _FloatSubclass(float):
+    pass
+
+
+class _IntSubclass(int):
+    pass
+
+
+class _StringSubclass(str):
+    pass
+
+
+class _MaskedPrivateKey(str):
+    lower_calls = 0
+
+    def lower(self):
+        type(self).lower_calls += 1
+        return "safe"
+
+
+class _StateSwitchingDict(dict):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.get_calls = 0
+        self.items_calls = 0
+
+    def get(self, key, default=None):
+        self.get_calls += 1
+        return super().get(key, default)
+
+    def items(self):
+        self.items_calls += 1
+        if self.items_calls == 1:
+            return super().items()
+        return {"record_locator": "invented-private"}.items()
+
+
+class _StateSwitchingList(list):
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.iter_calls = 0
+
+    def __iter__(self):
+        self.iter_calls += 1
+        if self.iter_calls == 1:
+            return super().__iter__()
+        return iter([{"record_locator": "invented-private"}])
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        1,
+        True,
+        "0.1",
+        {},
+        [],
+        0.0,
+        -0.1,
+        float("inf"),
+        float("nan"),
+        np.float64(0.1),
+        _FloatSubclass(0.1),
+    ),
+)
+def test_benchmark_rank_label_requires_exact_positive_finite_builtin_float(
+    monkeypatch,
+    tmp_path,
+    value,
+) -> None:
+    aggregate = _production_shaped_aggregate()
+    aggregate["benchmark"]["nearest_rank_p95_seconds"] = value
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+        code="aggregate_privacy_key",
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    (False, 0, 1, 1.0, "true", {}, [], np.bool_(True)),
+)
+def test_selected_locator_label_requires_exact_true(
+    monkeypatch,
+    tmp_path,
+    value,
+) -> None:
+    aggregate = _production_shaped_aggregate()
+    aggregate["checks"]["selected_locator_reload_complete"] = value
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+        code="aggregate_privacy_key",
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "code"),
+    (
+        ("/absolute/local/path", "aggregate_privacy_value"),
+        (r"C:\absolute\local\path", "aggregate_privacy_value"),
+        ("a" * 64, "aggregate_privacy_value"),
+        (float("nan"), "aggregate_json"),
+        (float("inf"), "aggregate_json"),
+    ),
+)
+def test_production_aggregate_rejects_private_or_nonfinite_values(
+    monkeypatch,
+    tmp_path,
+    value,
+    code,
+) -> None:
+    aggregate = _production_shaped_aggregate()
+    aggregate["runtime"]["invented_value"] = value
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+        code=code,
+    )
+
+
+def test_production_aggregate_rejects_non_string_and_private_child_keys(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    for mutation in ("non_string", "private_child"):
+        aggregate = _production_shaped_aggregate()
+        if mutation == "non_string":
+            aggregate["runtime"][1] = "invented"
+        else:
+            aggregate["benchmark"]["invented"] = {
+                "record_locator": "invented"
+            }
+        _assert_aggregate_publication_rejected(
+            monkeypatch,
+            tmp_path,
+            aggregate,
+            code="aggregate_privacy_key",
+        )
+
+
+def test_masked_string_key_is_rejected_without_calling_lower(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    aggregate = _production_shaped_aggregate()
+    key = _MaskedPrivateKey("record_locator")
+    type(key).lower_calls = 0
+    aggregate["runtime"][key] = "invented"
+
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+        code="aggregate_privacy_key",
+    )
+    assert type(key).lower_calls == 0
+
+
+def test_state_switching_containers_are_rejected_without_observation(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    root = _StateSwitchingDict(_production_shaped_aggregate())
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        root,
+        code="aggregate_json",
+    )
+    assert root.get_calls == 0
+    assert root.items_calls == 0
+
+    root_list = _StateSwitchingList([{"accepted": True}])
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        root_list,
+        code="aggregate_json",
+    )
+    assert root_list.iter_calls == 0
+
+    nested_mapping = _StateSwitchingDict({"safe": True})
+    aggregate = _production_shaped_aggregate()
+    aggregate["runtime"]["invented"] = nested_mapping
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+        code="aggregate_json",
+    )
+    assert nested_mapping.get_calls == 0
+    assert nested_mapping.items_calls == 0
+
+    nested_list = _StateSwitchingList([True])
+    aggregate = _production_shaped_aggregate()
+    aggregate["runtime"]["invented"] = nested_list
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+        code="aggregate_json",
+    )
+    assert nested_list.iter_calls == 0
+
+
+def test_cyclic_exact_containers_fail_stably_without_publication(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    cyclic_mapping = _production_shaped_aggregate()
+    cyclic_mapping["runtime"]["cycle"] = cyclic_mapping
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        cyclic_mapping,
+        code="aggregate_json",
+    )
+
+    cyclic_list = []
+    cyclic_list.append(cyclic_list)
+    aggregate = _production_shaped_aggregate()
+    aggregate["runtime"]["cycle"] = cyclic_list
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+        code="aggregate_json",
+    )
+
+
+def test_excessive_exact_container_depth_fails_stably_without_publication(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    nested = []
+    cursor = nested
+    for _ in range(sys.getrecursionlimit() + 50):
+        child = []
+        cursor.append(child)
+        cursor = child
+    aggregate = _production_shaped_aggregate()
+    aggregate["runtime"]["too_deep"] = nested
+
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+        code="aggregate_json",
+    )
+
+
+def test_canonical_encoder_recursion_fails_stably_without_publication(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    aggregate = _production_shaped_aggregate()
+
+    def recursive_encoder(_):
+        raise RecursionError("invented encoder depth")
+
+    monkeypatch.setattr(cli, "_encode_json_bytes", recursive_encoder)
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+        code="aggregate_json",
+    )
+
+
+def test_aggregate_builder_rejects_mapping_subclass_without_observation() -> None:
+    benchmark = _StateSwitchingDict({"safe": True})
+    with pytest.raises(cli.M4CommandError) as caught:
+        cli._build_acceptance_aggregate(
+            benchmark=benchmark,
+            cohort={},
+            idm={},
+            runtime={},
+        )
+    assert caught.value.code == "aggregate_json"
+    assert benchmark.get_calls == 0
+    assert benchmark.items_calls == 0
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        _StringSubclass("invented"),
+        _IntSubclass(1),
+        _FloatSubclass(0.1),
+        (True,),
+        MappingProxyType({"safe": True}),
+    ),
+)
+def test_nonexact_json_values_are_rejected_without_publication(
+    monkeypatch,
+    tmp_path,
+    value,
+) -> None:
+    aggregate = _production_shaped_aggregate()
+    aggregate["runtime"]["invented"] = value
+    _assert_aggregate_publication_rejected(
+        monkeypatch,
+        tmp_path,
+        aggregate,
+        code="aggregate_json",
+    )
+
+
+def test_publication_writes_validated_bytes_not_mutated_caller_state(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    aggregate = _production_shaped_aggregate()
+    expected = json.loads(cli._encode_json_bytes(aggregate))
+    output = tmp_path / "outputs" / "m4" / "invented"
+    output.mkdir(parents=True)
+    provenance = {"invented": True}
+    writes: list[tuple[Path, bytes]] = []
+
+    monkeypatch.setattr(cli, "_assert_clean_worktree", lambda _: None)
+    monkeypatch.setattr(cli, "_execution_provenance", lambda _: provenance)
+    monkeypatch.setattr(cli, "_assert_output_ignored", lambda *args: None)
+    monkeypatch.setattr(cli, "_is_git_ignored", lambda *args: True)
+
+    def mutate_at_write(path, encoded):
+        aggregate["runtime"]["record_locator"] = "invented-private"
+        writes.append((path, encoded))
+
+    monkeypatch.setattr(cli, "_write_bytes_exclusive", mutate_at_write)
+    report_path = cli._publish_accepted_aggregate(
+        root=tmp_path,
+        output=output,
+        provenance=provenance,
+        aggregate=aggregate,
+    )
+
+    assert len(writes) == 1
+    written_path, encoded = writes[0]
+    assert report_path == written_path
+    assert json.loads(encoded) == expected
+    assert b"record_locator" not in encoded
+    assert aggregate["runtime"]["record_locator"] == "invented-private"
 
 
 @pytest.mark.parametrize(

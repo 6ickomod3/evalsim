@@ -1,8 +1,9 @@
 # M4 implementation plan — deterministic WOMD cohort and Waymax parity
 
 **Date:** 2026-07-28
-**Status:** ⚠️ Fifth clean bound attempt manually interrupted and excluded;
-sixth fresh clean-commit rerun pending; payload gate closed
+**Status:** ⚠️ Aggregate-privacy correction implementation-ready; final
+exact-snapshot gates and clean commit/push pending; seventh fresh rerun pending;
+payload gate closed
 **Milestone:** M4 — exact ten-shard cohort → Waymax reference execution → EvalSim
 rollout contract
 
@@ -1171,3 +1172,169 @@ fingerprint only. Before the sixth attempt reads WOMD, this exact documentation
 snapshot must pass the required test, package, site, semantic, invariant, and privacy
 gates; be independently reviewed; be committed and pushed from a clean tree; and have
 local `HEAD` verified equal to `origin/main`.
+
+### Selector-v4 sixth bound attempt aggregate-privacy deviation — 2026-07-28
+
+The sixth fresh bound attempt started from clean, pushed commit
+`cb4e2c981194a22400f8e56a375c44390aaf9c12`, with local `HEAD`,
+`origin/main`, and the remote `main` ref independently verified equal. It exited with
+only the sanitized status `FAIL (aggregate_privacy_key)`.
+
+The stable code establishes only that aggregate privacy validation rejected a key.
+The tracked publication order performs that validation before exclusive creation of
+the accepted `aggregate-summary.json`, so this attempt produced no accepted aggregate.
+No ignored run artifact or artifact content was inspected after the command returned.
+Do not infer scan completion, manifest validity, cohort selection, policy/reference
+execution, metric computation, benchmark completion, or any result from the failure
+code or elapsed time. The entire sixth attempt is excluded from M4 acceptance evidence
+and unlocks no claim.
+
+Payload-independent inspection of tracked source found two independent false-positive
+collisions in the production aggregate schema:
+
+- the forbidden fragment `rank` also occurs in the statistical label
+  `benchmark.nearest_rank_p95_seconds`; and
+- the forbidden fragment `locator` also occurs in the boolean check label
+  `checks.selected_locator_reload_complete`.
+
+This diagnosis reads no WOMD or ignored output and does not claim which collision the
+runtime encountered first. Static inspection found no other production aggregate key
+containing a forbidden fragment. Runtime-derived strings remain subject to the
+existing absolute-path and 64-hex-digest value gates.
+
+Keep the broad, case-insensitive private-key fragment denylist and schema version 1.
+Do not globally allow either label, weaken either fragment, or use token-aware matching.
+Permit exactly these two path-and-type exceptions:
+
+1. path `("benchmark", "nearest_rank_p95_seconds")` only when the value has exact
+   built-in `float` type, is finite, and is strictly positive; and
+2. path `("checks", "selected_locator_reload_complete")` only when the value is
+   exactly `True`.
+
+The same spelling at any other path, either path with any other type or value, every
+case variant or near-collision, and every other key containing `rank` or `locator`
+must still fail with `aggregate_privacy_key`. Private child keys, non-string keys,
+absolute POSIX or Windows paths, 64-hex values, non-finite JSON values, and the
+remaining forbidden fragments must remain fail-closed. The two exceptions are fixed
+safe aggregate labels and never permit a locator, rank value, digest, identity, path,
+coordinate, trajectory, or arbitrary string.
+
+Validation and publication must use one deeply owned canonical JSON snapshot, not two
+observations of a caller-owned object. Accept only exact built-in `dict` and `list`
+containers, exact built-in `str` keys, and exact built-in `str`, `bool`, `int`,
+finite `float`, or `None` scalar values. Reject tuples, container/scalar subclasses,
+mapping proxies, and every other object as non-JSON-native; reject a key subclass as a
+non-string privacy key. Never call an overridable `lower`, iterator, mapping, or
+serialization method on a non-exact object.
+
+The privacy walk must build an owned plain-container tree while applying the path/type,
+private-fragment, absolute-path, digest, and finite-value gates. Canonically encode
+that exact tree once with the frozen sorted/indented UTF-8 JSON format. Publication
+must check `accepted is True` on the owned tree and pass those already validated bytes
+to the exclusive atomic writer; it must never serialize or otherwise re-read the
+caller-owned aggregate after validation. The production builder returns the owned
+tree, and publication independently snapshots it again at its trust boundary.
+
+Before any further WOMD access:
+
+1. extract the production benchmark mapping into a pure
+   `_build_benchmark_report` helper and the complete production aggregate mapping into
+   a pure `_build_acceptance_aggregate` helper;
+2. compose those exact helpers using invented scalar/count/runtime/cohort facts,
+   assert the canonical complete key tree and both exact value types, and prove the
+   complete production-shaped aggregate passes privacy validation and the mocked
+   exclusive publication seam;
+3. adversarially mutate that exact aggregate at top-level, nested-mapping, and
+   list-child positions; move each exception to a wrong parent; give it string,
+   integer, boolean, mapping, list, zero, negative, infinity, and NaN values as
+   applicable; inject keys containing each exact forbidden fragment—`coordinate`,
+   `digest`, `locator`, `native_id`, `ordinal`, `rank`, `scenario_id`, `sha256`, and
+   `trajectory`, including examples such as `selection_rank` and `record_locator`—plus
+   absolute POSIX/Windows path string values and standalone 64-hex string values; and
+   prove every mutation returns the expected stable privacy/JSON failure without
+   publication; and
+4. add hostile exact-boundary contradictions: a `str` key subclass whose `lower`
+   masks its stored forbidden spelling; root and nested mapping/list subclasses that
+   expose safe children on one observation and private children on another; scalar
+   subclasses; tuples; self-referential exact built-in dictionaries and lists; an
+   excessively deep acyclic exact-built-in tree; and mutation at the exclusive
+   byte-write seam. Detect active-container identity cycles directly and translate
+   only a remaining snapshot-walk or canonical-encoding `RecursionError` to stable
+   `aggregate_json` without catching or remapping an existing privacy
+   `M4CommandError`. Prove no overridable method is called, no caller-owned object is
+   serialized after validation, the emitted bytes decode to the validated owned
+   snapshot, and every rejected case writes nothing; and
+5. rerun the complete targeted, Waymo-extra, core-only, package/notices,
+   installed-help, site, staged-content, semantic, invariant, and privacy gates;
+   independently review the exact diff; add a final implementation-readiness record;
+   repeat the exact-snapshot gates after that executable-plan edit; commit and push
+   from a clean tree; and verify local `HEAD`, `origin/main`, and the remote ref are
+   equal.
+
+This correction changes no selector version or fingerprint, population, rejection
+predicate, ranking, quota, redistribution rule, fallback floor, cohort target,
+tolerance, horizon, execution scope, manifest or adapter schema, aggregate schema
+version, benchmark estimator, metric semantics, or reference fingerprint. It changes
+the plan, companion crosswalk, CLI, tests, Git tree, and executable-source fingerprint
+only.
+
+All six prior attempt directories remain retained unchanged. None may be inspected for
+evidence, resumed, reused, overwritten, deleted, published, or combined with another
+attempt. Only after every gate above passes may a seventh attempt use a new ignored
+directory and repeat both complete scans of exactly shards `00000`–`00009` from record
+zero through clean EOF.
+
+### Selector-v4 aggregate-privacy implementation-readiness record
+
+The schema-v1 aggregate-privacy correction was implemented without WOMD access or
+ignored-output access. It changes only this plan, the companion crosswalk, the M4 CLI,
+and its data-free tests. Selector-v4 configuration/fingerprint, population,
+predicates, ranking, quotas, schemas, reference configuration, benchmark estimator,
+metric scope, and public result claims remain unchanged.
+
+The exact implementation:
+
+- preserves the broad case-insensitive forbidden-key fragment denylist and admits only
+  `benchmark.nearest_rank_p95_seconds` as an exact positive finite built-in `float`
+  and `checks.selected_locator_reload_complete` as exact `True`;
+- keeps list indices in the inspection path so nesting cannot launder either
+  exception;
+- extracts the real benchmark mapping and complete aggregate mapping into pure
+  production builders exercised directly by invented tests;
+- accepts only exact built-in JSON containers, keys, and scalar types, producing a
+  deeply owned plain tree without calling subclass hooks;
+- detects active exact-container cycles while preserving shared acyclic subtrees,
+  translating only remaining snapshot or canonical-encoder recursion to stable
+  `aggregate_json`; and
+- canonically encodes the validated owned tree once and passes those immutable bytes
+  to the exclusive atomic writer, so later caller mutation cannot affect published
+  evidence.
+
+Independent reviews initially blocked readiness on a toy aggregate test that omitted
+the two production collisions, then on hostile key/container subclasses and
+validation/serialization time-of-check/time-of-use drift, and finally on cycle,
+excessive-depth, encoder-recursion, schema-version, and root-list evidence. After each
+correction, final semantic, stable-error, privacy-bypass, and evidence/process reviews
+returned **ACCEPTED — no unresolved blocker**.
+
+Pre-record verification passed:
+
+- 110 data-free M4 CLI tests;
+- the locked 12-file M4/Waymax/rollout matrix with 421 tests passing and one expected
+  local-data skip;
+- the full locked Waymo-extra environment with 493 tests passing and one expected
+  local-data skip;
+- the verified core-only environment, with JAX, jaxlib, TensorFlow, Flax, and Waymax
+  absent, with 418 tests passing and 22 expected optional-runtime skips; and
+- a fresh wheel/sdist audit with byte-identical required notices and no raw data,
+  outputs, private material, TFRecords, Parquet, caches, real checkout paths, or
+  vendored Waymax; installed-wheel M4 help outside the checkout and the presentation
+  request-matrix check both passed.
+
+These are implementation-readiness facts, not M4 execution evidence. This record is
+itself an executable-fingerprint change. The payload gate remains closed until this
+new exact snapshot repeats the focused CLI and locked matrix, complete
+Waymo-extra/core-only suites, package/notices/installed-help and site audits, and final
+exact-diff semantic, stable-error, privacy, and process reviews; is committed and
+pushed from a clean tree; and has local `HEAD`, `origin/main`, and the remote `main`
+ref independently verified equal.
