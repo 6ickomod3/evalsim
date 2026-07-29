@@ -2,8 +2,9 @@
 
 **Date:** 2026-07-28
 **Status:** Accepted pre-registration, data-free overlap-boundary amendment, and
-data-free implementation; commit/push and bound real-WOMD acceptance remain pending,
-and no M5 WOMD outcomes or native M5 parity results have been inspected
+data-free implementation; the implementation is committed and pushed, bound real-WOMD
+acceptance remains pending, and no M5 WOMD outcomes or native M5 parity results have
+been inspected
 **Depends on:** accepted M4 execution snapshot
 `a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`
 **Population:** the unchanged accepted M4 complete-case conditional cohort of
@@ -41,8 +42,9 @@ This closure is implementation evidence, not real-WOMD result evidence. No real-
 metric result, slice count, policy difference, resampling interval, or native M5
 metric-parity result was inspected. The unchanged 128-scenario cohort, shared pinned
 Waymax decode, and privileged logged-future status of log replay remain mandatory
-limitations. The data-free implementation is accepted in the working tree but has not
-yet been committed or pushed.
+limitations. The data-free implementation is accepted and pushed but has not been used
+to inspect a real-WOMD M5 outcome. The reviewed implementation was committed as
+`9b2676ac4b1c7bfb9f35a1c92f0159158756544a` before that boundary was opened.
 
 No real-WOMD M5 metric result, slice count, policy difference, resampling interval,
 native scenario identity, coordinate, or ignored M4 artifact **content** was inspected
@@ -860,5 +862,6 @@ release-surface audits.
       core-only suite passed 676 tests with 23 expected optional-runtime skips.
 - [x] Final independent architecture, methods/statistics, and privacy/claim reviews
       accepted the data-free implementation with no remaining blocker.
-- [ ] Accepted data-free implementation committed and pushed before WOMD execution.
+- [x] Accepted data-free implementation committed and pushed before WOMD execution
+      (`9b2676ac4b1c7bfb9f35a1c92f0159158756544a`).
 - [ ] Bound real-WOMD M5 execution, native metric parity, and result reviews completed.
