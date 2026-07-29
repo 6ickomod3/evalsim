@@ -36,19 +36,32 @@ cohort is conditional rather than representative; why a shared Waymax decode lim
 independence; why the privileged Waymax IDM reference was restricted to 16 scenes × 20
 transitions; and why a batch-two exact-log kernel benchmark is not end-to-end or
 production-scale throughput. Do not turn successful execution into a claim about
-realism—the first metric and statistical comparison belongs to M5.
+realism; M5 supplies a separate metric and statistical evidence gate.
 
 ### 2. Metric and statistical design
 
-Build with M5. Be able to explain:
+Study the accepted M5 result. Be able to explain:
 
 - realism versus downstream usefulness;
 - construct validity, units, eligibility, missingness, and aggregation;
 - why incompatible axes should not become one score;
-- paired scenario comparisons and scenario-cluster bootstrap;
+- paired scenario comparisons and deterministic scenario-level resampling;
 - rare events, small slices, pre-registered versus exploratory analysis, and multiple
   testing;
 - how a release decision changes when metrics disagree.
+
+Use the official ten-shard result as the case study: all 12 pre-registered primary
+`all`-slice cells retained paired `n = 128`, all 312 scorecards were independently
+reconstructed, and bounded native Waymax checks passed with zero tolerance-gate
+failures or binary mismatches. Explain why 10 of 12 multiplicity-adjusted
+scene-reweighting bands excluding zero still does **not** produce an overall winner
+when metric families disagree; why the other two cells must remain visible; why
+logged-position parity is tolerance-bounded rather than bit-exact; and why the fixed
+`0.1 s` kinematic diagnostic is not physical-time-normalized. Keep the conclusion
+conditional on the deterministic
+complete-case cohort: the bands are not confidence intervals or hypothesis tests, and
+the result is not WOMD-population inference, causal evidence, or a policy replacement
+decision.
 
 ### 3. Closed-loop causal evaluation
 

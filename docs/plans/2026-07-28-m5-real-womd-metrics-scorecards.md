@@ -1,12 +1,10 @@
 # M5 — Real-WOMD metric system and statistical scorecards
 
 **Date:** 2026-07-28
-**Status:** Accepted pre-registration, data-free overlap-boundary amendment, data-free
-implementation, and official-runner implementation; both implementations are committed
-and pushed, the private-repository authentication amendment is accepted and released
-at `828f01524e5bdcd6bbf1932fdea31c2d242e9bae`, the bound real-WOMD acceptance
-remains pending, and no M5 WOMD outcome or native M5 WOMD parity result has been
-computed
+**Status:** ✅ Accepted pre-registration, reviewed amendments, data-free and
+official-runner implementations, and bound real-WOMD result. The exact ten-shard,
+128-scenario execution and independent result reviews are closed in
+[§16](#16-bound-official-result-acceptance-closure); M6 is next and has not started.
 **Depends on:** accepted M4 execution snapshot
 `a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`
 **Population:** the unchanged accepted M4 complete-case conditional cohort of
@@ -911,14 +909,16 @@ release-surface audits.
       computing a WOMD outcome.
 - [x] Official-runner verification completed: 14 runner tests, a public mocked
       128-case lifecycle, 18 injected failure boundaries, 34 adversarial lifecycle
-      cases, the full repository suite with 862 passing tests and one expected
-      local-data skip, and a fresh clean core-only environment with 779 passing tests
-      and 25 expected optional/local skips.
+      cases, the final full repository suite with 876 passing tests and one expected
+      local-data skip, and a fresh clean core-only environment with 790 passing tests
+      and 28 expected optional/local skips.
 - [x] Final adversarial official-runner review returned **ACCEPT** with no remaining
       release blocker.
 - [x] Accepted official-runner implementation committed and pushed before WOMD
       execution (`c155d0d199b827a56417f288a41ea2437ea65127`).
-- [ ] Bound real-WOMD M5 execution, native metric parity, and result reviews completed.
+- [x] Bound real-WOMD M5 execution, native metric parity, exact result-store
+      verification, and independent semantic, statistical, and privacy/claim reviews
+      completed.
 
 ## 14. Pre-data private-repository transport amendment
 
@@ -966,8 +966,9 @@ WOMD or M5 output was accessed while closing this gate.
 
 ## 15. Outcome-blind cadence-domain amendment
 
-**Status:** design, implementation, and pre-release verification accepted; the
-correction release and fresh WOMD attempt `03` remain pending.
+**Status:** accepted, released as correction commit
+`51c881af95d963ce05a638a8a5c1fee79a11757a`, and exercised by the successful fresh
+WOMD attempt `03`.
 
 The fresh bound attempt `2026-07-29-official-m5-02` passed all source/Git/M4/output
 preflights, then stopped during the first case's kinematic-metric eligibility check
@@ -1046,3 +1047,58 @@ Three outcome-blind design reviews and three implementation/release reviews retu
 **ACCEPT** after correcting test-coverage and documentation-precision findings. No
 fresh WOMD execution occurred during the correction, and failed attempt `02` remains
 unchanged under the ignored local output boundary.
+
+## 16. Bound official-result acceptance closure
+
+**Status:** ✅ Accepted on 2026-07-29. M6 is next and has not started.
+
+Fresh attempt `03` ran the pre-registered official profile over the unchanged
+128-scenario complete-case conditional cohort from exact validation shards
+`00000`–`00009`. The accepted local M4 artifact set was revalidated and bound directly;
+the optional external M4 receipt was absent, so this is not described as an
+externally receipt-verified M4 handoff.
+
+The sealed ignored result passed exact store verification with:
+
+- 6,656 metric rows;
+- 1,024 source-only slice-membership rows;
+- 312 scorecard rows; and
+- 144 native-parity summary rows.
+
+All 312 scorecards were independently reconstructed. Every one of the 12
+pre-registered primary `all`-slice cells retained paired `n = 128`, with zero
+exclusions and no policy-dependent asymmetric missingness. The only metric
+ineligibility was the pre-registered symmetric `no_supported_lane` case: 23 scenarios,
+or 92 rows across the four execution/reference roles, for each lane diagnostic. The
+observed-ego-turn slice had zero members and remained in the complete ledger with its
+39 cells labeled `insufficient_n`.
+
+The bounded native cross-check compared 38,754 logged-position components with zero
+tolerance failures, 38,754 overlap components with zero binary mismatches, and 37,770
+fixed-step kinematic components with zero binary mismatches. Logged-position parity is
+not bit-exact: 24 of 48 summary rows had nonzero numerical error that remained inside
+the pre-registered float32 tolerance. Kinematic parity uses version `1.0.1` and the
+fixed `0.1 s` Waymax-semantic timebase.
+
+The complete 12-cell primary family was reviewed rather than cherry-picked. Ten of 12
+multiplicity-adjusted scene-reweighting bands exclude zero; two do not support an
+adjusted direction. Position and speed error, overlap, and fixed-step kinematic
+diagnostics do not induce one consistent policy order. The accepted conclusion is
+therefore a mixed result with no overall winner, total ranking, or
+simulator-superiority claim.
+
+Three independent result-review tracks accepted the semantic/parity interpretation,
+the complete statistical reconstruction, and the privacy/publication boundary. The
+promoted aggregate evidence is recorded in
+[`docs/results/m5-official-acceptance.md`](../results/m5-official-acceptance.md).
+Raw TFRecords, native identities, coordinates, detailed diagnostics, and all generated
+result files remain local and ignored.
+
+These results are conditional on one deterministic complete-case cohort. The bands
+are empirical scene-reweighting sensitivity summaries, not confidence intervals,
+hypothesis tests, or WOMD-population uncertainty. The reference and custom paths share
+the pinned Waymax decoder; log replay is a privileged recorded-future construction;
+ego remains logged/exogenous; overlap is a target-frame proxy; and the fixed-step
+kinematic diagnostic is not physical-time-normalized. M5 establishes neither causal
+reactivity, metric construct validity under controlled defects, native
+offroad/route/signal semantics, production scale, nor a policy replacement decision.

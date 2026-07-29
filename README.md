@@ -26,11 +26,11 @@ the canonical
 The platform is built **contract-first** (ports-and-adapters). The validated `Scenario`
 contract has both a synthetic producer and an M3 local WOMD producer through pinned
 Waymax/JAX on Apple Silicon CPU. M4 makes Waymax a recurring reference rollout and
-semantic-parity path. M5 now has accepted data-free metric, slicing, paired-statistics,
-result-store, reporting, and fail-closed official-runner implementations behind those
-same contracts. Downstream components continue to consume **only** project contracts.
-Synthetic scenes remain analytic oracles while every core feature from M3 onward also
-gets a real-WOMD acceptance path.
+semantic-parity path. M5 adds the accepted contract-first metric, slicing,
+paired-statistics, result-store, reporting, and fail-closed official-runner stack, then
+exercises it on the unchanged 128-scenario ten-shard WOMD cohort. Downstream components
+continue to consume **only** project contracts. Synthetic scenes remain analytic
+oracles while every core feature from M3 onward also gets a real-WOMD acceptance path.
 
 ## Progress
 
@@ -43,7 +43,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M2 | Simulator adapters + rollout engine | ✅ | 🖥️ |
 | M3 | Local WOMD → Waymax/JAX → EvalSim vertical slice | ✅ | 🖥️ |
 | M4 | Deterministic WOMD cohort + Waymax parity | ✅ | 🖥️ |
-| M5 | Metric system + statistical scorecards; real-WOMD acceptance | 🚧 | 🖥️ |
+| M5 | Metric system + statistical scorecards; real-WOMD acceptance | ✅ | 🖥️ |
 | M6 | Counterfactual closed-loop reactivity | ⬜ | 🖥️ |
 | M7 | Evaluator red-team + metric governance | ⬜ | 🖥️ |
 | M8 | JAX/Flax learned realism discriminator | ⬜ | 🖥️/☁️ |
@@ -51,22 +51,22 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M10 | Scalable, resumable evaluation pipeline | ⬜ | 🖥️/☁️ |
 | M11 | Decision package + staff-caliber communication | ⬜ | 🖥️ |
 
-M5's data-free and official-runner implementations are accepted: 13 registered
-metrics, 8 source-only slices, paired scorecards, an immutable result store and
-renderer, an accepted-M4 reuse verifier, a fixed synthetic acceptance CLI, and a
-streaming official CLI bound to the accepted M4 cohort and a clean pushed source
-state. The
-[accepted M5 pre-registration](docs/plans/2026-07-28-m5-real-womd-metrics-scorecards.md)
-still governs the pending real-data gate. The official-runner implementation passed a
-mocked 128-case lifecycle, 18 injected failure boundaries, 34 adversarial lifecycle
-cases, 14 runner tests, and final adversarial review. No M5 WOMD/Waymax metric outcome
-has been computed or accepted, and no policy-quality result, ranking, or winner is
-claimed.
+M5 is accepted. Its official execution evaluated all three policies over the unchanged
+128-scenario complete-case conditional cohort from WOMD validation shards
+`00000`–`00009`, wrote and re-verified the exact 6,656 metric, 1,024 slice, 312
+scorecard, and 144 parity-summary row domains, and passed independent semantic,
+statistical, and privacy/claim review. All 12 pre-registered primary `all`-slice cells
+were complete and paired. The result is intentionally mixed: different metrics favor
+different policies, 10 of 12 multiplicity-adjusted primary stability bands exclude
+zero, and the remaining comparisons plus cross-metric contradictions do not support an
+overall winner or simulator-superiority claim. See the
+[sanitized M5 acceptance report](docs/results/m5-official-acceptance.md) and the
+[accepted pre-registration](docs/plans/2026-07-28-m5-real-womd-metrics-scorecards.md).
 
 **Tests:** current full repository suite: 876 passed + 1 expected local-data skip;
 fresh clean core-only environment: 790 passed + 28 expected optional/local skips ·
-**Last updated:** 2026-07-29 (M5 official runner and private-repository live-ref
-amendment accepted and pushed; real-WOMD/Waymax execution and acceptance pending)
+**Last updated:** 2026-07-29 (M5 official ten-shard acceptance completed; M6 is next and
+has not started)
 
 ## Completed work
 
@@ -201,14 +201,14 @@ random or representative WOMD benchmark. EvalSim and the reference path share th
 pinned Waymax WOMD decode, so the cross-check is not fully independent. M4 establishes
 cohort construction, supported-field/exact-log semantics, bounded reference execution,
 and a narrow JAX microbenchmark. It does **not** establish simulator realism,
-generalization, production scale, or custom/Waymax metric agreement; metrics,
-behavioral slices, and statistical comparisons begin in M5. See the
+generalization, production scale, or custom/Waymax metric agreement. Those later
+metric, slice, and statistical gates were completed separately in M5. See the
 [reviewed M4 plan](docs/plans/2026-07-28-m4-womd-cohort-waymax-parity.md).
 
-### M5 — Metric, scorecard, and official-runner implementation 🚧 real-data acceptance pending
+### M5 — Real-WOMD metrics and statistical scorecards ✅ accepted
 
-The contract-first M5 evaluation stack and its official execution path are implemented
-and accepted at the software boundary:
+The contract-first M5 evaluation stack, official execution path, and bound ten-shard
+result are accepted:
 
 - **13 registered motion metrics** expose units, direction, eligibility, invalid
   reasons, and retained component distributions without a composite realism score.
@@ -238,15 +238,38 @@ and accepted at the software boundary:
 - **Adversarial runner verification** covers 14 runner tests, a public mocked 128-case
   lifecycle, 18 injected failure boundaries, and 34 adversarial lifecycle cases. The
   final independent review returned **ACCEPT**.
+- **Bound real-WOMD acceptance** reused and revalidated the accepted local M4 artifact
+  set, evaluated the exact 128-case cohort from shards `00000`–`00009`, and sealed a
+  complete result with 6,656 metric rows, 1,024 source-only slice rows, 312 scorecards,
+  and 144 bounded native-parity summaries.
+- **Independent result verification** re-derived all 312 scorecards, confirmed complete
+  source pairing with no policy-dependent asymmetric missingness, and retained the
+  pre-registered empty observed-ego-turn slice as `insufficient_n`. The only metric
+  ineligibility was the symmetric `no_supported_lane` case for the two lane
+  diagnostics.
+- **Bounded native parity** found zero tolerance failures across 38,754
+  logged-position components, zero binary mismatches across 38,754 overlap components,
+  and zero binary mismatches across 37,770 fixed-step kinematic components. Logged
+  position parity is tolerance-bounded—not bit-exact—and the kinematic measure is a
+  fixed `0.1 s` Waymax-semantic diagnostic, not a physical-time-normalized feasibility
+  measure.
+- **Mixed primary result** retains the complete 12-cell `all`-slice matrix. Ten
+  multiplicity-adjusted stability bands exclude zero, but different metric families
+  favor different policies and two cells do not support an adjusted direction. There
+  is no defensible overall winner, total ordering, causal conclusion, or
+  simulator-superiority claim.
 
 The current full repository suite reports **876 passed and 1 expected local-data
 skip**. A fresh clean core-only environment without JAX, jaxlib, TensorFlow, Flax, or
-Waymax reports **790 passed and 28 expected optional/local skips**. These are
-implementation and contract evidence only. The bound M5 real-WOMD/Waymax metric
-execution has not run, so none of the official row domains contains a computed WOMD
-outcome and there is no accepted policy-quality effect, ranking, winner, or
-population-level conclusion. The remaining real-data and parity gates are defined in the
-[accepted M5 pre-registration](docs/plans/2026-07-28-m5-real-womd-metrics-scorecards.md).
+Waymax reports **790 passed and 28 expected optional/local skips**. The official
+analysis is conditional on one deterministic complete-case cohort, uses a shared
+Waymax decoder, keeps ego logged/exogenous, and treats privileged log replay as a
+construction oracle—not independent ground truth. Its deterministic
+scenario-resampling bands are finite-cohort reweighting sensitivity summaries, not
+confidence intervals, hypothesis tests, or WOMD-population inference. Native
+offroad/route/signal semantics, counterfactual ego control, evaluator validity, and
+production scale remain outside M5. The complete promoted matrix and limitations are
+in the [sanitized acceptance report](docs/results/m5-official-acceptance.md).
 
 ## Setup
 
@@ -428,12 +451,12 @@ not evidence about WOMD or policy quality.
 
 ## M5 official acceptance runner
 
-The reviewed `evalsim-m5-official` entry point is implemented, but this repository has
-not yet computed or accepted an M5 WOMD outcome. Its four required arguments are the
-exact project root, local WOMD validation directory, explicit ignored accepted-M4 run
-directory, and a new lowercase run name beneath ignored `outputs/m5/`.
+The reviewed `evalsim-m5-official` entry point produced the accepted M5 result. Its
+four required arguments are the exact project root, local WOMD validation directory,
+explicit ignored accepted-M4 run directory, and a new lowercase run name beneath
+ignored `outputs/m5/`.
 
-After the reviewed runner source is committed and pushed, the invocation shape is:
+To reproduce it from a clean pushed source state, use this invocation shape:
 
 ```bash
 M5_ACCEPTED_M4_RUN="$PWD/outputs/m4/replace-with-accepted-run-name"
@@ -449,8 +472,10 @@ dirty or unpushed source state, changed shards or M4 evidence, an existing/non-i
 output, row-domain drift, determinism drift, parity failure, or terminal-publication
 leak. A successful real-data run must produce exactly 6,656 metric rows, 1,024 slice
 rows, 312 scorecard rows, and 144 parity-summary rows before it can promote `SUCCESS`.
-All generated artifacts remain local and ignored. Software tests of this lifecycle do
-not substitute for the pending real-WOMD execution and result review.
+All generated artifacts remain local and ignored. The accepted aggregate-only evidence
+is summarized in
+[`docs/results/m5-official-acceptance.md`](docs/results/m5-official-acceptance.md);
+reproduction must independently pass the same result verification and claim review.
 
 ## Layout
 
@@ -472,6 +497,7 @@ tests/          # contracts, sources, policies, rollout engine, dynamics, and vi
 docs/plans/     # historical M0–M2 design + canonical Waymo-aligned roadmap
 docs/data/      # tracked schema mappings and omission crosswalks (never dataset payloads)
 docs/interview/ # sanitized role matrix, claim ledger, and study plan
+docs/results/   # sanitized aggregate milestone evidence (never generated result tables)
 index.html      # interactive, evidence-led technical presentation
 public/og.png   # social preview artwork (not an experiment artifact)
 scripts/        # dependency-free presentation build and structural checks
@@ -485,14 +511,12 @@ one-scenario vertical slice; M4 now supports the narrower substantive claim that
 log-playback mapping and rollout-contract semantics were cross-checked on a
 deterministic 128-scenario complete-case conditional cohort from ten WOMD validation
 shards, with bounded Waymax reference execution and a measured batch-two JAX CPU
-microbenchmark. M5 adds tested data-free and official-runner implementations for 13
-metrics, 8 source-only slices, paired finite-cohort scorecards, immutable result
-storage, deterministic reporting, accepted-M4 reuse verification, a bounded Waymax
-metric-parity adapter, and synthetic/official CLIs. The official lifecycle has been
-mocked and adversarially tested, but no M5 WOMD outcome has been computed. The
-implementation therefore does not unlock a real-WOMD, native-parity-result,
-policy-quality, or simulator-superiority claim; the bound real-data run remains
-pending. Counterfactuals, stress tests, learned evaluators, scalable execution, and
-video/VLM work likewise remain unavailable as claims until their evidence gates pass.
-See the
+microbenchmark. M5 now supports the narrower additional claim that 13 separately
+reported metrics and 8 source-only slices were evaluated over that unchanged cohort
+with paired finite-cohort scorecards, deterministic scenario-reweighting stability
+analysis, and bounded native Waymax metric cross-checks. The mixed result supports the
+evaluation methodology, not an overall policy winner, WOMD-population conclusion,
+causal claim, or simulator-superiority claim. Counterfactuals, stress tests, learned evaluators,
+scalable execution, and video/VLM work remain unavailable as claims until their
+evidence gates pass. M6 is next but has not started. See the
 [claim-to-evidence ledger](docs/interview/claim-evidence-ledger.md).

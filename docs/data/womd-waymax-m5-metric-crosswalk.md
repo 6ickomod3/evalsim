@@ -1,8 +1,8 @@
 # WOMD / Waymax / EvalSim M5 metric crosswalk
 
 **Status:** Accepted pre-registered semantics, data-free overlap-boundary amendment,
-outcome-blind cadence-domain amendment, data-free implementation, and official-runner
-implementation; no M5 WOMD outcome or native M5 WOMD parity result computed
+outcome-blind cadence-domain amendment, data-free and official-runner implementations,
+and bound ten-shard M5 result with bounded native parity
 **Pinned Waymax commit:** `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`
 
 This document separates numerical equivalence, deliberate EvalSim definitions, and
@@ -14,8 +14,8 @@ their trigonometric results differ at the bit level. This falsifies universal ba
 bit-equivalence before any M5 WOMD outcome access. The counterexample is retained in
 tests; exact observed flags remain mandatory on the frozen parity subset.
 
-Before a fresh official execution, a preserved pre-metric failure falsified the
-additional assumption that every accepted source interval must equal exactly
+Before the successful official execution, a preserved pre-metric failure falsified
+the additional assumption that every accepted source interval must equal exactly
 `100_000` microseconds. No metric, slice, scorecard, determinism, or native-parity
 result was produced or inspected. The accepted outcome-blind correction removes that
 cadence eligibility gate without changing the cohort, states, masks, thresholds, or
@@ -57,12 +57,36 @@ passing tests and one expected local-data skip, and final adversarial review wit
 tests with 28 expected optional/local skips. The mocked lifecycle enforces 6,656
 metric rows, 1,024 slice rows, 312 scorecard rows, and 144 parity-summary rows.
 
-No real-WOMD metric effect, slice prevalence, missingness result, or native metric
-parity result is established here: the official lifecycle used mocks and no M5 WOMD
-outcome was computed. The later data execution remains conditional on the unchanged
-128-scenario complete-case M4 cohort. It is not population inference; the custom and
-reference paths share the pinned Waymax decoder; and log replay remains a privileged
-logged-future construction oracle rather than independent ground truth.
+Those checks are software evidence. The separately reviewed official result below,
+not the mocked lifecycle, establishes the fixed-cohort native parity claim.
+
+## Accepted official-result evidence
+
+The bound official execution reused and revalidated the accepted local M4 artifact set
+for the unchanged 128-scenario complete-case conditional cohort from validation shards
+`00000`–`00009`. Exact result-store verification passed for 6,656 metric rows, 1,024
+slice-membership rows, 312 scorecards, and 144 parity-summary rows. All 312 scorecards
+were independently reconstructed; all 12 pre-registered primary `all`-slice cells
+retained paired `n = 128` with no policy-dependent asymmetric missingness.
+
+The bounded native parity result is:
+
+- **Logged-position divergence `1.0.0`:** 38,754 compared components and zero tolerance
+  failures. Twenty-four of 48 summary rows had nonzero numerical error inside the
+  pre-registered float32 tolerance, so this is not bit-exact parity.
+- **Oriented-box overlap `1.0.0`:** 38,754 compared components and zero binary
+  mismatches.
+- **Kinematic infeasibility `1.0.1`:** 37,770 compared components and zero binary
+  mismatches under the fixed `0.1 s` inverse-dynamics timebase.
+
+The separate full-cohort Waymax exact-log reference and EvalSim log replay completed
+their prescribed domains; 640 logged-reference error-oracle results were exactly zero
+across their eligible components. This is a bounded semantic cross-check, not
+population inference or ground truth: the custom and reference paths share the pinned
+Waymax decoder, log replay uses privileged logged future, and the kinematic diagnostic
+is fixed-step rather than physical-time-normalized. The complete aggregate result and
+claim limitations are recorded in the
+[`M5 official acceptance report`](../results/m5-official-acceptance.md).
 
 Pinned sources:
 
@@ -310,8 +334,7 @@ canonical candidate motion/validity and contract dimensions into retained
 timestamps, roadgraph, and padding, sets the current timestep, and calls the native
 metric class directly.
 
-The official runner now implements the separate full 128-scene/80-transition Waymax
-exact-log gate and exact 144-row parity-summary domain. The public mocked lifecycle and
-data-free acceptance produced no native WOMD parity result. Any later observed 16 × 20
-parity result is a bounded semantic cross-check, not a policy benchmark or a rerun of
-Waymax IDM.
+The official runner implements the separate full 128-scene/80-transition Waymax
+exact-log gate and exact 144-row parity-summary domain. The accepted observed
+16 × 20 × 3-policy parity result is a bounded semantic cross-check, not a policy
+benchmark or a rerun of Waymax IDM.

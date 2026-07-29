@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07110f">
-  <meta name="description" content="EvalSim is a contract-first platform for evaluating traffic simulators. Explore accepted M0–M4 evidence, the reviewed M5 evaluator and official-runner implementation, three baseline policies, and the pending real-WOMD/Waymax metric run.">
+  <meta name="description" content="EvalSim is a contract-first platform for evaluating traffic simulators. Explore accepted M0–M5 evidence, an official ten-shard WOMD evaluation on a fixed 128-scenario cohort, three baseline policies, and the next M6 counterfactual question.">
   <link rel="canonical" href="https://evalsim-policy-lab.jdai2013.chatgpt.site/">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/">
   <meta property="og:title" content="EvalSim — Closed-loop simulator evaluation">
-  <meta property="og:description" content="M0–M4 accepted · M5 official runner accepted data-free · 876 tests pass · real M5 WOMD run pending">
+  <meta property="og:description" content="M0–M5 accepted · official ten-shard WOMD evaluation · 128 paired scenarios · 876 tests pass · M6 not started">
   <meta property="og:image" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/og.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="EvalSim — Closed-loop simulator evaluation">
-  <meta name="twitter:description" content="M0–M4 accepted · M5 official runner accepted data-free · 876 tests pass · real M5 WOMD run pending">
+  <meta name="twitter:description" content="M0–M5 accepted · official ten-shard WOMD evaluation · 128 paired scenarios · 876 tests pass · M6 not started">
   <meta name="twitter:image" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/og.png">
   <title>EvalSim — Closed-loop simulator evaluation</title>
   <style>
@@ -627,6 +627,34 @@
     }
     .comparison td { color: var(--muted); }
     .comparison td strong { color: var(--ink); }
+    .result-table { min-width: 1960px; }
+    .result-table th,
+    .result-table td {
+      padding: 12px 13px;
+      font-variant-numeric: tabular-nums;
+    }
+    .result-table tbody th {
+      width: 13%;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    .result-table tbody th span {
+      color: var(--faint);
+      font: 650 11px/1.5 var(--mono);
+    }
+    .result-table td.numeric {
+      white-space: nowrap;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+    .result-table .gate-pass { color: var(--mint); }
+    .result-table .gate-hold { color: var(--orange); }
+    .results-note {
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
 
     .rollout-flow {
       display: grid;
@@ -770,6 +798,20 @@
       color: var(--muted);
       font-size: 13px;
       line-height: 1.5;
+    }
+    .results-block {
+      margin-top: 34px;
+      border-top: 1px solid var(--line);
+      padding-top: 34px;
+    }
+    .results-block h3 {
+      margin-bottom: 9px;
+      font-size: clamp(24px, 3vw, 34px);
+      letter-spacing: -.03em;
+    }
+    .results-block > p {
+      max-width: 920px;
+      color: var(--muted);
     }
     .review-strip {
       display: grid;
@@ -1194,7 +1236,7 @@
   <main id="main">
     <section class="shell hero" id="top" aria-labelledby="hero-title">
       <div>
-        <p class="kicker">M0 → M4 accepted · M5 official runner accepted data-free</p>
+        <p class="kicker">M0 → M5 accepted · official ten-shard WOMD evaluation</p>
         <h1 id="hero-title">A simulator can match the log—and still <em>fail the test.</em></h1>
         <p class="hero-copy">EvalSim is a contract-first platform for discovering how traffic simulators differ: what they replay, what they react to, where their motion breaks, and whether their outputs are useful for closed-loop evaluation.</p>
         <div class="hero-actions">
@@ -1227,7 +1269,7 @@
     </section>
 
     <div class="shell evidence-ribbon" aria-label="Current project evidence">
-      <div class="stat"><strong>5</strong><span>milestones complete</span></div>
+      <div class="stat"><strong>6</strong><span>milestones complete</span></div>
       <div class="stat"><strong>876</strong><span>full repository tests pass</span></div>
       <div class="stat"><strong>5</strong><span>synthetic families</span></div>
       <div class="stat"><strong>128</strong><span>conditional WOMD cohort</span></div>
@@ -1240,7 +1282,7 @@
           <span class="section-index">01 / Evaluation tension</span>
           <h2 id="why-title">Realism is not a scalar.</h2>
         </div>
-        <p>The project starts with deliberately limited policies so their different failure modes remain legible. M4 exercised the contract on a deterministic, conditional WOMD cohort with pinned Waymax reference execution and batched JAX checks. M5's evaluator and fail-closed official runner are accepted at the data-free boundary; the runner has not yet produced a WOMD metric outcome.</p>
+        <p>The project starts with deliberately limited policies so their different failure modes remain legible. M5 ran the accepted evaluator on the fixed 128-scenario M4 cohort from exactly ten WOMD validation shards, with pinned Waymax parity checks and paired scene-level statistics. The result is deliberately mixed: every policy contrast has metrics pointing in both directions, so there is no overall winner.</p>
       </div>
       <div class="tension-grid">
         <article class="tension-card">
@@ -1334,7 +1376,7 @@
             </dl>
           </article>
         </div>
-        <p class="schematic-note">The trajectories above are explanatory schematics derived from implemented policy semantics—not measured M5 metric results or a ranking of policy quality.</p>
+        <p class="schematic-note">The trajectories above remain explanatory schematics derived from implemented policy semantics. The reviewed M5 measurements appear in the complete matrix below; neither the schematics nor those finite-cohort diagnostics establish an overall policy-quality ranking.</p>
 
         <div class="comparison-wrap">
           <table class="comparison">
@@ -1454,14 +1496,187 @@
         <article class="proof-card"><span class="proof-id">EVIDENCE / J</span><h3>Contract + exact log</h3><p>All pre-registered contract and exact-log gates passed at their declared scopes, including adapter parity and exact-log rollout conversion across the full selected cohort.</p></article>
         <article class="proof-card"><span class="proof-id">EVIDENCE / K</span><h3>Waymax reference</h3><p>The privileged logged-trajectory waypoint-following Waymax IDM reference executed on 16 selected scenes for 20 transitions. This is execution evidence—not metric parity or realism evidence.</p></article>
         <article class="proof-card"><span class="proof-id">EVIDENCE / L</span><h3>Batched JAX evidence</h3><p>A fresh-process Apple CPU exact-log microbenchmark used batch size 2 and 20 warm runs: 217.983625 ms compile, 1.897854 ms median, 2.617709 ms nearest-rank p95, and 1,053.821843 scenarios/s. Peak process high-water RSS was 587,808,768 bytes.</p></article>
-        <article class="proof-card"><span class="proof-id">EVIDENCE / M</span><h3>Data-free M5 evaluator</h3><p>Thirteen metrics, eight source-only slices, a complete 312-cell paired scorecard ledger, immutable local results, deterministic rendering, accepted-M4 reuse verification, and the fixed synthetic CLI are implemented. This is not a real-data or policy-quality result.</p></article>
-        <article class="proof-card"><span class="proof-id">EVIDENCE / N</span><h3>Official-runner lifecycle</h3><p>A public mocked 128-case lifecycle proves the fixed 6,656 metric, 1,024 slice, 312 scorecard, and 144 native-parity row contracts without reading WOMD. Eighteen failure boundaries, 34 adversarial lifecycle cases, and 14 runner tests passed before release review accepted the implementation.</p></article>
+        <article class="proof-card"><span class="proof-id">EVIDENCE / M</span><h3>Official M5 evaluation</h3><p>The bound ten-shard run completed on all 128 accepted scenarios and produced the pre-registered domains: 6,656 metric rows, 1,024 slice memberships, 312 scorecards, and 144 native-parity summaries. All 12 primary cells retained paired n = 128 with zero exclusions or asymmetric missingness.</p></article>
+        <article class="proof-card"><span class="proof-id">EVIDENCE / N</span><h3>Native parity outcome</h3><p>On the bounded subset of 16 scenes × 20 post-current transitions × three policies, 38,754 overlap components and 37,770 fixed-step kinematic components had zero binary mismatches. Log divergence had zero tolerance mismatches across 38,754 components; 24 of 48 rows had nonzero error within the pre-registered float32 tolerance, so it is not claimed bit-exact.</p></article>
+      </div>
+
+      <div class="results-block" aria-labelledby="m5-results-title">
+        <span class="section-index">M5 / Complete promoted primary family</span>
+        <h3 id="m5-results-title">Twelve cells, including the contradictions.</h3>
+        <p>Every row below is from the <code>all</code> slice of the accepted official run. The policies are intentionally simple diagnostic baselines. The matrix is complete rather than selected for favorable outcomes.</p>
+        <div class="comparison-wrap">
+          <table class="comparison result-table">
+            <caption class="sr-only">Complete 12-cell M5 primary all-slice matrix from the accepted official ten-shard WOMD evaluation</caption>
+            <thead>
+              <tr>
+                <th scope="col">Metric contract</th>
+                <th scope="col">Ordered A − B</th>
+                <th scope="col">Pairing + missingness</th>
+                <th scope="col">Exact raw mean / N</th>
+                <th scope="col">Pointwise 0.95 band</th>
+                <th scope="col">Adjusted 0.9958333333333333 band</th>
+                <th scope="col">Nonzero / status / suppression</th>
+                <th scope="col">Raw sign</th>
+                <th scope="col">Oriented advantage sign</th>
+                <th scope="col">Directional gate</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>position_error_m</code><br><span>v1.0.0 · m · lower</span></th>
+                <td><code>constant_velocity</code><br>− <code>log_replay</code></td>
+                <td class="numeric">paired 128<br>valid A/B 128/128<br>excluded/asymmetric 0/0<br>both-missing 0<br>reasons A/B {}/{}</td>
+                <td class="numeric">2.997305058703697<br>N = 128</td>
+                <td class="numeric">[2.6279802249751203,<br>3.3901418187934973]</td>
+                <td class="numeric">[2.4703977791024374,<br>3.5883347567281167]</td>
+                <td>nonzero 128<br><code>descriptive</code><br>suppressed no</td>
+                <td class="numeric">positive</td>
+                <td class="numeric">-2.997305058703697<br>negative · A worse</td>
+                <td class="gate-pass">directional yes</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>position_error_m</code><br><span>v1.0.0 · m · lower</span></th>
+                <td><code>idm</code><br>− <code>log_replay</code></td>
+                <td class="numeric">paired 128<br>valid A/B 128/128<br>excluded/asymmetric 0/0<br>both-missing 0<br>reasons A/B {}/{}</td>
+                <td class="numeric">7.7500647664453<br>N = 128</td>
+                <td class="numeric">[7.254792072654283,<br>8.238701486809102]</td>
+                <td class="numeric">[7.039911175083419,<br>8.46896905650854]</td>
+                <td>nonzero 128<br><code>descriptive</code><br>suppressed no</td>
+                <td class="numeric">positive</td>
+                <td class="numeric">-7.7500647664453<br>negative · A worse</td>
+                <td class="gate-pass">directional yes</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>position_error_m</code><br><span>v1.0.0 · m · lower</span></th>
+                <td><code>idm</code><br>− <code>constant_velocity</code></td>
+                <td class="numeric">paired 128<br>valid A/B 128/128<br>excluded/asymmetric 0/0<br>both-missing 0<br>reasons A/B {}/{}</td>
+                <td class="numeric">4.752759707741603<br>N = 128</td>
+                <td class="numeric">[4.202246972287565,<br>5.3075581383441]</td>
+                <td class="numeric">[3.95256553101306,<br>5.56545970470591]</td>
+                <td>nonzero 128<br><code>descriptive</code><br>suppressed no</td>
+                <td class="numeric">positive</td>
+                <td class="numeric">-4.752759707741603<br>negative · A worse</td>
+                <td class="gate-pass">directional yes</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>speed_error_mps</code><br><span>v1.0.0 · m/s · lower</span></th>
+                <td><code>constant_velocity</code><br>− <code>log_replay</code></td>
+                <td class="numeric">paired 128<br>valid A/B 128/128<br>excluded/asymmetric 0/0<br>both-missing 0<br>reasons A/B {}/{}</td>
+                <td class="numeric">1.0965694309637917<br>N = 128</td>
+                <td class="numeric">[0.9619761038524979,<br>1.2391368628083081]</td>
+                <td class="numeric">[0.9032779039639633,<br>1.3053634771162963]</td>
+                <td>nonzero 128<br><code>descriptive</code><br>suppressed no</td>
+                <td class="numeric">positive</td>
+                <td class="numeric">-1.0965694309637917<br>negative · A worse</td>
+                <td class="gate-pass">directional yes</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>speed_error_mps</code><br><span>v1.0.0 · m/s · lower</span></th>
+                <td><code>idm</code><br>− <code>log_replay</code></td>
+                <td class="numeric">paired 128<br>valid A/B 128/128<br>excluded/asymmetric 0/0<br>both-missing 0<br>reasons A/B {}/{}</td>
+                <td class="numeric">2.9496225910279303<br>N = 128</td>
+                <td class="numeric">[2.7967982543093335,<br>3.104855524781929]</td>
+                <td class="numeric">[2.7243675139407824,<br>3.1765169409116614]</td>
+                <td>nonzero 128<br><code>descriptive</code><br>suppressed no</td>
+                <td class="numeric">positive</td>
+                <td class="numeric">-2.9496225910279303<br>negative · A worse</td>
+                <td class="gate-pass">directional yes</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>speed_error_mps</code><br><span>v1.0.0 · m/s · lower</span></th>
+                <td><code>idm</code><br>− <code>constant_velocity</code></td>
+                <td class="numeric">paired 128<br>valid A/B 128/128<br>excluded/asymmetric 0/0<br>both-missing 0<br>reasons A/B {}/{}</td>
+                <td class="numeric">1.8530531600641384<br>N = 128</td>
+                <td class="numeric">[1.6431704146322648,<br>2.063347933439761]</td>
+                <td class="numeric">[1.5420387726424956,<br>2.1559393836500935]</td>
+                <td>nonzero 128<br><code>descriptive</code><br>suppressed no</td>
+                <td class="numeric">positive</td>
+                <td class="numeric">-1.8530531600641384<br>negative · A worse</td>
+                <td class="gate-pass">directional yes</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>oriented_box_overlap_rate</code><br><span>v1.0.0 · fraction · lower</span></th>
+                <td><code>constant_velocity</code><br>− <code>log_replay</code></td>
+                <td class="numeric">paired 128<br>valid A/B 128/128<br>excluded/asymmetric 0/0<br>both-missing 0<br>reasons A/B {}/{}</td>
+                <td class="numeric">0.04966195639263592<br>N = 128</td>
+                <td class="numeric">[0.03709369889680477,<br>0.06256488985435854]</td>
+                <td class="numeric">[0.031503882406754925,<br>0.06888376611885266]</td>
+                <td>nonzero 112<br><code>descriptive</code><br>suppressed no</td>
+                <td class="numeric">positive</td>
+                <td class="numeric">-0.04966195639263592<br>negative · A worse</td>
+                <td class="gate-pass">directional yes</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>oriented_box_overlap_rate</code><br><span>v1.0.0 · fraction · lower</span></th>
+                <td><code>idm</code><br>− <code>log_replay</code></td>
+                <td class="numeric">paired 128<br>valid A/B 128/128<br>excluded/asymmetric 0/0<br>both-missing 0<br>reasons A/B {}/{}</td>
+                <td class="numeric">0.04324182820631069<br>N = 128</td>
+                <td class="numeric">[0.034523267487685035,<br>0.05171025074417448]</td>
+                <td class="numeric">[0.03023094433374868,<br>0.05548078521175095]</td>
+                <td>nonzero 117<br><code>descriptive</code><br>suppressed no</td>
+                <td class="numeric">positive</td>
+                <td class="numeric">-0.04324182820631069<br>negative · A worse</td>
+                <td class="gate-pass">directional yes</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>oriented_box_overlap_rate</code><br><span>v1.0.0 · fraction · lower</span></th>
+                <td><code>idm</code><br>− <code>constant_velocity</code></td>
+                <td class="numeric">paired 128<br>valid A/B 128/128<br>excluded/asymmetric 0/0<br>both-missing 0<br>reasons A/B {}/{}</td>
+                <td class="numeric">-0.006420128186325231<br>N = 128</td>
+                <td class="numeric">[-0.015279928885177754,<br>0.0020568185134115127]</td>
+                <td class="numeric">[-0.01956296032512017,<br>0.005847794738256519]</td>
+                <td>nonzero 117<br><code>descriptive</code><br>suppressed no</td>
+                <td class="numeric">negative</td>
+                <td class="numeric">0.006420128186325231<br>positive · A better</td>
+                <td class="gate-hold">directional no<br>bands cross zero</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>waymax_kinematic_infeasibility_rate</code><br><span>v1.0.1 · fraction · lower</span></th>
+                <td><code>constant_velocity</code><br>− <code>log_replay</code></td>
+                <td class="numeric">paired 128<br>valid A/B 128/128<br>excluded/asymmetric 0/0<br>both-missing 0<br>reasons A/B {}/{}</td>
+                <td class="numeric">-0.04413296796842321<br>N = 128</td>
+                <td class="numeric">[-0.04984095659342634,<br>-0.038919178663599646]</td>
+                <td class="numeric">[-0.052764339963662525,<br>-0.036711842617360955]</td>
+                <td>nonzero 128<br><code>descriptive</code><br>suppressed no</td>
+                <td class="numeric">negative</td>
+                <td class="numeric">0.04413296796842321<br>positive · A better</td>
+                <td class="gate-pass">directional yes</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>waymax_kinematic_infeasibility_rate</code><br><span>v1.0.1 · fraction · lower</span></th>
+                <td><code>idm</code><br>− <code>log_replay</code></td>
+                <td class="numeric">paired 128<br>valid A/B 128/128<br>excluded/asymmetric 0/0<br>both-missing 0<br>reasons A/B {}/{}</td>
+                <td class="numeric">-0.044146410267774536<br>N = 128</td>
+                <td class="numeric">[-0.04983342988405147,<br>-0.03893367324809029]</td>
+                <td class="numeric">[-0.05276528621539924,<br>-0.036806857987709767]</td>
+                <td>nonzero 128<br><code>descriptive</code><br>suppressed no</td>
+                <td class="numeric">negative</td>
+                <td class="numeric">0.044146410267774536<br>positive · A better</td>
+                <td class="gate-pass">directional yes</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>waymax_kinematic_infeasibility_rate</code><br><span>v1.0.1 · fraction · lower</span></th>
+                <td><code>idm</code><br>− <code>constant_velocity</code></td>
+                <td class="numeric">paired 128<br>valid A/B 128/128<br>excluded/asymmetric 0/0<br>both-missing 0<br>reasons A/B {}/{}</td>
+                <td class="numeric">-1.3442299351326267e-05<br>N = 128</td>
+                <td class="numeric">[-2.7997259380531403e-05,<br>-1.0808611332096852e-06]</td>
+                <td class="numeric">[-3.6473133948291926e-05,<br>3.2271037770856812e-06]</td>
+                <td>nonzero 7<br><code>event_sparse</code><br>suppressed no</td>
+                <td class="numeric">negative</td>
+                <td class="numeric">1.3442299351326267e-05<br>positive · A better</td>
+                <td class="gate-hold">directional no<br>event-sparse; adjusted crosses zero</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="results-note"><strong>How to read this:</strong> the raw effect is the exact finite-cohort mean of per-scene A − B values; all four registered directions are lower. The oriented advantage is reported separately as −(raw mean), so a positive oriented sign means A is better under that metric. Every cell has paired N = 128, no effect suppression, and 100,000 deterministic scene-resampling draws. The pointwise and Bonferroni-adjusted ranges are finite-cohort sensitivity bands—not confidence intervals, hypothesis tests, or population claims. Ten of 12 adjusted bands exclude zero; the two held cells remain visible.</p>
+        <p class="results-note"><strong>Mixed result, no winner:</strong> privileged log replay is lowest on logged-position error, logged-speed error, and the overlap proxy; the causal CV baseline is lower than IDM on the two logged-error diagnostics. The fixed-0.1-second Waymax kinematic diagnostic reverses the replay comparison, while the small IDM–CV difference is event-sparse. Every contrast has metrics pointing in both directions, so M5 does not establish overall realism, superiority, causality, or policy quality.</p>
       </div>
 
       <div class="review-strip" aria-label="Current validation evidence">
         <div><strong>876 passed</strong><span>current full repository suite, with 1 expected local-data skip; clean core-only: 790 passed with 28 expected optional/local skips</span></div>
-        <div><strong>34 + 18</strong><span>adversarial lifecycle cases plus public official-CLI failure boundaries; final P1/P2 review accepted</span></div>
-        <div><strong>2,916 → 128</strong><span>raw ten-shard records to selected complete-case cohort; conditional and nonrepresentative by design</span></div>
+        <div><strong>6,656 + 1,024</strong><span>metric rows plus slice memberships; 312 complete scorecards and 144 parity summaries verified</span></div>
+        <div><strong>2,916 → 128</strong><span>raw ten-shard records to selected complete-case cohort; all primary cells paired, conditional and nonrepresentative by design</span></div>
       </div>
     </section>
 
@@ -1474,11 +1689,12 @@
         <ul class="trust-list">
           <li><strong>The M4 cohort is conditional, not representative.</strong> It is a deterministic complete-case sample from exactly ten validation shards, not a random sample, the full dataset, or evidence of population-level generalization.</li>
           <li><strong>The decode boundary is shared.</strong> EvalSim and the Waymax reference paths use the same pinned Waymax WOMD decoder, so their agreement is not fully independent source validation.</li>
-          <li><strong>No M5 real-data scorecard or policy-quality result.</strong> The metric, slice, paired-statistics, immutable-store, renderer, streaming Waymax parity adapter, and official runner are accepted at the data-free boundary, but the bound WOMD/Waymax run has not executed. There is no accepted policy effect, slice prevalence, native parity outcome, ranking, or winner; native offroad, route, and signal metrics also remain outside the current contract.</li>
+          <li><strong>M5 is finite-cohort diagnostic evidence, not a winner.</strong> The accepted result is conditional on one deterministic 128-scenario complete-case cohort, shared Waymax decode, seed-zero policies, logged/exogenous ego motion, and a privileged recorded-future replay baseline. Every contrast has diagnostics in both directions; there is no overall realism, superiority, causal, production, or population-level claim.</li>
+          <li><strong>The uncertainty language is intentionally narrow.</strong> The pointwise and adjusted ranges are deterministic scene-reweighting sensitivity bands, not confidence intervals, hypothesis tests, or population uncertainty. The overlap rate is a target-frame proxy, and the kinematic rate is a fixed-0.1-second Waymax diagnostic rather than a physical-time-normalized safety metric. Native offroad, route, and signal metrics remain outside the current contract.</li>
           <li><strong>The benchmark is deliberately narrow.</strong> It measures a batch-2 exact-log JAX kernel on Apple CPU after host-to-device transfer—not ingestion, the full cohort, accelerator speedup, scaling efficiency, or production throughput. RSS is process high-water memory, not JAX device memory.</li>
           <li><strong>No M6 counterfactual result.</strong> M2 keeps ego on its logged trajectory; ego perturbation and reactivity metrics remain planned.</li>
         </ul>
-        <p class="next-question"><span>Next falsifiable question / M5 real-data acceptance</span>Can the implemented metrics and scenario-level uncertainty distinguish the known failure modes of replay, constant velocity, and IDM on the accepted real-WOMD path without turning implementation artifacts into a realism ranking?</p>
+        <p class="next-question"><span>Next falsifiable question / M6 not started</span>When ego motion is changed through a typed intervention, do causal world policies respond differently from privileged log replay—and can paired reactivity metrics distinguish response from trajectory imitation without leaking recorded futures?</p>
       </div>
     </section>
 
@@ -1497,11 +1713,11 @@
         <article class="arch-node done"><span class="arch-status">Implemented · M2</span><h3>Simulation</h3><p>Replay, CV, IDM, typed policy steps, engine dynamics, and provenance.</p></article>
         <article class="arch-node done"><span class="arch-status">Implemented · M3</span><h3>Waymo substrate</h3><p>Exact local WOMD decode, pinned Waymax/JAX adapter, mapping, and one-record contract acceptance.</p></article>
         <article class="arch-node done"><span class="arch-status">Implemented · M4</span><h3>Evaluation substrate</h3><p>Deterministic conditional cohort, exact-log gates, Waymax reference execution, and batched CPU JAX evidence.</p></article>
-        <article class="arch-node next"><span class="arch-status">Runner accepted data-free · M5</span><h3>Metrics + statistics</h3><p>13 metrics, 8 source-only slices, paired scorecards, immutable results, streaming exact-log/parity adapters, and a fail-closed official runner; real WOMD/Waymax outcomes remain pending.</p></article>
+        <article class="arch-node done"><span class="arch-status">Implemented + accepted · M5</span><h3>Metrics + statistics</h3><p>Official ten-shard WOMD evaluation, 13 metrics, 8 source-only slices, complete paired scorecards, deterministic scene-reweighting bands, native parity, immutable local results, and a fail-closed runner.</p></article>
       </div>
       <div class="producer-note" aria-label="Source implementation status">
         <span class="implemented">Synthetic producer · implemented locally</span>
-        <span class="implemented">WOMD / Waymax / JAX producer · conditional ten-shard M4 path accepted locally</span>
+        <span class="implemented">WOMD / Waymax / JAX producer · conditional ten-shard M4 and M5 paths accepted locally</span>
       </div>
     </section>
 
@@ -1559,19 +1775,18 @@
             <div class="roadmap-item"><dt>M2</dt><dd><strong>Policies + rollout engine</strong><span>Replay, CV, IDM, lifecycle, dynamics, provenance</span></dd></div>
             <div class="roadmap-item"><dt>M3</dt><dd><strong>Local Waymo vertical slice</strong><span>Exact WOMD shard, pinned Waymax/JAX, independent supported-field parity</span></dd></div>
             <div class="roadmap-item"><dt>M4</dt><dd><strong>Cohort + reference execution</strong><span>Fixed ten-shard accounting, exact-log gates, Waymax reference rollout, batched CPU JAX</span></dd></div>
-            <div class="roadmap-item"><dt>M5</dt><dd><strong>Evaluator + official runner</strong><span>13 metrics, 8 slices, paired scorecards, immutable store, exact-log/parity adapters, fail-closed lifecycle</span></dd></div>
+            <div class="roadmap-item"><dt>M5</dt><dd><strong>Official metrics + statistics</strong><span>Ten shards, 128 paired scenes, 13 metrics, 8 slices, complete scorecards, native parity, immutable local store</span></dd></div>
           </dl>
         </article>
         <article class="roadmap-column next">
-          <h3>Next <span>real-data acceptance</span></h3>
+          <h3>Next <span>not started</span></h3>
           <dl class="roadmap-list">
-            <div class="roadmap-item"><dt>M5</dt><dd><strong>Bound WOMD/Waymax run</strong><span>Frozen M4 cohort, metric cross-checks, retained nulls; no result yet</span></dd></div>
+            <div class="roadmap-item"><dt>M6</dt><dd><strong>Counterfactual reactivity</strong><span>Typed ego interventions, causal response checks, and paired reactivity evidence</span></dd></div>
           </dl>
         </article>
         <article class="roadmap-column future">
           <h3>Planned <span>role evidence</span></h3>
           <dl class="roadmap-list">
-            <div class="roadmap-item"><dt>M6</dt><dd><strong>Counterfactual reactivity</strong><span>Typed ego interventions and paired causal evidence</span></dd></div>
             <div class="roadmap-item"><dt>M7</dt><dd><strong>Evaluator red-team</strong><span>Severity curves, held-out defects, metric governance</span></dd></div>
             <div class="roadmap-item"><dt>M8</dt><dd><strong>Learned discriminator</strong><span>Flax, leakage audits, calibration, generator holdout</span></dd></div>
             <div class="roadmap-item"><dt>M9</dt><dd><strong>Video / VLM bridge</strong><span>Semantic BEV first; real camera evidence before camera claims</span></dd></div>
@@ -1583,7 +1798,7 @@
       <div class="reproduce">
         <article class="reproduce-copy">
           <h3>Run the implemented paths.</h3>
-          <p>M0–M4, the fixed M5 data-free acceptance, and the reviewed M5 official-runner software run locally through the repository’s <code>uv</code>-managed environment. The core and M5 synthetic path remain usable without Waymo dependencies. The official command is shown for reproducibility; no M5 WOMD result is represented here.</p>
+          <p>M0–M5 run locally through the repository’s <code>uv</code>-managed environment. The core and M5 synthetic path remain usable without Waymo dependencies. The official ten-shard command reproduced the complete accepted aggregate matrix shown above; its raw data, detailed diagnostics, and generated result store remain ignored and local-only.</p>
           <p class="data-note">WOMD data and all derived artifacts are excluded from Git and deployment. M3 requires separately obtained shard <code>00000</code>; M4 and M5 require the exact ten-shard set <code>00000</code>–<code>00009</code>, the accepted ignored M4 run, a clean pushed worktree, a fresh ignored output directory, explicit data-access opt-in, and acceptance of the complete upstream terms above.</p>
         </article>
         <div class="code-card">
@@ -1597,7 +1812,7 @@ uv run pytest
 # Current clean core-only environment:
 # 790 passed, 28 expected optional/local skips
 
-# Fixed M5 data-free acceptance; choose a new run name:
+# Fixed M5 synthetic acceptance; choose a new run name:
 uv run evalsim-m5-synthetic \
   --project-root . \
   --run-name data-free-acceptance-01
@@ -1632,7 +1847,7 @@ EVALSIM_RUN_WAYMO_LOCAL=1 uv run --extra waymo evalsim-m5-official \
 
   <footer>
     <div class="shell footer-row">
-      <span>EvalSim · M0–M4 accepted · M5 official runner accepted data-free · real-data run pending · updated 2026-07-29</span>
+      <span>EvalSim · M0–M5 accepted · official ten-shard WOMD evaluation complete · M6 not started · updated 2026-07-29</span>
       <div class="footer-links">
         <a href="https://github.com/6ickomod3/evalsim" rel="noreferrer">Source</a>
         <a href="https://github.com/6ickomod3/evalsim/blob/main/README.md" rel="noreferrer">README</a>
