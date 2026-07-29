@@ -1,9 +1,8 @@
 # M4 implementation plan — deterministic WOMD cohort and Waymax parity
 
 **Date:** 2026-07-28
-**Status:** ⚠️ Selector-v4 terminal-privacy/raw-reader correction is
-implementation-ready; clean commit/push and fresh bound rerun pending; payload gate
-closed
+**Status:** ⚠️ Fifth clean bound attempt manually interrupted and excluded;
+sixth fresh clean-commit rerun pending; payload gate closed
 **Milestone:** M4 — exact ten-shard cohort → Waymax reference execution → EvalSim
 rollout contract
 
@@ -1082,9 +1081,9 @@ The plan, loader, CLI, Git tree, and executable-source fingerprint change.
 The payload gate is closed until this amendment, implementation, synthetic
 contradictions, full Waymo-extra/core-only suites, package and installed-help audit,
 and independent semantic/privacy reviews are accepted; the exact snapshot is committed
-and pushed; and clean local `HEAD` equals `origin/main`. The next attempt must use a
-fifth fresh ignored directory and repeat both complete scans of exactly shards
-`00000`–`00009` from record zero through clean EOF.
+and pushed; and clean local `HEAD` equals `origin/main`. The next attempt after the
+interruption record below must use a sixth fresh ignored directory and repeat both
+complete scans of exactly shards `00000`–`00009` from record zero through clean EOF.
 
 After the final readiness record or other executable/document edit, rerun the complete
 Waymo-extra and core-only suites, package/notices and installed-help audit, and
@@ -1141,3 +1140,34 @@ until this new exact snapshot repeats the complete Waymo-extra/core-only suites,
 package/notices/installed-help and site audits, and final exact-diff reviews; is
 committed and pushed from a clean tree; and local `HEAD` is verified equal to
 `origin/main`.
+
+### Selector-v4 fifth bound attempt interruption — 2026-07-28
+
+The fifth fresh bound attempt started from clean, pushed commit
+`aadfa6f0a37c85f8bc37b8a34335688c8adbb185`, with local `HEAD` verified equal
+to `origin/main`. The user then explicitly requested a pause, so the process was
+manually interrupted. The CLI emitted only its sanitized
+`FAIL (unexpected_failure)` status for that interruption.
+
+The ignored local attempt directory was checked only for filenames. It contains
+execution provenance, the terminal transcript, and both manifest filenames, but no
+accepted `aggregate-summary.json`. No artifact content was opened or interpreted:
+neither manifest, provenance, nor transcript content participates in this record.
+File existence cannot establish scan completion, manifest validity, cohort selection,
+policy/reference execution, metric computation, benchmark completion, or acceptance.
+Accordingly, the entire fifth attempt is excluded from M4 acceptance evidence and
+unlocks no claim.
+
+All five prior attempt directories remain retained unchanged. None may be reused,
+overwritten, deleted, published, or combined with a later run. The sixth attempt must
+use a new ignored directory and repeat both complete scans of exactly shards
+`00000`–`00009` from record zero through clean EOF.
+
+This interruption changes no selector version or fingerprint, rejection predicate,
+ranking, quota, redistribution rule, fallback floor, cohort target, tolerance,
+horizon, execution scope, manifest or adapter schema, or reference fingerprint. This
+plan and the companion crosswalk change the Git tree and executable-source
+fingerprint only. Before the sixth attempt reads WOMD, this exact documentation
+snapshot must pass the required test, package, site, semantic, invariant, and privacy
+gates; be independently reviewed; be committed and pushed from a clean tree; and have
+local `HEAD` verified equal to `origin/main`.

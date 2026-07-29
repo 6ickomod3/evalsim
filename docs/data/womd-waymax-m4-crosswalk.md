@@ -1,8 +1,8 @@
 # WOMD / Waymax M4 execution crosswalk
 
-**Status:** Selector-v4 terminal-privacy/raw-reader correction
-implementation-ready; clean commit/push and fresh bound rerun pending; payload gate
-closed; M4 metric parity is not run here
+**Status:** Fifth clean bound attempt manually interrupted and excluded; sixth
+fresh clean-commit rerun pending; payload gate closed; M4 metric parity is not run
+here
 **Dataset profile:** WOMD v1.3.1 TFExample validation, 10 past + 1 current +
 80 future frames
 **Waymax revision:** `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`
@@ -148,6 +148,29 @@ The pre-existing `TF_CPP_MIN_LOG_LEVEL=2` constraint is unchanged and is not evi
 for this correction; no Python warning filter or TensorFlow logger-level change is
 added. This changes the executable snapshot, not selector-v4 population, ranking,
 schemas, or metric scope.
+
+### Fifth bound attempt interruption
+
+The fifth fresh bound attempt started from clean, pushed commit
+`aadfa6f0a37c85f8bc37b8a34335688c8adbb185` and was manually interrupted when
+the user explicitly requested a pause. Its stable CLI status was
+`FAIL (unexpected_failure)`. The ignored attempt directory was checked only for
+filenames: execution provenance, the terminal transcript, and both manifest
+filenames exist, while no accepted `aggregate-summary.json` exists. No artifact
+content was opened or interpreted.
+
+Existence of those files establishes no scan, manifest, cohort, reference, policy,
+metric, benchmark, or acceptance result. The entire fifth attempt is excluded from
+M4 evidence and unlocks no claim. It and the four earlier attempt directories remain
+retained unchanged and may not be reused, overwritten, deleted, published, or
+combined with a later run.
+
+Selector-v4 population, fingerprint, ranking, schemas, execution scopes, and metric
+scope remain unchanged. This documentation-only interruption record changes the Git
+tree and executable-source fingerprint. The payload gate remains closed until this
+snapshot passes its required gates, is independently reviewed, committed, and
+pushed, and clean local `HEAD` equals `origin/main`. A sixth fresh attempt must then
+repeat both complete scans from record zero through clean EOF.
 
 ### Population
 
