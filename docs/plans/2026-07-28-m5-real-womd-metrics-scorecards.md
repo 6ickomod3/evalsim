@@ -810,5 +810,6 @@ release-surface audits.
       completed.
 - [x] Pinned Waymax crosswalk complete and adversarially accepted.
 - [x] Four adversarial plan reviews accepted with no unresolved blocker or major issue.
-- [ ] Accepted pre-registration committed and pushed before M5 implementation.
+- [x] Accepted pre-registration committed and pushed before M5 implementation
+      (`5a52203cdbb5b055d2a152aeddd114ab09083eb4`).
 - [ ] Data-free implementation accepted, committed, and pushed before WOMD execution.
