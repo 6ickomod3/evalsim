@@ -30,15 +30,17 @@ work.
 - **Implemented:** contracts, lossless scenario/rollout serialization, deterministic
   synthetic scenarios, visualization, log replay, constant velocity, IDM, closed-loop
   world-agent rollout, and the M3 one-record WOMD → pinned Waymax/JAX → EvalSim local
-  vertical slice. The Waymo-extra suite has 170 passing tests (the clean core-only path
-  has 152); the additional real-data test is opt-in and passes against local shard
-  `00000`.
-- **Available locally for the next gate:** WOMD v1.3.1 TFExample validation shards
-  `00000`–`00009`. Additional files in the directory must not silently expand the M4
-  population.
-- **Not yet implemented:** the M4 deterministic cohort/Waymax rollout parity, metrics,
-  statistical scorecards, counterfactual ego control, evaluator stress tests, learned
-  evaluators, multimodal/video/VLM evaluation, and a scalable resumable pipeline.
+  vertical slice. M4 is also implemented and locally accepted: an auditable
+  complete-case conditional cohort from exactly ten validation shards passed
+  supported-field, exact-log, rollout-contract, bounded Waymax-reference, and batched
+  JAX CPU gates. The verified Waymo-extra suite has 493 passing tests and one expected
+  local-data skip; the core-only path has 418 passing tests and 22 expected
+  optional-runtime skips.
+- **Available locally:** WOMD v1.3.1 TFExample validation shards `00000`–`00009`.
+  Additional files in the directory do not expand the frozen M4 population.
+- **Not yet implemented:** real-WOMD metrics, statistical scorecards, counterfactual ego
+  control, evaluator stress tests, learned evaluators, multimodal/video/VLM evaluation,
+  and a scalable resumable pipeline. M4 release is still pending.
 
 Plans and downloaded files do not count as implemented evidence.
 
@@ -101,8 +103,10 @@ semantic loss at the fields we intentionally support?
 - Conversion is deterministic and the contract plus Parquet round-trip tests pass.
 - EvalSim and Waymax views agree on scenario/SDC identity, agent count, supported
   horizon, valid masks, and map placement.
-- The full Waymo-extra suite passes 170 tests; the separately opted-in real-data integration
-  test also passes.
+- The current full Waymo-extra suite passes 493 tests with one expected local-data
+  skip; the core-only suite passes 418 with 22 expected optional-runtime skips. The
+  separately opted-in M3 integration passed at M3 acceptance, and M4 now has its own
+  standalone local-data acceptance.
 - No real-data golden fixture or converted payload is committed; regular CI uses
   synthetic Waymax-shaped fixtures, while a marked local integration test reads the
   ignored TFRecord.
@@ -124,8 +128,7 @@ artifacts remained local and ignored.
 
 ### M4 — Deterministic WOMD cohort and Waymax parity
 
-**Status:** 🚧 Pre-registered and adversarially accepted on 2026-07-28; no M4 WOMD
-payload scan or comparative result has been run.
+**Status:** ✅ Implemented and locally accepted on 2026-07-28; release pending.
 
 **Question:** Does the one-scene adapter scale to an auditable population, and where do
 EvalSim and Waymax semantics agree or diverge?
@@ -160,6 +163,34 @@ EvalSim and Waymax semantics agree or diverge?
   semantic reference that shares the decode path, not independent ground truth.
 - CPU compilation time, warm throughput, peak memory, and exact version provenance are
   recorded locally.
+
+**Accepted evidence:** exactly shards `00000`–`00009` contained 2,916 raw records.
+The frozen supported-map complete-case predicate classified 1,527 as eligible and
+1,389 as `source_no_supported_map`, meaning no roadgraph group met the frozen strict
+predicate—not that those records contained no map data. The deterministic selector
+chose 128 with no quota deficit, redistribution, or fallback. Scan-time
+adapter/independent parity gates passed,
+and the selected full cohort passed direct exact-log oracles, 80-transition reference
+conversion, and 80-transition EvalSim log-replay, constant-velocity, and IDM execution.
+The privileged logged-trajectory waypoint-following Waymax IDM reference was limited
+as pre-registered to 16 scenes × 20 transitions and repeated deterministically; its
+separate JIT gate covered one scene.
+
+The fresh-worker batch-two JAX CPU exact-log microbenchmark used 20 warm runs and
+recorded 217.983625 ms compilation, 1.897854 ms median, 2.617709 ms nearest-rank
+empirical p95, and 1,053.821843 scenarios/s at the median. Process peak RSS was
+587,808,768 bytes; that value is a process high-water mark, not JAX device memory. The
+focused M4 CLI suite passed 110 tests, the locked M4 matrix passed 421 with one
+local-data skip, the full Waymo-extra suite passed 493 with one local-data skip, and
+the core-only suite passed 418 with 22 optional-runtime skips.
+
+**Limitations:** this is a deterministic complete-case conditional sample from the
+first ten validation shards, not a random or representative WOMD benchmark. EvalSim
+and the reference path share the pinned Waymax WOMD decode, so the cross-check is not
+fully independent. The benchmark measures the narrow batch-two exact-log kernel, not
+end-to-end cohort throughput or production scale. M4 did not compute custom realism
+metrics, behavioral slices, uncertainty, policy rankings, or custom/Waymax metric
+parity; those remain M5 work.
 
 **Claim unlocked after acceptance:** cross-checked exact log-playback mapping and
 rollout-contract semantics against pinned Waymax/JAX on an auditable complete-case

@@ -30,6 +30,14 @@ Build with M3–M4. Be able to explain:
 - `jit`, `vmap`, static shapes, compilation cost, host/device transfer, PRNG discipline,
   and why local CPU is acceptable for development.
 
+Use the accepted M4 result as a bounded case study: explain why 2,916 raw records became
+1,527 eligible records and a deterministic 128-scenario complete-case cohort; why that
+cohort is conditional rather than representative; why a shared Waymax decode limits
+independence; why the privileged Waymax IDM reference was restricted to 16 scenes × 20
+transitions; and why a batch-two exact-log kernel benchmark is not end-to-end or
+production-scale throughput. Do not turn successful execution into a claim about
+realism—the first metric and statistical comparison belongs to M5.
+
 ### 2. Metric and statistical design
 
 Build with M5. Be able to explain:

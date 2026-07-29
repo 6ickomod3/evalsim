@@ -40,7 +40,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M1 | Synthetic scenario source + visualization | ✅ | 🖥️ |
 | M2 | Simulator adapters + rollout engine | ✅ | 🖥️ |
 | M3 | Local WOMD → Waymax/JAX → EvalSim vertical slice | ✅ | 🖥️ |
-| M4 | Deterministic WOMD cohort + Waymax parity | 🚧 | 🖥️ |
+| M4 | Deterministic WOMD cohort + Waymax parity | ✅ accepted; release pending | 🖥️ |
 | M5 | Real-WOMD metrics + statistical scorecards | ⬜ | 🖥️ |
 | M6 | Counterfactual closed-loop reactivity | ⬜ | 🖥️ |
 | M7 | Evaluator red-team + metric governance | ⬜ | 🖥️ |
@@ -49,8 +49,10 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M10 | Scalable, resumable evaluation pipeline | ⬜ | 🖥️/☁️ |
 | M11 | Decision package + staff-caliber communication | ⬜ | 🖥️ |
 
-**Tests:** 170 passing with the Waymo extra; 152 passing core-only; 1 additional
-opt-in local-WOMD test · **Last updated:** 2026-07-28 (M4 pre-registered; no M4 result)
+**Tests:** 493 passing + 1 local-data skip with the Waymo extra; 418 passing + 22
+optional-runtime skips core-only; focused M4 CLI 110 passing; locked M4 matrix 421
+passing + 1 local-data skip · **Last updated:** 2026-07-28 (M4 implemented and locally
+accepted; release pending)
 
 ## Completed work
 
@@ -152,13 +154,41 @@ metrics, statistical comparison, or learned evaluation. See the
 [reviewed M3 plan](docs/plans/2026-07-28-m3-local-waymo-vertical-slice.md), and the
 [third-party notice](NOTICE.md).
 
-### M4 — Deterministic cohort and Waymax parity 🚧
+### M4 — Deterministic cohort and Waymax parity ✅ accepted
 
-M4 is pre-registered and its plan has passed two adversarial reviews. No M4 WOMD
-eligibility scan or comparative result has been run yet. The accepted plan freezes the
-exact ten-shard boundary, raw-record accounting, complete-case selector, full-cohort
-exact-log parity, two-scene `jit`/`vmap` gate, and a separately scoped
-logged-trajectory waypoint-following Waymax IDM subset before data inspection. See the
+The pre-registered M4 acceptance passed locally on Apple Silicon CPU. Its public
+evidence is deliberately aggregate-only:
+
+- **Auditable population accounting** — exactly shards `00000`–`00009` contained
+  2,916 raw records. The frozen complete-case predicate found 1,527 eligible records
+  and classified 1,389 as `source_no_supported_map`: no roadgraph group met the frozen
+  strict supported-map predicate, which does not mean those records contained no map
+  data. The deterministic selector chose 128 scenarios with no quota deficit,
+  redistribution, or fallback.
+- **Full-cohort contract checks** — every source-eligible record passed adapter and
+  independent supported-field parity. On the frozen 128-scenario cohort, direct
+  exact-log reference checks and conversion back to `Rollout` passed; EvalSim log
+  replay, constant velocity, and IDM each completed all 80 requested transitions.
+- **Bounded Waymax reference** — the privileged logged-trajectory waypoint-following
+  Waymax IDM reference repeated deterministically on its pre-registered 16-scene ×
+  20-transition subset; a separate one-scene kernel JIT gate passed. This is not a
+  causal map-route policy or independent ground truth.
+- **Measured JAX CPU path** — a fresh-worker, batch-two, 20-warm-run exact-log
+  microbenchmark recorded 217.983625 ms compilation, 1.897854 ms median execution,
+  2.617709 ms nearest-rank empirical p95, and 1,053.821843 scenarios/s at the median.
+  Process peak RSS was 587,808,768 bytes; it is a process high-water mark, not JAX
+  device memory or end-to-end cohort throughput.
+- **Verification** — 110 focused M4 CLI tests, the locked matrix at 421 passed + 1
+  local-data skip, the full Waymo-extra suite at 493 passed + 1 local-data skip, and
+  the core-only suite at 418 passed + 22 optional-runtime skips.
+
+This is a complete-case conditional sample from the first ten validation shards, not a
+random or representative WOMD benchmark. EvalSim and the reference path share the
+pinned Waymax WOMD decode, so the cross-check is not fully independent. M4 establishes
+cohort construction, supported-field/exact-log semantics, bounded reference execution,
+and a narrow JAX microbenchmark. It does **not** establish simulator realism,
+generalization, production scale, or custom/Waymax metric agreement; metrics,
+behavioral slices, and statistical comparisons begin in M5. See the
 [reviewed M4 plan](docs/plans/2026-07-28-m4-womd-cohort-waymax-parity.md).
 
 ## Setup
@@ -172,10 +202,10 @@ uv sync --extra dev                    # create .venv and install deps
 uv run pytest                          # run the test suite
 ```
 
-A clean core-only environment currently reports **152 passed, 3 optional skips**. After
-installing the licensed Waymo extra documented below, the normal suite reports
-**170 passed, 1 local-data skip**; explicitly opting into that local test reports
-**1 passed, 170 deselected**.
+A verified core-only environment reports **418 passed, 22 optional-runtime skips**.
+After installing the licensed Waymo extra documented below, the full suite reports
+**493 passed, 1 local-data skip**. The focused M4 CLI suite reports **110 passed**, and
+the locked M4/Waymax/rollout matrix reports **421 passed, 1 local-data skip**.
 
 ## Generate synthetic scenarios
 
@@ -307,6 +337,22 @@ fixed M3 shard and writes a sanitized summary, converted Parquet, and visualizat
 under ignored `outputs/m3/`. It prints no native scenario ID, trajectory, coordinate,
 map sample, or absolute data path.
 
+## Run the M4 local cohort acceptance
+
+After all ten fixed shards are present, run M4 only from a clean Git worktree. The
+output directory must be a new ignored descendant of `outputs/m4/`:
+
+```bash
+EVALSIM_RUN_WAYMO_LOCAL=1 uv run --extra waymo evalsim-waymax-m4 \
+  --project-root "$PWD" \
+  --data-dir "$PWD/data/raw/womd/v1.3.1/tf_example/validation" \
+  --output-dir "$PWD/outputs/m4/manual-acceptance"
+```
+
+The command scans exactly shards `00000`–`00009`, binds evidence to the clean source
+commit, and keeps manifests, provenance, native identities, and detailed run artifacts
+local and ignored. Use a different new output-directory name for a later run.
+
 ## Layout
 
 ```
@@ -335,11 +381,12 @@ scripts/        # dependency-free presentation build and structural checks
 ## Résumé framing
 
 The current implemented stack is **Python · NumPy · PyArrow · Matplotlib**, plus an
-optional pinned **WOMD · Waymax · JAX · TensorFlow · Flax** source runtime. M3 supports
-the narrow claim that one local WOMD v1.3.1 scenario was integrated through
-Waymax/JAX into the validated EvalSim contract on Apple Silicon CPU. M4 is still needed
-before claiming an auditable cohort, Waymax rollout parity, batching, or substantive JAX
-evaluation. Metrics, slices, confidence intervals, counterfactuals, stress tests,
-learned evaluators, scale, and video/VLM work each remain unavailable as claims until
-their evidence gate passes. See the
+optional pinned **WOMD · Waymax · JAX · TensorFlow · Flax** runtime. M3 established the
+one-scenario vertical slice; M4 now supports the narrower substantive claim that exact
+log-playback mapping and rollout-contract semantics were cross-checked on a
+deterministic 128-scenario complete-case conditional cohort from ten WOMD validation
+shards, with bounded Waymax reference execution and a measured batch-two JAX CPU
+microbenchmark. Metrics, slices, confidence intervals, counterfactuals, stress tests,
+learned evaluators, scalable execution, and video/VLM work each remain unavailable as
+claims until their evidence gate passes. See the
 [claim-to-evidence ledger](docs/interview/claim-evidence-ledger.md).

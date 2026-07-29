@@ -24,6 +24,13 @@
   `data/raw/womd/v1.3.1/tf_example/validation/`.
 - Only small reproducibility metadata such as manifests, checksums, schemas, and download
   instructions may be committed. They must not contain dataset payloads.
+- Detailed data-derived diagnostics may be written and inspected locally under ignored
+  `outputs/` paths for debugging and learning. Keep them out of Git, deployments, and
+  chat/public summaries; sanitize only the facts intentionally promoted across that
+  publication boundary.
+- Do not impose a general zero-terminal-output requirement on local experiments.
+  Capture or suppress terminal output only when a pre-registered acceptance gate
+  requires it; otherwise preserve useful local diagnostics and review them in place.
 - Before any commit or push, inspect both the working tree and staged file list and
   confirm that no dataset or generated experiment artifact is included.
 - If a dataset file is staged accidentally, stop and remove it from the Git index without

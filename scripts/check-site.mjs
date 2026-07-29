@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -10,12 +11,20 @@ const clientOgBuffer = await readFile(resolve(projectRoot, "dist", "client", "og
 const workerPath = resolve(projectRoot, "dist", "server", "index.js");
 const workerSource = await readFile(workerPath, "utf8");
 const html = sourceHtmlBuffer.toString("utf8");
+const approvedOgSha256 = "6110243b5fa850f627c1c0ea865f00198e4e2dd62b921ce3561238332b591355";
+const sourceOgSha256 = createHash("sha256").update(sourceOgBuffer).digest("hex");
 
 if (!sourceHtmlBuffer.equals(clientHtmlBuffer)) {
   throw new Error("Built client HTML does not exactly match index.html");
 }
 if (!sourceOgBuffer.equals(clientOgBuffer)) {
   throw new Error("Built social preview does not exactly match public/og.png");
+}
+if (sourceOgSha256 !== approvedOgSha256) {
+  throw new Error(
+    "Social preview differs from the reviewed evergreen asset; inspect its visible " +
+    "copy and update the approved digest deliberately."
+  );
 }
 
 const requiredPatterns = [
@@ -42,7 +51,19 @@ const requiredPatterns = [
   ["Waymax full citation", /Waymax: An Accelerated, Data-Driven Simulator for Large-Scale Autonomous Driving Research/],
   ["pinned Waymax license", /a64dfec9be8576b60d9cecc94f406d9812d4a7d0\/LICENSE/],
   ["non-commercial scope", /personal, non-commercial interview-preparation purpose/],
-  ["current test evidence", /170 \/ 170/],
+  ["current Waymo-extra test evidence", /493 passed/],
+  ["current core-only test evidence", /418 passed and 22 optional skips/],
+  ["accepted M4 cohort evidence", /2,916 → 128/],
+  ["M4 conditional-sample caveat", /conditional and nonrepresentative by design/],
+  ["M4 locally accepted status", /M0–M4 implemented and locally accepted/],
+  ["M4 cohort classification", /2,916 raw records: 1,527 eligible and 1,389 rejected/],
+  ["locked M4 matrix evidence", /421 passed/],
+  ["shared-decode limitation", /same pinned Waymax WOMD decoder/],
+  ["M5 metric boundary", /No M5 scorecards or metric parity/],
+  ["narrow benchmark scope", /batch-2 exact-log JAX kernel/],
+  ["process-RSS caveat", /process high-water memory, not JAX device memory/],
+  ["M5 next status", /Next · M5/],
+  ["shell-safe M4 output example", /outputs\/m4\/manual-acceptance-01/],
   ["worker fetch handler", /async fetch\(request\)/]
 ];
 
@@ -62,6 +83,23 @@ if (brokenAnchors.length) throw new Error(`Broken local anchors: ${[...new Set(b
 
 if (/localStorage|PROJECT_STATE|Interview Project/.test(html)) {
   throw new Error("The public presentation still contains stale tracker language or state");
+}
+
+const staleEvidencePatterns = [
+  /M0–M2 complete/,
+  /134 tests/,
+  /M0–M3 complete/,
+  /M0 → M3 implemented and tested/,
+  /EvalSim · M0–M3/,
+  /170 tests/,
+  /170 passed/,
+  /170 \/ 170/,
+  /152 passed/,
+  /Next · M4/,
+  /&lt;new-run-name&gt;/
+];
+for (const pattern of staleEvidencePatterns) {
+  if (pattern.test(html)) throw new Error(`Stale presentation evidence matched ${pattern}`);
 }
 
 const imported = await import(`${pathToFileURL(workerPath).href}?check=${Date.now()}`);

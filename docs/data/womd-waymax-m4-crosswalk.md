@@ -1,8 +1,9 @@
 # WOMD / Waymax M4 execution crosswalk
 
-**Status:** Aggregate-privacy correction implementation-ready; final
-exact-snapshot gates and clean commit/push pending; seventh fresh rerun pending;
-payload gate closed; M4 metric parity is not run here
+**Status:** Seventh fresh bound run empirically accepted at
+`a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`; evidence-closure release,
+push, and owner-only presentation deployment remain pending; M4 metric parity
+is not run here
 **Dataset profile:** WOMD v1.3.1 TFExample validation, 10 past + 1 current +
 80 future frames
 **Waymax revision:** `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`
@@ -12,9 +13,10 @@ This document fixes the semantic boundary between the M4 WOMD selector, pinned
 Waymax reference execution, and the source-neutral EvalSim `Rollout` contract.
 It also records the pinned Waymax metric definitions that M5 will compare.
 
-It contains no native scenario identities, record locators, shard digests,
-coordinates, trajectories, local paths, result values, or M4 numerical metric
-claims.
+It contains only the accepted privacy-safe aggregate evidence below. It
+contains no native scenario identities, record locators, shard digests,
+coordinates, trajectories, local paths, generated result artifacts, or M4
+numerical metric claims.
 
 Primary implementation references:
 
@@ -243,6 +245,74 @@ No WOMD or ignored output was accessed for this correction. These are readiness 
 not M4 execution evidence. Because this record changes the executable snapshot, all
 exact-snapshot gates must repeat before a clean commit/push and verified local/remote
 ref equality can open the seventh-run payload gate.
+
+### Seventh bound attempt accepted execution
+
+The seventh fresh attempt ran from verified clean, pushed commit
+`a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`, repeated both complete scans of
+exactly validation shards `00000`–`00009` through clean EOF, and exited
+**PASS**. The accepted aggregate stayed under ignored local output storage,
+the terminal transcript was empty, and the tracked worktree stayed clean.
+Three independent adversarial method/semantics, privacy/release, and
+numerical/evidence reviewers accepted the sanitized evidence with no
+unresolved blocker.
+
+The selected 128 scenarios are a complete-case conditional sample, not a
+random or representative sample:
+
+| Shard | Raw | Eligible | Rejected | Selected |
+|---:|---:|---:|---:|---:|
+| `00000` | 286 | 148 | 138 | 13 |
+| `00001` | 309 | 165 | 144 | 13 |
+| `00002` | 306 | 158 | 148 | 13 |
+| `00003` | 307 | 151 | 156 | 13 |
+| `00004` | 269 | 133 | 136 | 13 |
+| `00005` | 278 | 150 | 128 | 13 |
+| `00006` | 285 | 154 | 131 | 13 |
+| `00007` | 297 | 171 | 126 | 13 |
+| `00008` | 284 | 143 | 141 | 12 |
+| `00009` | 295 | 154 | 141 | 12 |
+| **Total** | **2,916** | **1,527** | **1,389** | **128** |
+
+All 1,389 rejections were `source_no_supported_map`; the other three
+pre-registered source-rejection counts were zero. This code means that no
+roadgraph ID group passed the frozen strict supported-map predicate, not that
+the record contained no map data. Every shard filled its quota, all quota
+deficits and redistribution were zero, and the under-128 fallback was not
+used.
+
+Both manifests were byte-identical; selected-entry provenance reload,
+full-cohort M3 conversion, and independent source-array parity passed. EvalSim
+log replay, constant velocity, and IDM completed 80 transitions on all 128
+scenarios. The compact Waymax exact-log path, direct logged-state oracle, and
+conversion to the EvalSim `Rollout` contract passed the same cohort and
+horizon; the bounded stock-Waymax check passed one transition on the first
+selected scene. Both paths share the pinned Waymax WOMD decode, so this is not
+an independent-decoder comparison.
+
+All 128 scenarios qualified for the Waymax privileged logged-trajectory
+waypoint-following IDM reference. Its pre-registered 16-scenario,
+20-transition subset repeated byte-identically and the one-scene kernel
+JIT-compiled. Accounting recorded 8,467 requested controlled transitions:
+7,134 effective controls and 1,333 initialized-overlap fallbacks; 112 vehicles
+used that fallback, the full cohort had 3,308 initialized-overlap vehicle
+exclusions, and 6,673 lifecycle fallback transitions were recorded. The
+minimum qualifying-vehicle effective-transition count was 20 and nonfallback
+motion was observed. These facts do not establish realism or numerical parity
+with EvalSim IDM.
+
+The Apple-CPU batch-two exact-log `jit(vmap(...))` gate matched eager
+sequential output and passed inverse-permutation invariance. Its fresh-worker
+80-transition microbenchmark used 20 synchronized warm runs: compilation
+0.217983625 s, median 0.001897854 s, nearest-rank empirical p95
+0.002617709 s, and median throughput 1,053.8218429868682 scenarios/s. Peak RSS
+was 587,808,768 bytes (about 560.6 MiB), which is process high-water RSS—not
+JAX device memory. This is not end-to-end latency, full-cohort batching,
+accelerator or scaling evidence, or production throughput.
+
+M4 ran no custom-versus-Waymax numerical metric parity and makes no statistical
+realism conclusion. The empirical gates are closed; the evidence-closure
+commit, push, and owner-only presentation deployment remain pending.
 
 ### Population
 

@@ -1,9 +1,9 @@
 # M4 implementation plan — deterministic WOMD cohort and Waymax parity
 
 **Date:** 2026-07-28
-**Status:** ⚠️ Aggregate-privacy correction implementation-ready; final
-exact-snapshot gates and clean commit/push pending; seventh fresh rerun pending;
-payload gate closed
+**Status:** ✅ Seventh fresh bound run empirically accepted at
+`a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`; evidence-closure release,
+push, and owner-only presentation deployment remain pending
 **Milestone:** M4 — exact ten-shard cohort → Waymax reference execution → EvalSim
 rollout contract
 
@@ -567,8 +567,10 @@ Release follows the project nine-step workflow:
    pre-execution code review, then commit and push a clean implementation;
 4. run the complete local acceptance only from that exact clean commit;
 5. obtain independent execution and publication reviews;
-6. update all public evidence surfaces without local data and verify the executable
-   fingerprint did not change;
+6. update all public evidence surfaces without local data; because this plan is itself
+   an executable-fingerprint input, verify every *other* executable path is unchanged
+   from the accepted run and record the resulting commit as documentation-only closure,
+   not as the executed snapshot;
 7. audit the staged tree and package/site archives and create the evidence-closure
    commit;
 8. push GitHub and the exact Sites source state, then deploy a saved version with the
@@ -578,23 +580,25 @@ Release follows the project nine-step workflow:
 ## 12. Acceptance checklist
 
 - [x] Two adversarial plan reviews are accepted with no unresolved blocker.
-- [ ] Accepted pre-registration and clean pre-execution implementation commits are
+- [x] Accepted pre-registration and clean pre-execution implementation commits are
   pushed before any WOMD payload scan.
-- [ ] Exact ten-shard scan has zero silent drops and a clean EOF for every shard.
-- [ ] Independent repeat scan produces a byte-identical local manifest.
-- [ ] Frozen cohort meets the target or the pre-registered fallback floor.
-- [ ] Every selected locator reloads with exact identity/provenance.
-- [ ] M3 conversion and independent parity pass for the full cohort.
-- [ ] EvalSim replay, CV, and IDM run deterministically for the full cohort.
-- [ ] Waymax exact-log reference passes the full 80-transition parity matrix.
-- [ ] Waymax waypoint-following IDM passes the declared nested subset/horizon.
-- [ ] Explicit two-scene `jit`/`vmap` and permutation gates pass.
-- [ ] Compile/warm timing and process peak RSS are recorded accurately.
-- [ ] Core-only, Waymo-extra, and opt-in local suites pass.
-- [ ] Crosswalk and public limitations match the supported evidence.
-- [ ] No dataset, identity, local manifest/output, private material, or secret is tracked.
-- [ ] Wheel, sdist, and site archives contain notices and no forbidden artifacts.
-- [ ] Adversarial execution/publication reviews have no unresolved blocker.
+- [x] Exact ten-shard scan has zero silent drops and a clean EOF for every shard.
+- [x] Independent repeat scan produces a byte-identical local manifest.
+- [x] Frozen cohort meets the target or the pre-registered fallback floor.
+- [x] Every selected locator reloads with exact identity/provenance.
+- [x] M3 conversion and independent parity pass for the full cohort.
+- [x] EvalSim replay, CV, and IDM run deterministically for the full cohort.
+- [x] Waymax exact-log reference passes the full 80-transition parity matrix.
+- [x] Waymax waypoint-following IDM passes the declared nested subset/horizon.
+- [x] Explicit two-scene `jit`/`vmap` and permutation gates pass.
+- [x] Compile/warm timing and process peak RSS are recorded accurately.
+- [x] Core-only, Waymo-extra, and opt-in local suites pass.
+- [x] Crosswalk and public limitations match the supported evidence.
+- [x] No dataset, identity, local manifest/output, private material, or secret is tracked.
+- [x] Wheel, sdist, and site archives contain notices and no forbidden artifacts.
+- [x] Three accepted-run result reviews have no unresolved blocker.
+- [x] Evidence-closure semantic, privacy, and cross-surface reviews have no unresolved
+  blocker.
 - [ ] Milestone commit is pushed and the owner-only presentation deploy is verified.
 
 ## 13. Pre-registration record
@@ -1338,3 +1342,83 @@ Waymo-extra/core-only suites, package/notices/installed-help and site audits, an
 exact-diff semantic, stable-error, privacy, and process reviews; is committed and
 pushed from a clean tree; and has local `HEAD`, `origin/main`, and the remote `main`
 ref independently verified equal.
+
+### Seventh bound attempt accepted execution — 2026-07-28
+
+The seventh fresh attempt ran from verified clean, pushed commit
+`a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`, repeated both complete scans of
+exactly validation shards `00000`–`00009` from record zero through clean EOF,
+and exited **PASS**. The ignored transcript was proven empty, the accepted
+aggregate remained ignored, and the tracked worktree remained clean. Three
+independent adversarial method/semantics, privacy/release, and
+numerical/evidence reviews accepted the sanitized result with no unresolved
+blocker.
+
+The frozen cohort is a complete-case conditional sample, not a random or
+representative sample:
+
+| Shard | Raw | Eligible | Rejected | Selected |
+|---:|---:|---:|---:|---:|
+| `00000` | 286 | 148 | 138 | 13 |
+| `00001` | 309 | 165 | 144 | 13 |
+| `00002` | 306 | 158 | 148 | 13 |
+| `00003` | 307 | 151 | 156 | 13 |
+| `00004` | 269 | 133 | 136 | 13 |
+| `00005` | 278 | 150 | 128 | 13 |
+| `00006` | 285 | 154 | 131 | 13 |
+| `00007` | 297 | 171 | 126 | 13 |
+| `00008` | 284 | 143 | 141 | 12 |
+| `00009` | 295 | 154 | 141 | 12 |
+| **Total** | **2,916** | **1,527** | **1,389** | **128** |
+
+All 1,389 rejections were `source_no_supported_map`; the other three
+pre-registered rejection counts were zero. That reason means no roadgraph ID
+group passed the frozen, strict supported-map geometry predicate—it does not
+mean the source record contained no map data. Every shard filled its initial
+quota, so all quota deficits and the redistribution count were zero and the
+under-128 fallback was not used.
+
+Both manifests were byte-identical, every selected entry reloaded with the
+bound identity and provenance, and full-cohort adapter/independent-source
+parity passed. EvalSim log replay, constant velocity, and IDM each completed
+all 80 transitions on all 128 scenarios. The compact Waymax exact-log path,
+its direct logged-state oracle, and conversion back to the EvalSim `Rollout`
+contract also passed the full cohort and horizon; the bounded stock-Waymax
+gate passed one transition on the first selected scene. Both paths share the
+pinned Waymax WOMD decode, so this is not independent-decoder validation.
+
+All 128 scenarios qualified for the separately scoped Waymax privileged
+logged-trajectory waypoint-following IDM reference. The frozen 16-scenario,
+20-transition subset repeated byte-identically and its single-scene kernel
+JIT-compiled. It recorded 8,467 requested controlled transitions: 7,134
+effective controls plus 1,333 initialized-overlap fallbacks; 112 vehicles
+used that overlap fallback, 3,308 full-cohort vehicle exclusions arose from
+the initialized-overlap rule, and 6,673 lifecycle fallback transitions were
+recorded. The minimum qualifying-vehicle effective-transition count was 20,
+and nonfallback motion was observed. These are execution/accounting facts for
+a privileged logged-trajectory reference, not a realism result or numerical
+parity with EvalSim IDM.
+
+On Apple CPU with Python 3.11.5, NumPy 1.26.4, JAX/jaxlib 0.4.38,
+TensorFlow 2.18.1, Flax 0.10.4, and Waymax 0.1.0, the fresh-worker
+two-scene exact-log `jit(vmap(...))` gate matched eager sequential execution
+and passed inverse-permutation invariance. For 80 transitions and 20
+synchronized warm runs, compilation took 0.217983625 s; median execution was
+0.001897854 s, nearest-rank empirical p95 was 0.002617709 s, and median
+throughput was 1,053.8218429868682 scenarios/s. Peak RSS was 587,808,768
+bytes (about 560.6 MiB), measured as process high-water RSS—not JAX device
+memory. This is a batch-two exact-log kernel microbenchmark, not end-to-end
+latency, full-cohort batching, accelerator evidence, scaling evidence, or
+production throughput.
+
+M4 ran no custom-versus-Waymax numerical metric parity and makes no statistical
+realism conclusion. Metric alignment and comparison begin in M5. The accepted
+run closes the empirical gates.
+
+This evidence closure intentionally edits this plan, so the closure tree's
+executable-source fingerprint is different from the accepted run. A path-by-path
+comparison with `a7a20e5de89c9c988f36a4b2f10ff4acc49246f0` confirms that every other
+member of `_EXECUTABLE_PATHS` is unchanged. The empirical evidence remains bound to
+`a7a20e5`; the documentation-only closure commit is not represented as an executed
+snapshot and does not require another WOMD run under the rule in section 8. The
+evidence-closure commit, push, and owner-only presentation deployment remain pending.
