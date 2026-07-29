@@ -750,8 +750,20 @@ def _m4_shard_suffix_from_path(path: Path) -> str:
     return suffix
 
 
-def _verified_m4_scan_event(stream_record: M4StreamRecord) -> Any:
-    """Construct the only permitted event after frozen source/adapter gates."""
+def verify_m4_stream_record(
+    stream_record: M4StreamRecord,
+) -> tuple[Any, Scenario | None]:
+    """Reconstruct one M4 event and its verified contract scenario.
+
+    This is the public, bounded-reload counterpart to the full-population scanner.
+    It reruns the frozen source predicate and, for eligible records, conversion plus
+    independent adapter parity.  It performs no selection and never reads another
+    record.  Native identity and source provenance remain inside the returned
+    local-only objects.
+    """
+
+    if not isinstance(stream_record, M4StreamRecord):
+        raise TypeError("stream_record must be an M4StreamRecord")
 
     from .waymax import (
         DEFAULT_WAYMAX_TEMPORAL_PROFILE,
@@ -772,9 +784,12 @@ def _verified_m4_scan_event(stream_record: M4StreamRecord) -> Any:
         "dataset_config_fingerprint": record.dataset_config_fingerprint,
     }
     if rejection is not None:
-        return ScanEvent.rejected_event(
-            **event_kwargs,
-            rejection_code=rejection,
+        return (
+            ScanEvent.rejected_event(
+                **event_kwargs,
+                rejection_code=rejection,
+            ),
+            None,
         )
 
     scenario = scenario_from_waymax_state(
@@ -789,7 +804,13 @@ def _verified_m4_scan_event(stream_record: M4StreamRecord) -> Any:
         },
     )
     validate_record_parity(record, scenario)
-    return ScanEvent.eligible_event(**event_kwargs)
+    return ScanEvent.eligible_event(**event_kwargs), scenario
+
+
+def _verified_m4_scan_event(stream_record: M4StreamRecord) -> Any:
+    """Construct the only permitted event after frozen source/adapter gates."""
+
+    return verify_m4_stream_record(stream_record)[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1649,4 +1670,5 @@ __all__ = [
     "runtime_summary",
     "shard_suffix",
     "validate_record_parity",
+    "verify_m4_stream_record",
 ]

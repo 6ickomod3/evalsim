@@ -1,10 +1,47 @@
 # WOMD / Waymax / EvalSim M5 metric crosswalk
 
-**Status:** Accepted pre-registered semantics; no M5 WOMD outcomes inspected
+**Status:** Accepted pre-registered semantics, data-free overlap-boundary amendment,
+and data-free implementation; no M5 WOMD outcomes or native M5 parity results inspected
 **Pinned Waymax commit:** `a64dfec9be8576b60d9cecc94f406d9812d4a7d0`
 
 This document separates numerical equivalence, deliberate EvalSim definitions, and
 unsupported semantics. A shared name is not evidence of equivalence.
+
+Data-free adversarial testing on 2026-07-29 found rotated, strict zero-margin float32
+boxes for which NumPy/libm and XLA make different discrete overlap decisions because
+their trigonometric results differ at the bit level. This falsifies universal backend
+bit-equivalence before any M5 WOMD outcome access. The counterexample is retained in
+tests; exact observed flags remain mandatory on the frozen parity subset.
+
+## Accepted data-free implementation evidence
+
+The data-free M5 path was accepted on 2026-07-29 after architecture, methods/statistics,
+and privacy/publication review. The M5-focused suite reports 264 passing tests; the
+locked Waymo-extra suite reports 757 passed with one expected local-data skip; and the
+clean locked core-only suite reports 676 passed with 23 expected optional-runtime
+skips. This is software and analytic-oracle evidence only:
+
+- five fixed 91-frame synthetic scenarios run through three EvalSim policies and
+  thirteen metrics, producing exactly 195 metric rows;
+- eight source-only slices produce exactly 40 membership rows;
+- the complete thirteen-metric × eight-slice × three-contrast domain produces exactly
+  312 scorecard rows, while the native Waymax parity table has zero rows;
+- 25 exact log-replay zero oracles cover all five synthetic cases and all five
+  registered error metrics, checking every eligible component; and
+- every data-free scorecard has paired N between zero and five, is labeled
+  `insufficient_n`, suppresses effects and stability bands, and forbids directional
+  language.
+
+The command has no WOMD, accepted-M4, official, or Waymax execution argument. Its
+terminal status, manifest, and scorecard use the `data_free_test` profile, and normal
+result verification rejects that profile unless the caller explicitly opts into
+data-free verification.
+
+No real-WOMD metric effect, slice prevalence, missingness result, or native metric
+parity result is established here. The later official path remains conditional on the
+unchanged 128-scenario complete-case M4 cohort. It is not population inference; the
+custom and reference paths share the pinned Waymax decoder; and log replay remains a
+privileged logged-future construction oracle rather than independent ground truth.
 
 Pinned sources:
 
@@ -20,21 +57,28 @@ Pinned sources:
 
 | Upstream registry name | Pinned upstream output | EvalSim M5 treatment | Numerical status |
 |---|---|---|---|
-| `log_divergence` | Per-object current XY Euclidean distance; valid iff simulated and logged object are valid | `position_error_m`, then restrict to future non-ego target components for scorecards | Exact component parity target |
-| `overlap` | Per-object binary flag for strict oriented-box overlap with any other valid object; output validity is target validity | `oriented_box_overlap_rate`; preserve flags before target/window aggregation | Exact mask and discrete parity target |
+| `log_divergence` | Per-object current XY Euclidean distance; valid iff simulated and logged object are valid | `position_error_m`, then restrict to future non-ego target components for scorecards | Bounded-tolerance continuous parity target |
+| `overlap` | Per-object binary flag for strict oriented-box overlap with any other valid object; output validity is target validity | `oriented_box_overlap_rate`; preserve flags before target/window aggregation | Exact mask and bounded observed discrete parity gate; universal zero-margin bit-equivalence falsified |
 | `kinematic_infeasibility` | Per-object binary inverse-bicycle acceleration/curvature threshold for the transition ending at current frame | `waymax_kinematic_infeasibility_rate`; preserve action mask and flags before aggregation | Exact mask and discrete parity target |
 | `offroad` | Any box corner lies on the positive signed side of its nearest eligible 3-D road-edge sample | No custom native-equivalent metric in M5 | Unsupported by current contract |
 | `sdc_wrongway` | Thresholded XY distance to any valid SDC path sample; no direction test | No metric under this name; possible M6 typed path metric must be called path-sample distance | Unsupported and upstream name is misleading |
 | `sdc_progression` | SDC projection to the nearest valid on-route path samples and arc-length ratio | Deferred to typed M6 route context | Unsupported by current contract |
 | `sdc_off_route` | Thresholded comparison of SDC distance to on-route and off-route path samples | Deferred to typed M6 route context | Unsupported by current contract |
 
-## Exact parity anchors
+## Parity anchors
 
 All three anchors use one canonical NumPy float32 contract view. Candidate/logged
 motion and candidate dimensions are cast once; the exact resulting bits feed both the
 custom functions and pinned Waymax adapter. Boolean masks and integer identity are
 unchanged. This is necessary because EvalSim contracts otherwise hold float64 values
 while pinned Waymax `Trajectory` requires float32.
+
+Canonical inputs remove input-quantization ambiguity; they do not force NumPy/libm and
+XLA to use identical trigonometric rounding. Position and kinematic anchors reproduce
+the pinned arithmetic branches and are checked natively. Overlap uses the
+source-neutral NumPy scorecard definition and must match every valid native flag in
+the bounded observed parity subset; any mismatch fails the run and is retained rather
+than normalized.
 
 ### Logged-position divergence
 
@@ -81,6 +125,11 @@ Parity requires exact identity/order and target validity everywhere, then every
 discrete flag only where the target is valid. Upstream raw values for invalid targets
 are semantically masked and may be nonzero; M5 neither compares them nor calls
 post-mask zero-filling raw parity.
+
+This requirement is exact for the observed parity matrix, not universal
+bit-equivalence over every possible float32 box. A permanent synthetic rotated
+zero-margin counterexample demonstrates the backend boundary. M5 therefore claims a
+bounded native semantic cross-check only if all frozen observed flags agree.
 
 ### Kinematic infeasibility
 
@@ -225,5 +274,6 @@ timestamps, roadgraph, and padding, sets the current timestep, and calls the nat
 metric class directly.
 
 The full 128-scene/80-transition Waymax exact-log path remains a separate M5 execution
-gate. The 16 × 20 parity result is a bounded semantic cross-check, not a policy
-benchmark or a rerun of Waymax IDM.
+gate. The data-free acceptance produced no native parity rows. Any later 16 × 20 parity
+result is a bounded semantic cross-check, not a policy benchmark or a rerun of Waymax
+IDM.

@@ -1,11 +1,11 @@
 """Interfaces are abstract; RunManifest round-trips through JSON."""
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from evalsim import (
     Metric,
+    MetricEligibility,
     MetricResult,
     MetricSpec,
     PolicyMetadata,
@@ -38,23 +38,25 @@ def test_minimal_simulator_and_metric_subclasses():
     class ConstMetric(Metric):
         spec = MetricSpec(name="const", version="0.0.1")
 
-        def validate_inputs(self, scenario, rollout):
-            return True
+        def eligibility(self, scenario):
+            return MetricEligibility.accepted()
 
         def compute(self, scenario, rollout):
-            return MetricResult("const", "0.0.1", scenario.scenario_id, 1.0)
-
-        def aggregate(self, per_scenario_values):
-            return {"mean": float(np.mean(per_scenario_values)), "n": len(per_scenario_values)}
+            return MetricResult(
+                "const",
+                "0.0.1",
+                scenario.scenario_id,
+                1.0,
+                distribution=(1.0,),
+            )
 
     sim = NoopSim()
     assert sim.step(sim.initialize(None, 0), None)["t"] == 1
     assert sim.metadata().name == "noop"
 
     m = ConstMetric()
-    assert m.validate_inputs(None, None) is True
-    agg = m.aggregate([1.0, 1.0, 1.0])
-    assert agg["mean"] == pytest.approx(1.0) and agg["n"] == 3
+    assert m.eligibility(None) == MetricEligibility.accepted()
+    assert not hasattr(m, "aggregate")
 
 
 def test_run_manifest_json_roundtrip(tmp_path):

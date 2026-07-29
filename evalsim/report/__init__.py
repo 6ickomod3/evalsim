@@ -1,4 +1,25 @@
-"""Scorecards, failure visualizations, technical report (M8).
+"""Deterministic human-readable evaluation reports."""
 
-Placeholder — implemented in a later milestone.
-"""
+from .m5 import (
+    DATA_FREE_TEST_PROFILE,
+    M5_SCORECARD_INPUT_FIELDS,
+    M5_SCORECARD_RENDERED_ROW_FIELDS,
+    M5_SCORECARD_RENDERER_VERSION,
+    M5_SCORECARD_REPORT_MEDIA_TYPE,
+    M5_SCORECARD_REPORT_PATH,
+    M5_SCORECARD_SOURCE_SCHEMA_VERSION,
+    OFFICIAL_M5_PROFILE,
+    render_m5_scorecard,
+)
+
+__all__ = [
+    "DATA_FREE_TEST_PROFILE",
+    "M5_SCORECARD_INPUT_FIELDS",
+    "M5_SCORECARD_RENDERED_ROW_FIELDS",
+    "M5_SCORECARD_RENDERER_VERSION",
+    "M5_SCORECARD_REPORT_MEDIA_TYPE",
+    "M5_SCORECARD_REPORT_PATH",
+    "M5_SCORECARD_SOURCE_SCHEMA_VERSION",
+    "OFFICIAL_M5_PROFILE",
+    "render_m5_scorecard",
+]

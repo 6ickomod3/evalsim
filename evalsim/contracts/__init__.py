@@ -9,7 +9,7 @@ from .simulator import (
     PolicyStep,
     SimulatorPolicy,
 )
-from .metric import Metric, MetricResult, MetricSpec
+from .metric import Metric, MetricEligibility, MetricResult, MetricSpec
 from .manifest import RunManifest
 from .serialization import (
     scenario_to_parquet,
@@ -31,6 +31,7 @@ __all__ = [
     "PolicyStep",
     "SimulatorPolicy",
     "Metric",
+    "MetricEligibility",
     "MetricResult",
     "MetricSpec",
     "RunManifest",

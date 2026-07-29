@@ -1,4 +1,58 @@
-"""Metric registry and metric implementations (M3).
+"""Metric implementations and deterministic registration."""
 
-Placeholder — implemented in a later milestone.
-"""
+from .m5 import (
+    M5_METRIC_TYPES,
+    M5_METRIC_SPECS,
+    M5_METRIC_VERSION,
+    AccelerationErrorMetric,
+    ConstantVelocityTTCCapMetric,
+    JerkErrorMetric,
+    KinematicContinuityResidualMetric,
+    LaneCenterDistanceMetric,
+    LaneHeadingDisagreementMetric,
+    LifecycleReentryPerAgentMetric,
+    MetricInputError,
+    MinimumCenterDistanceMetric,
+    OrientedBoxOverlapRateMetric,
+    PositionErrorMetric,
+    SpeedErrorMetric,
+    WaymaxKinematicInfeasibilityRateMetric,
+    YawRateErrorMetric,
+    canonical_float32_view,
+    constant_velocity_disc_ttc,
+    kinematic_infeasibility_components,
+    kinematic_infeasibility_flags,
+    m5_metrics,
+    oriented_box_overlap_components,
+    position_divergence_components,
+)
+from .registry import MetricRegistry, MetricRegistryError
+
+__all__ = [
+    "M5_METRIC_TYPES",
+    "M5_METRIC_SPECS",
+    "M5_METRIC_VERSION",
+    "AccelerationErrorMetric",
+    "ConstantVelocityTTCCapMetric",
+    "JerkErrorMetric",
+    "KinematicContinuityResidualMetric",
+    "LaneCenterDistanceMetric",
+    "LaneHeadingDisagreementMetric",
+    "LifecycleReentryPerAgentMetric",
+    "MetricInputError",
+    "MetricRegistry",
+    "MetricRegistryError",
+    "MinimumCenterDistanceMetric",
+    "OrientedBoxOverlapRateMetric",
+    "PositionErrorMetric",
+    "SpeedErrorMetric",
+    "WaymaxKinematicInfeasibilityRateMetric",
+    "YawRateErrorMetric",
+    "canonical_float32_view",
+    "constant_velocity_disc_ttc",
+    "kinematic_infeasibility_components",
+    "kinematic_infeasibility_flags",
+    "m5_metrics",
+    "oriented_box_overlap_components",
+    "position_divergence_components",
+]

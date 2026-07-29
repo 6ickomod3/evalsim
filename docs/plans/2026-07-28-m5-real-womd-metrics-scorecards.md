@@ -1,8 +1,9 @@
 # M5 — Real-WOMD metric system and statistical scorecards
 
 **Date:** 2026-07-28
-**Status:** Accepted pre-registration; implementation not yet accepted and no M5 WOMD
-outcomes inspected
+**Status:** Accepted pre-registration, data-free overlap-boundary amendment, and
+data-free implementation; commit/push and bound real-WOMD acceptance remain pending,
+and no M5 WOMD outcomes or native M5 parity results have been inspected
 **Depends on:** accepted M4 execution snapshot
 `a7a20e5de89c9c988f36a4b2f10ff4acc49246f0`
 **Population:** the unchanged accepted M4 complete-case conditional cohort of
@@ -14,10 +15,39 @@ implementation cannot meet a rule below, the run fails or the plan is versioned 
 reviewed again before a fresh run; the rule is not silently relaxed after looking at
 results.
 
-No M5 metric result, slice count, policy difference, resampling interval, native
-scenario identity, coordinate, or ignored M4 artifact **content** was inspected while
-selecting these definitions. The existing tracked M4 aggregate and pinned upstream
-source were used to establish feasibility.
+**Accepted data-free amendment, 2026-07-29:** adversarial synthetic testing falsified universal
+bit-equivalence between NumPy/libm and XLA for strict oriented-box overlap at
+float32 zero-margin boundaries. No M5 WOMD outcome, ignored M4 artifact content, or
+data-derived count was inspected. The universal claim is withdrawn before execution;
+the frozen observed 16 × 20 × three-policy native flag comparison remains exact and
+fails on any mismatch. The synthetic counterexample remains a permanent test rather
+than being hidden or tolerance-normalized. Independent metric/statistics and
+publication-claim reviewers accepted the bounded claim and permanent counterexample.
+
+**Accepted data-free implementation closure, 2026-07-29:** the fixed five-scene
+synthetic runner, thirteen metrics, eight source-only slices, paired finite-cohort
+statistics, immutable result store, aggregate scorecard, and privacy-safe CLI passed
+264 focused tests. The locked Waymo-extra suite passed 757 tests with one expected
+local-data skip; the clean locked core-only suite passed 676 tests with 23 expected
+optional-runtime skips. Independent architecture, methods/statistics, and
+privacy/claim reviews returned **ACCEPT** after the terminal/finalization and
+failure-record findings were corrected. The exact data-free matrix is 195 metric rows,
+40 slice rows, 312 scorecard rows, and zero native Waymax parity rows. All 25
+log-replay error oracles are exact zero across their eligible components. All 312
+synthetic scorecards have paired N from zero to five, are `insufficient_n`, suppress
+effects and bands, and forbid directional language.
+
+This closure is implementation evidence, not real-WOMD result evidence. No real-WOMD
+metric result, slice count, policy difference, resampling interval, or native M5
+metric-parity result was inspected. The unchanged 128-scenario cohort, shared pinned
+Waymax decode, and privileged logged-future status of log replay remain mandatory
+limitations. The data-free implementation is accepted in the working tree but has not
+yet been committed or pushed.
+
+No real-WOMD M5 metric result, slice count, policy difference, resampling interval,
+native scenario identity, coordinate, or ignored M4 artifact **content** was inspected
+while selecting these definitions. The existing tracked M4 aggregate and pinned
+upstream source were used to establish feasibility.
 
 ## 1. Question, hypothesis, and claim boundary
 
@@ -145,7 +175,12 @@ infeasibility—use one canonical float32 view in both production scorecards and
 
 The custom functions and the pinned Waymax adapter receive copies of those exact
 float32 bits. Other EvalSim-only diagnostics use the contract's float64 values.
-This prevents input quantization from being mistaken for metric disagreement.
+This prevents input quantization from being mistaken for metric disagreement, but it
+does not imply universal backend bit-equivalence: NumPy/libm and XLA trigonometric
+rounding can flip a strict overlap decision at an adversarial zero-margin boundary.
+M5 retains that counterexample, describes the scorecard implementation as the
+source-neutral NumPy definition, and requires exact observed native flags throughout
+the frozen parity subset.
 
 ## 3. Metric contract
 
@@ -234,8 +269,10 @@ The primary family is exactly four metrics by three ordered policy contrasts, fo
 - **Interpretation:** overlapping-target-frame rate, not collision-pair count,
   geometric occupancy, or collision severity.
 - **Expected eligibility:** unconditional for all 128 M4 scenarios.
-- **Waymax crosswalk:** equivalent to upstream `overlap` after target/window
-  restriction.
+- **Waymax crosswalk:** same intended strict separating-axis semantics after
+  target/window restriction, with exact observed flag comparison on the frozen parity
+  subset. Universal bit-equivalence at float32 zero-margin boundaries is explicitly
+  falsified and not claimed.
 
 #### `waymax_kinematic_infeasibility_rate` version `1.0.0`
 
@@ -339,7 +376,7 @@ counterfactual, but M5 does not hide source tensors in `Scenario.metadata`.
 
 ## 5. Waymax metric parity
 
-The pinned source definitions and exact semantic crosswalk live in
+The pinned source definitions and bounded semantic crosswalk live in
 `docs/data/womd-waymax-m5-metric-crosswalk.md`.
 
 For the frozen 16-scene × 20-transition M5 parity subset, the runner compares custom
@@ -367,7 +404,8 @@ Acceptance rules:
 - identity/order and validity masks are exact;
 - overlap validity masks are exact everywhere and discrete flags are exact only where
   the target mask is valid; invalid-target raw values are ignored rather than
-  normalized and claimed as parity;
+  normalized and claimed as parity; this is a bounded observed parity gate, not a
+  universal NumPy/XLA bit-equivalence claim;
 - kinematic-infeasibility masks and binary flags are exact;
 - jointly valid finite continuous log-divergence values satisfy
   `abs(custom - reference) <= max(1e-6, 8 * float32_ulp(abs(reference)))`
@@ -638,6 +676,9 @@ Before any M5 WOMD execution, tests must prove:
 - derivatives never cross invalid gaps, births, deaths, or re-entries;
 - exact box separation, edge touch, infinitesimal penetration, invalid target, and
   invalid counterpart behavior;
+- a retained rotated zero-margin float32 counterexample demonstrating that
+  NumPy/libm and XLA overlap flags are not universally bit-equivalent, plus exact
+  pinned-native checks for ordinary and threshold fixtures;
 - pinned Waymax kinematic boundaries using each exact float32 threshold and float32
   `nextafter` immediately below and above `0.6`, `10.401`, and `0.301`, preserving
   new-yaw `<= 0.6`, suppression `< 0.6`, and infeasibility strict `>`;
@@ -790,7 +831,7 @@ Rollback is additive: disable or revert M5 code while preserving prior commits a
 ignored evidence directories. Raw data and accepted M4 outputs are never modified or
 deleted.
 
-## 13. Pre-implementation checklist
+## 13. Pre-implementation and data-free closure checklist
 
 Four independent adversarial review tracks—architecture/feasibility, pinned Waymax
 semantics, finite-cohort statistics, and privacy/publication claims—initially rejected
@@ -812,4 +853,12 @@ release-surface audits.
 - [x] Four adversarial plan reviews accepted with no unresolved blocker or major issue.
 - [x] Accepted pre-registration committed and pushed before M5 implementation
       (`5a52203cdbb5b055d2a152aeddd114ab09083eb4`).
-- [ ] Data-free implementation accepted, committed, and pushed before WOMD execution.
+- [x] Data-free metrics, slices, statistics, immutable store, report, source-neutral
+      runner, and synthetic CLI implemented and accepted.
+- [x] Data-free verification completed: 264 focused tests passed; the locked Waymo-extra
+      suite passed 757 tests with one expected local-data skip; the clean locked
+      core-only suite passed 676 tests with 23 expected optional-runtime skips.
+- [x] Final independent architecture, methods/statistics, and privacy/claim reviews
+      accepted the data-free implementation with no remaining blocker.
+- [ ] Accepted data-free implementation committed and pushed before WOMD execution.
+- [ ] Bound real-WOMD M5 execution, native metric parity, and result reviews completed.

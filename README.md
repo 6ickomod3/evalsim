@@ -26,9 +26,10 @@ the canonical
 The platform is built **contract-first** (ports-and-adapters). The validated `Scenario`
 contract has both a synthetic producer and an M3 local WOMD producer through pinned
 Waymax/JAX on Apple Silicon CPU. M4 makes Waymax a recurring reference rollout and
-semantic-parity path. Downstream components continue to consume **only** project
-contracts. Synthetic scenes remain analytic oracles while every core feature from M3
-onward also gets a real-WOMD acceptance path.
+semantic-parity path. M5 now has a data-free metric, slicing, paired-statistics, result
+store, and reporting implementation behind those same contracts. Downstream components
+continue to consume **only** project contracts. Synthetic scenes remain analytic
+oracles while every core feature from M3 onward also gets a real-WOMD acceptance path.
 
 ## Progress
 
@@ -41,7 +42,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M2 | Simulator adapters + rollout engine | ✅ | 🖥️ |
 | M3 | Local WOMD → Waymax/JAX → EvalSim vertical slice | ✅ | 🖥️ |
 | M4 | Deterministic WOMD cohort + Waymax parity | ✅ | 🖥️ |
-| M5 | Real-WOMD metrics + statistical scorecards | 🚧 | 🖥️ |
+| M5 | Metric system + statistical scorecards; real-WOMD acceptance | 🚧 | 🖥️ |
 | M6 | Counterfactual closed-loop reactivity | ⬜ | 🖥️ |
 | M7 | Evaluator red-team + metric governance | ⬜ | 🖥️ |
 | M8 | JAX/Flax learned realism discriminator | ⬜ | 🖥️/☁️ |
@@ -49,15 +50,17 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M10 | Scalable, resumable evaluation pipeline | ⬜ | 🖥️/☁️ |
 | M11 | Decision package + staff-caliber communication | ⬜ | 🖥️ |
 
-M5 now has an
-[accepted, data-free pre-registration](docs/plans/2026-07-28-m5-real-womd-metrics-scorecards.md)
-after four adversarial review tracks. No M5 metric outcome has been inspected or
-claimed; implementation and real-cohort acceptance remain ahead.
+M5's data-free implementation is accepted: 13 registered metrics, 8 source-only
+slices, paired scorecards, an immutable result store and renderer, an accepted-M4 reuse
+verifier, and a fixed synthetic acceptance CLI. The
+[accepted M5 pre-registration](docs/plans/2026-07-28-m5-real-womd-metrics-scorecards.md)
+still governs the pending real-data gate. No M5 WOMD/Waymax metric run has been
+accepted, and no policy-quality result, ranking, or winner is claimed.
 
-**Tests:** 493 passing + 1 local-data skip with the Waymo extra; 418 passing + 22
-optional-runtime skips core-only; focused M4 CLI 110 passing; locked M4 matrix 421
-passing + 1 local-data skip · **Last updated:** 2026-07-28 (M4 implemented, accepted,
-released, and post-release verified)
+**Tests:** current full repository suite: 757 passed + 1 expected local-data skip;
+clean core-only environment: 676 passed + 23 expected optional-runtime skips ·
+**Last updated:** 2026-07-29 (M5 data-free implementation accepted; real-WOMD/Waymax
+acceptance pending)
 
 ## Completed work
 
@@ -196,6 +199,37 @@ generalization, production scale, or custom/Waymax metric agreement; metrics,
 behavioral slices, and statistical comparisons begin in M5. See the
 [reviewed M4 plan](docs/plans/2026-07-28-m4-womd-cohort-waymax-parity.md).
 
+### M5 — Data-free metric and scorecard implementation 🚧 real-data acceptance pending
+
+The contract-first M5 evaluation stack is implemented and accepted at the data-free
+boundary:
+
+- **13 registered motion metrics** expose units, direction, eligibility, invalid
+  reasons, and retained component distributions without a composite realism score.
+- **8 source-only slices** are computed from the `Scenario` before any policy rollout,
+  preventing policy-dependent slice membership.
+- **Paired finite-cohort statistics** generate the complete 13 × 8 × 3 = 312-cell
+  comparison ledger, including paired effects, deterministic scenario-resampling
+  stability bands, missingness accounting, adjusted primary bands, and explicit
+  small/sparse suppression rather than a forced winner.
+- **Immutable local results** use typed Parquet schemas, exact row accounting,
+  content hashes, scorecard re-derivation, and a deterministic aggregate renderer so a
+  coherently rehashed but semantically altered result is rejected.
+- **Accepted-M4 reuse** verifies and reloads the exact local M4 evidence boundary
+  fail-closed, without silently rescanning the ten shards or constructing a new cohort.
+- **Fixed synthetic acceptance** runs five deterministic scenarios through all three
+  EvalSim policies and writes 195 metric rows, 40 slice rows, and 312 scorecard rows,
+  including 25 exact log-replay zero oracles and zero Waymax-parity rows. The command
+  has no WOMD, accepted-M4, or official Waymax execution argument.
+
+The current full repository suite reports **757 passed and 1 expected local-data skip**;
+a clean core-only environment without JAX, TensorFlow, Flax, or Waymax reports
+**676 passed and 23 expected optional-runtime skips**. These are implementation and
+contract evidence only. The bound M5 real-WOMD/Waymax metric execution has not run, so
+there is no accepted policy-quality effect, ranking, winner, or population-level
+conclusion. The remaining real-data and parity gates are defined in the
+[accepted M5 pre-registration](docs/plans/2026-07-28-m5-real-womd-metrics-scorecards.md).
+
 ## Setup
 
 Uses [`uv`](https://docs.astral.sh/uv/) for an isolated environment (independent of the
@@ -207,10 +241,10 @@ uv sync --extra dev                    # create .venv and install deps
 uv run pytest                          # run the test suite
 ```
 
-A verified core-only environment reports **418 passed, 22 optional-runtime skips**.
-After installing the licensed Waymo extra documented below, the full suite reports
-**493 passed, 1 local-data skip**. The focused M4 CLI suite reports **110 passed**, and
-the locked M4/Waymax/rollout matrix reports **421 passed, 1 local-data skip**.
+The current clean core-only environment reports **676 passed, 23 expected
+optional-runtime skips**. With the licensed Waymo runtime configured, the current full
+repository suite reports **757 passed, 1 expected local-data skip**. Historical
+milestone-scoped acceptance counts remain recorded in their milestone sections.
 
 ## Generate synthetic scenarios
 
@@ -358,6 +392,21 @@ The command scans exactly shards `00000`–`00009`, binds evidence to the clean 
 commit, and keeps manifests, provenance, native identities, and detailed run artifacts
 local and ignored. Use a different new output-directory name for a later run.
 
+## Run the M5 data-free acceptance
+
+The fixed synthetic command exercises the implemented M5 stack without reading WOMD,
+accepted-M4 artifacts, or Waymax:
+
+```bash
+uv run evalsim-m5-synthetic \
+  --project-root "$PWD" \
+  --run-name data-free-acceptance-01
+```
+
+Run it from a clean Git worktree and choose a new run name each time. It writes only
+under ignored `outputs/m5/`. Its five synthetic scenarios are analytic contract oracles,
+not evidence about WOMD or policy quality.
+
 ## Layout
 
 ```
@@ -391,8 +440,11 @@ one-scenario vertical slice; M4 now supports the narrower substantive claim that
 log-playback mapping and rollout-contract semantics were cross-checked on a
 deterministic 128-scenario complete-case conditional cohort from ten WOMD validation
 shards, with bounded Waymax reference execution and a measured batch-two JAX CPU
-microbenchmark. Metrics, slices, paired finite-cohort effects and scene-reweighting
-stability analysis, counterfactuals, stress tests, learned evaluators, scalable
-execution, and video/VLM work each remain unavailable as claims until their evidence
-gate passes. See the
+microbenchmark. M5 adds a tested data-free implementation of 13 metrics, 8 source-only
+slices, paired finite-cohort scorecards, an immutable result store, deterministic
+reporting, accepted-M4 reuse verification, and a fixed synthetic CLI. That
+implementation does not unlock a real-WOMD, Waymax-parity, policy-quality, or
+simulator-superiority claim; the bound real-data run remains pending. Counterfactuals,
+stress tests, learned evaluators, scalable execution, and video/VLM work likewise
+remain unavailable as claims until their evidence gates pass. See the
 [claim-to-evidence ledger](docs/interview/claim-evidence-ledger.md).

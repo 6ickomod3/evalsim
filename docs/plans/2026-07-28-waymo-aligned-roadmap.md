@@ -1,6 +1,7 @@
 # EvalSim — Waymo-aligned roadmap
 
 **Date:** 2026-07-28
+**Last evidence update:** 2026-07-29
 **Status:** Canonical plan for M3 onward
 **Supersedes:** The unfinished portion of
 [`2026-07-27-evalsim-implementation-plan.md`](2026-07-27-evalsim-implementation-plan.md)
@@ -33,16 +34,21 @@ work.
   vertical slice. M4 is also implemented, locally accepted, and released: an auditable
   complete-case conditional cohort from exactly ten validation shards passed
   supported-field, exact-log, rollout-contract, bounded Waymax-reference, and batched
-  JAX CPU gates. The verified Waymo-extra suite has 493 passing tests and one expected
-  local-data skip; the core-only path has 418 passing tests and 22 expected
-  optional-runtime skips.
+  JAX CPU gates. M5's data-free implementation adds 13 registered motion metrics, 8
+  source-only slices, paired finite-cohort scorecards, a schema- and hash-bound
+  immutable result store, deterministic aggregate renderer, fail-closed accepted-M4
+  reuse verification, and a fixed synthetic acceptance CLI. The current full
+  repository suite has 757 passing tests and one expected local-data skip; a clean
+  core-only environment has 676 passing tests and 23 expected optional-runtime skips.
 - **Available locally:** WOMD v1.3.1 TFExample validation shards `00000`–`00009`.
   Additional files in the directory do not expand the frozen M4 population.
-- **Not yet implemented:** real-WOMD metrics, statistical scorecards, counterfactual ego
-  control, evaluator stress tests, learned evaluators, multimodal/video/VLM evaluation,
-  and a scalable resumable pipeline.
+- **Not yet accepted:** M5 real-WOMD/Waymax metric execution, custom/Waymax metric
+  cross-checks, and any policy-quality result. Counterfactual ego control, evaluator
+  stress tests, learned evaluators, multimodal/video/VLM evaluation, and a scalable
+  resumable pipeline are also not yet implemented.
 
-Plans and downloaded files do not count as implemented evidence.
+Plans and downloaded files do not count as implemented evidence. The accepted M5
+data-free implementation does not count as real-data or policy-quality evidence.
 
 ## Milestone completion protocol
 
@@ -202,18 +208,32 @@ version 6. Raw data and all generated experiment artifacts remained local and ig
 
 ### M5 — Real-WOMD metric system and statistical scorecards
 
-**Status:** 🚧 Pre-registration accepted after four adversarial review tracks; data-free
-implementation is next. No M5 WOMD metric outcome has been inspected. The
+**Status:** 🚧 Data-free implementation accepted on 2026-07-29 after adversarial
+review; the bound real-WOMD/Waymax execution is still pending. The
 [`accepted M5 pre-registration`](2026-07-28-m5-real-womd-metrics-scorecards.md)
 supersedes the less-specific build bullets below.
+
+The accepted data-free boundary contains 13 registered metrics, 8 source-only slices,
+the complete 13 × 8 × 3 paired-scorecard ledger, deterministic scenario-resampling
+statistics with small/sparse suppression, an immutable Parquet result store with
+schema/hash/row validation and scorecard re-derivation, a deterministic aggregate
+renderer, fail-closed accepted-M4 reuse verification, and a fixed five-scenario
+synthetic CLI. That CLI produces 195 metric rows, 40 slice rows, 312 scorecard rows,
+25 exact log-replay zero oracles, and zero Waymax-parity rows.
+
+No M5 WOMD/Waymax metric run has been accepted. There is therefore no policy-quality
+effect, winner, ranking, simulator-superiority result, or WOMD-population claim. The
+synthetic CLI is implementation evidence only, and its five-scenario scorecards retain
+the pre-registered small-sample suppression.
 
 **Question:** Can independent metrics expose materially different simulator failures on
 the frozen real-scene cohort without hiding scene-level variation or collapsing motion
 quality into one score?
 
-**Build**
+**Implemented data-free build**
 
-- Implement the metric registry and per-scenario local result store.
+- The metric registry and per-scenario local result store consume only project
+  contracts.
 - Kinematics: speed, acceleration, jerk, yaw rate, feasibility, and distributional log
   divergence.
 - Interaction: overlapping-target-frame rate, minimum center distance, and a capped
@@ -226,19 +246,19 @@ quality into one score?
   approximations.
 - Temporal consistency: discontinuities, lifecycle flicker, and implausible state
   changes. These are motion-domain analogues, not camera-video metrics.
-- Validate custom definitions with analytic synthetic oracles and cross-check overlapping
-  definitions against Waymax.
-- Pre-register source-only slices for current density, a clearly labeled retained-world
+- Custom definitions are validated with analytic synthetic oracles. Cross-checking
+  overlapping definitions against Waymax remains part of the real-data gate.
+- Source-only slices cover current density, a clearly labeled retained-world
   count proxy, vulnerable-road-user presence, current low-TTC proxy, observed ego
   maneuver, future lifecycle change, and retained-lane availability. Signalization is
   deferred because the current contract lacks its typed timeline.
-- Add exact paired finite-cohort effects, deterministic scenario-resampling stability
+- Exact paired finite-cohort effects, deterministic scenario-resampling stability
   bands, effect sizes, eligibility/missingness counts, small/sparse warnings, a fixed
-  complete comparison ledger, and adjusted primary stability bands. Do not present
-  fixed-cohort resampling as WOMD-population confidence or generate exploratory
-  significance claims.
+  complete comparison ledger, and adjusted primary stability bands are implemented.
+  Fixed-cohort resampling is not presented as WOMD-population confidence, and the
+  implementation does not generate exploratory significance claims.
 
-**Evidence gate**
+**Remaining real-data evidence gate**
 
 - All three EvalSim policies and at least one Waymax path run over the frozen cohort.
 - Every metric publishes its unit, direction, eligibility, invalid reasons, and retained

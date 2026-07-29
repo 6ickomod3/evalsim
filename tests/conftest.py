@@ -51,7 +51,15 @@ def rollout(scenario: Scenario) -> Rollout:
         sim_version="0.1.0",
         seed=42,
         timestamps=scenario.timestamps.copy(),
-        agents=[make_agent(i, scenario.num_steps, seed=2) for i in range(scenario.num_agents)],
+        agents=[
+            make_agent(
+                i,
+                scenario.num_steps,
+                seed=2,
+                atype=scenario.agents[i].type,
+            )
+            for i in range(scenario.num_agents)
+        ],
         perturbation=None,
         metadata={"note": "unit-test rollout"},
     )

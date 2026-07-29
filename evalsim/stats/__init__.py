@@ -1,4 +1,55 @@
-"""Aggregation and scenario-cluster bootstrap statistics (M4).
+"""Paired finite-cohort summaries and scenario-resampling stability analysis."""
 
-Placeholder — implemented in a later milestone.
-"""
+from .m5 import (
+    CONSTANT_VELOCITY_MINUS_LOG_REPLAY,
+    IDM_MINUS_CONSTANT_VELOCITY,
+    IDM_MINUS_LOG_REPLAY,
+    M5_BASE_SEED,
+    M5_METRIC_DIRECTIONS,
+    M5_OTHER_RESAMPLES,
+    M5_POINTWISE_STABILITY_LEVEL,
+    M5_POLICY_CONTRASTS,
+    M5_PRIMARY_ADJUSTED_STABILITY_LEVEL,
+    M5_PRIMARY_FAMILY_SIZE,
+    M5_PRIMARY_METRIC_NAMES,
+    M5_PRIMARY_RESAMPLES,
+    M5_SLICE_NAMES,
+    M5_SLICE_VERSION,
+    M5_STATISTICS_SCHEMA_VERSION,
+    PairedCellResult,
+    PairedCellSpec,
+    PolicyContrast,
+    ResamplingKey,
+    ScenarioScalar,
+    StabilityBand,
+    analyze_paired_cell,
+    draw_resample_indices,
+    make_resampling_key,
+)
+
+__all__ = [
+    "CONSTANT_VELOCITY_MINUS_LOG_REPLAY",
+    "IDM_MINUS_CONSTANT_VELOCITY",
+    "IDM_MINUS_LOG_REPLAY",
+    "M5_BASE_SEED",
+    "M5_METRIC_DIRECTIONS",
+    "M5_OTHER_RESAMPLES",
+    "M5_POINTWISE_STABILITY_LEVEL",
+    "M5_POLICY_CONTRASTS",
+    "M5_PRIMARY_ADJUSTED_STABILITY_LEVEL",
+    "M5_PRIMARY_FAMILY_SIZE",
+    "M5_PRIMARY_METRIC_NAMES",
+    "M5_PRIMARY_RESAMPLES",
+    "M5_SLICE_NAMES",
+    "M5_SLICE_VERSION",
+    "M5_STATISTICS_SCHEMA_VERSION",
+    "PairedCellResult",
+    "PairedCellSpec",
+    "PolicyContrast",
+    "ResamplingKey",
+    "ScenarioScalar",
+    "StabilityBand",
+    "analyze_paired_cell",
+    "draw_resample_indices",
+    "make_resampling_key",
+]

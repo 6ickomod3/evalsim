@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07110f">
-  <meta name="description" content="EvalSim is a contract-first platform for evaluating traffic simulators. Explore the implemented M0–M4 architecture, accepted ten-shard WOMD/Waymax/JAX cohort path, three baseline policies, test evidence, and honest limitations.">
+  <meta name="description" content="EvalSim is a contract-first platform for evaluating traffic simulators. Explore accepted M0–M4 evidence, the implemented M5 data-free evaluator, three baseline policies, and the pending real-WOMD/Waymax metric gate.">
   <link rel="canonical" href="https://evalsim-policy-lab.jdai2013.chatgpt.site/">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/">
   <meta property="og:title" content="EvalSim — Closed-loop simulator evaluation">
-  <meta property="og:description" content="M0–M4 complete · 493 tests pass · accepted ten-shard WOMD/Waymax/JAX cohort path">
+  <meta property="og:description" content="M0–M4 accepted · M5 data-free evaluator implemented · 757 tests pass, 1 expected local-data skip · real M5 WOMD run pending">
   <meta property="og:image" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/og.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="EvalSim — Closed-loop simulator evaluation">
-  <meta name="twitter:description" content="M0–M4 complete · 493 tests pass · accepted ten-shard WOMD/Waymax/JAX cohort path">
+  <meta name="twitter:description" content="M0–M4 accepted · M5 data-free evaluator implemented · 757 tests pass, 1 expected local-data skip · real M5 WOMD run pending">
   <meta name="twitter:image" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/og.png">
   <title>EvalSim — Closed-loop simulator evaluation</title>
   <style>
@@ -1194,7 +1194,7 @@
   <main id="main">
     <section class="shell hero" id="top" aria-labelledby="hero-title">
       <div>
-        <p class="kicker">M0 → M4 implemented and tested</p>
+        <p class="kicker">M0 → M4 accepted · M5 data-free stack implemented</p>
         <h1 id="hero-title">A simulator can match the log—and still <em>fail the test.</em></h1>
         <p class="hero-copy">EvalSim is a contract-first platform for discovering how traffic simulators differ: what they replay, what they react to, where their motion breaks, and whether their outputs are useful for closed-loop evaluation.</p>
         <div class="hero-actions">
@@ -1228,7 +1228,7 @@
 
     <div class="shell evidence-ribbon" aria-label="Current project evidence">
       <div class="stat"><strong>5</strong><span>milestones complete</span></div>
-      <div class="stat"><strong>493</strong><span>Waymo-extra tests pass</span></div>
+      <div class="stat"><strong>757</strong><span>full repository tests pass</span></div>
       <div class="stat"><strong>5</strong><span>synthetic families</span></div>
       <div class="stat"><strong>128</strong><span>conditional WOMD cohort</span></div>
       <div class="stat"><strong>CPU</strong><span>Apple Silicon acceptance</span></div>
@@ -1240,7 +1240,7 @@
           <span class="section-index">01 / Evaluation tension</span>
           <h2 id="why-title">Realism is not a scalar.</h2>
         </div>
-        <p>The project starts with deliberately limited policies so their different failure modes remain legible. M4 has now exercised the contract on a deterministic, conditional WOMD cohort with pinned Waymax reference execution and batched JAX checks. M5 is next: turning visible failures into measured dimensions.</p>
+        <p>The project starts with deliberately limited policies so their different failure modes remain legible. M4 exercised the contract on a deterministic, conditional WOMD cohort with pinned Waymax reference execution and batched JAX checks. M5's data-free evaluator is now implemented; its bound real-WOMD/Waymax metric run is next.</p>
       </div>
       <div class="tension-grid">
         <article class="tension-card">
@@ -1454,10 +1454,11 @@
         <article class="proof-card"><span class="proof-id">EVIDENCE / J</span><h3>Contract + exact log</h3><p>All pre-registered contract and exact-log gates passed at their declared scopes, including adapter parity and exact-log rollout conversion across the full selected cohort.</p></article>
         <article class="proof-card"><span class="proof-id">EVIDENCE / K</span><h3>Waymax reference</h3><p>The privileged logged-trajectory waypoint-following Waymax IDM reference executed on 16 selected scenes for 20 transitions. This is execution evidence—not metric parity or realism evidence.</p></article>
         <article class="proof-card"><span class="proof-id">EVIDENCE / L</span><h3>Batched JAX evidence</h3><p>A fresh-process Apple CPU exact-log microbenchmark used batch size 2 and 20 warm runs: 217.983625 ms compile, 1.897854 ms median, 2.617709 ms nearest-rank p95, and 1,053.821843 scenarios/s. Peak process high-water RSS was 587,808,768 bytes.</p></article>
+        <article class="proof-card"><span class="proof-id">EVIDENCE / M</span><h3>Data-free M5 evaluator</h3><p>Thirteen metrics, eight source-only slices, a complete 312-cell paired scorecard ledger, immutable local results, deterministic rendering, accepted-M4 reuse verification, and the fixed synthetic CLI are implemented. This is not a real-data or policy-quality result.</p></article>
       </div>
 
       <div class="review-strip" aria-label="Current validation evidence">
-        <div><strong>493 passed</strong><span>Waymo-extra repository suite, with 1 local-data skip; core-only suite: 418 passed and 22 optional skips</span></div>
+        <div><strong>757 passed</strong><span>current full repository suite, with 1 expected local-data skip; clean core-only environment: 676 passed and 23 expected optional-runtime skips</span></div>
         <div><strong>421 passed</strong><span>locked 12-file M4 verification matrix, with 1 local-data skip</span></div>
         <div><strong>2,916 → 128</strong><span>raw ten-shard records to selected complete-case cohort; conditional and nonrepresentative by design</span></div>
       </div>
@@ -1472,11 +1473,11 @@
         <ul class="trust-list">
           <li><strong>The M4 cohort is conditional, not representative.</strong> It is a deterministic complete-case sample from exactly ten validation shards, not a random sample, the full dataset, or evidence of population-level generalization.</li>
           <li><strong>The decode boundary is shared.</strong> EvalSim and the Waymax reference paths use the same pinned Waymax WOMD decoder, so their agreement is not fully independent source validation.</li>
-          <li><strong>No M5 scorecards or metric parity.</strong> Collision, off-road, kinematic realism, uncertainty, and policy comparisons have not been implemented or measured; M4 reference execution is not a claim of behavioral realism.</li>
+          <li><strong>No M5 real-data scorecard or policy-quality result.</strong> The metric, slice, paired-statistics, immutable-store, and renderer stack is implemented and tested data-free, but the bound WOMD/Waymax metric run and custom/Waymax cross-checks are pending. There is no accepted policy effect, ranking, or winner; native offroad, route, and signal metrics also remain outside the current contract.</li>
           <li><strong>The benchmark is deliberately narrow.</strong> It measures a batch-2 exact-log JAX kernel on Apple CPU after host-to-device transfer—not ingestion, the full cohort, accelerator speedup, scaling efficiency, or production throughput. RSS is process high-water memory, not JAX device memory.</li>
           <li><strong>No M6 counterfactual result.</strong> M2 keeps ego on its logged trajectory; ego perturbation and reactivity metrics remain planned.</li>
         </ul>
-        <p class="next-question"><span>Next falsifiable question / M5</span>Can pre-registered metrics and scenario-level uncertainty distinguish the known failure modes of replay, constant velocity, and IDM on synthetic oracles and the accepted real-WOMD path without turning implementation artifacts into a realism ranking?</p>
+        <p class="next-question"><span>Next falsifiable question / M5 real-data acceptance</span>Can the implemented metrics and scenario-level uncertainty distinguish the known failure modes of replay, constant velocity, and IDM on the accepted real-WOMD path without turning implementation artifacts into a realism ranking?</p>
       </div>
     </section>
 
@@ -1495,7 +1496,7 @@
         <article class="arch-node done"><span class="arch-status">Implemented · M2</span><h3>Simulation</h3><p>Replay, CV, IDM, typed policy steps, engine dynamics, and provenance.</p></article>
         <article class="arch-node done"><span class="arch-status">Implemented · M3</span><h3>Waymo substrate</h3><p>Exact local WOMD decode, pinned Waymax/JAX adapter, mapping, and one-record contract acceptance.</p></article>
         <article class="arch-node done"><span class="arch-status">Implemented · M4</span><h3>Evaluation substrate</h3><p>Deterministic conditional cohort, exact-log gates, Waymax reference execution, and batched CPU JAX evidence.</p></article>
-        <article class="arch-node next"><span class="arch-status">Next · M5</span><h3>Metrics + statistics</h3><p>Pre-registered dimensions, real-WOMD scorecards, paired effects, and scenario-level uncertainty.</p></article>
+        <article class="arch-node next"><span class="arch-status">Implemented data-free · M5</span><h3>Metrics + statistics</h3><p>13 metrics, 8 source-only slices, paired scorecards, immutable results, and deterministic aggregate reporting; real WOMD/Waymax execution remains pending.</p></article>
       </div>
       <div class="producer-note" aria-label="Source implementation status">
         <span class="implemented">Synthetic producer · implemented locally</span>
@@ -1557,12 +1558,13 @@
             <div class="roadmap-item"><dt>M2</dt><dd><strong>Policies + rollout engine</strong><span>Replay, CV, IDM, lifecycle, dynamics, provenance</span></dd></div>
             <div class="roadmap-item"><dt>M3</dt><dd><strong>Local Waymo vertical slice</strong><span>Exact WOMD shard, pinned Waymax/JAX, independent supported-field parity</span></dd></div>
             <div class="roadmap-item"><dt>M4</dt><dd><strong>Cohort + reference execution</strong><span>Fixed ten-shard accounting, exact-log gates, Waymax reference rollout, batched CPU JAX</span></dd></div>
+            <div class="roadmap-item"><dt>M5</dt><dd><strong>Data-free evaluator</strong><span>13 metrics, 8 slices, paired scorecards, immutable store + renderer</span></dd></div>
           </dl>
         </article>
         <article class="roadmap-column next">
-          <h3>Next <span>measured dimensions</span></h3>
+          <h3>Next <span>real-data acceptance</span></h3>
           <dl class="roadmap-list">
-            <div class="roadmap-item"><dt>M5</dt><dd><strong>Metrics + statistics</strong><span>Real-WOMD scorecards, paired effects, scenario bootstrap</span></dd></div>
+            <div class="roadmap-item"><dt>M5</dt><dd><strong>Bound WOMD/Waymax run</strong><span>Frozen M4 cohort, metric cross-checks, retained nulls; no result yet</span></dd></div>
           </dl>
         </article>
         <article class="roadmap-column future">
@@ -1580,7 +1582,7 @@
       <div class="reproduce">
         <article class="reproduce-copy">
           <h3>Run the implemented paths.</h3>
-          <p>M0–M4 run locally through the repository’s <code>uv</code>-managed environment. The core remains usable without Waymo dependencies.</p>
+          <p>M0–M4 and the fixed M5 data-free acceptance run locally through the repository’s <code>uv</code>-managed environment. The core and M5 synthetic path remain usable without Waymo dependencies.</p>
           <p class="data-note">WOMD data and all derived artifacts are excluded from Git and deployment. M3 requires separately obtained shard <code>00000</code>; M4 requires the exact ten-shard set <code>00000</code>–<code>00009</code>, a clean worktree, a fresh ignored output directory, explicit data-access opt-in, and acceptance of the complete upstream terms above.</p>
         </article>
         <div class="code-card">
@@ -1591,13 +1593,18 @@
           <pre id="commands"><code>uv sync --extra dev
 uv run pytest
 
-# Verified clean core-only suite:
-# 418 passed, 22 skipped
+# Current clean core-only environment:
+# 676 passed, 23 skipped
+
+# Fixed M5 data-free acceptance; choose a new run name:
+uv run evalsim-m5-synthetic \
+  --project-root . \
+  --run-name data-free-acceptance-01
 
 # Optional Waymo dependencies:
 uv sync --extra dev --extra waymo
 uv run --extra waymo pytest
-# 493 passed, 1 skipped
+# Current full repository suite: 757 passed, 1 skipped
 # Locked 12-file M4 matrix: 421 passed, 1 skipped
 
 # Optional licensed M3 path:
@@ -1616,7 +1623,7 @@ EVALSIM_RUN_WAYMO_LOCAL=1 uv run --extra waymo evalsim-waymax-m4 \
 
   <footer>
     <div class="shell footer-row">
-      <span>EvalSim · M0–M4 · updated 2026-07-28</span>
+      <span>EvalSim · M0–M4 accepted · M5 data-free implemented · updated 2026-07-29</span>
       <div class="footer-links">
         <a href="https://github.com/6ickomod3/evalsim" rel="noreferrer">Source</a>
         <a href="https://github.com/6ickomod3/evalsim/blob/main/README.md" rel="noreferrer">README</a>
