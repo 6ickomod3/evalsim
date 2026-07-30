@@ -12,11 +12,12 @@ from evalsim import (
     Agent,
     AgentFrame,
     AgentType,
+    HistoryOnlyPolicyContext,
+    HistoryOnlySimulatorPolicy,
     PolicyMetadata,
     PolicyObservation,
     PolicyStep,
     Scenario,
-    SimulatorPolicy,
     rollout_from_parquet,
     rollout_to_parquet,
 )
@@ -272,13 +273,13 @@ def test_current_index_copies_history_then_starts_simulation() -> None:
 
 
 @dataclass
-class _SpyPolicy(SimulatorPolicy):
+class _SpyPolicy(HistoryOnlySimulatorPolicy):
     observations: list[PolicyObservation]
     initialize_calls: int = 0
 
-    def initialize(self, scenario: Scenario, seed: int):
+    def initialize(self, scenario: HistoryOnlyPolicyContext, seed: int):
         self.initialize_calls += 1
-        return {"count": scenario.num_agents}
+        return {"count": len(scenario.agent_ids)}
 
     def step(self, state, observation: PolicyObservation) -> PolicyStep:
         self.observations.append(observation)
@@ -340,8 +341,8 @@ def test_one_frame_scenario_initializes_once_without_stepping() -> None:
     np.testing.assert_array_equal(rollout.agents[0].x, [5.0])
 
 
-class _WrongOutputPolicy(SimulatorPolicy):
-    def initialize(self, scenario: Scenario, seed: int):
+class _WrongOutputPolicy(HistoryOnlySimulatorPolicy):
+    def initialize(self, scenario: HistoryOnlyPolicyContext, seed: int):
         return None
 
     def step(self, state, observation):
@@ -351,8 +352,8 @@ class _WrongOutputPolicy(SimulatorPolicy):
         return PolicyMetadata("wrong", "0.1.0", True)
 
 
-class _NaNPolicy(SimulatorPolicy):
-    def initialize(self, scenario: Scenario, seed: int):
+class _NaNPolicy(HistoryOnlySimulatorPolicy):
+    def initialize(self, scenario: HistoryOnlyPolicyContext, seed: int):
         return None
 
     def step(self, state, observation):
@@ -391,8 +392,8 @@ def test_malformed_policy_outputs_fail_with_transition_context(
         RolloutEngine().run(scenario, policy)
 
 
-class _ExtremePolicy(SimulatorPolicy):
-    def initialize(self, scenario: Scenario, seed: int):
+class _ExtremePolicy(HistoryOnlySimulatorPolicy):
+    def initialize(self, scenario: HistoryOnlyPolicyContext, seed: int):
         return None
 
     def step(self, state, observation) -> PolicyStep:
@@ -443,9 +444,9 @@ def test_invalid_seed_rejects(seed) -> None:
         RolloutEngine().run(scenario, ConstantVelocityPolicy(), seed=seed)
 
 
-def test_non_none_perturbation_rejects_until_m5() -> None:
+def test_free_text_perturbation_remains_rejected() -> None:
     scenario = SyntheticSource(seed=1).generate_one(0)
-    with pytest.raises(ValueError, match="M5"):
+    with pytest.raises(ValueError, match="free-text"):
         RolloutEngine().run(
             scenario,
             ConstantVelocityPolicy(),
@@ -514,8 +515,8 @@ def test_invalid_scenario_boundaries_reject_before_rollout() -> None:
         )
 
 
-class _VehicleOnlyNoFallback(SimulatorPolicy):
-    def initialize(self, scenario: Scenario, seed: int):
+class _VehicleOnlyNoFallback(HistoryOnlySimulatorPolicy):
+    def initialize(self, scenario: HistoryOnlyPolicyContext, seed: int):
         return None
 
     def step(self, state, observation):
@@ -612,7 +613,6 @@ def test_policy_observation_ego_index_requires_strict_integer(
             next_timestamp=0.1,
             dt=0.1,
             frame=frame,
-            next_valid=np.ones(2, dtype=bool),
             agent_ids=(0, 1),
             agent_types=(AgentType.VEHICLE, AgentType.VEHICLE),
             lengths=np.full(2, 4.5),
@@ -621,8 +621,8 @@ def test_policy_observation_ego_index_requires_strict_integer(
         )
 
 
-class _WriteFlagAttackPolicy(SimulatorPolicy):
-    def initialize(self, scenario: Scenario, seed: int):
+class _WriteFlagAttackPolicy(HistoryOnlySimulatorPolicy):
+    def initialize(self, scenario: HistoryOnlyPolicyContext, seed: int):
         return None
 
     def step(self, state, observation):
@@ -663,7 +663,7 @@ def test_observation_arrays_cannot_reenable_writes() -> None:
     _assert_scenario_equal(scenario, before)
 
 
-class _FrozenDataclassBypassPolicy(SimulatorPolicy):
+class _FrozenDataclassBypassPolicy(HistoryOnlySimulatorPolicy):
     def __init__(self) -> None:
         self.policy_metadata = PolicyMetadata(
             "frozen_bypass",
@@ -672,7 +672,7 @@ class _FrozenDataclassBypassPolicy(SimulatorPolicy):
             supported_agent_types=tuple(AgentType),
         )
 
-    def initialize(self, scenario: Scenario, seed: int):
+    def initialize(self, scenario: HistoryOnlyPolicyContext, seed: int):
         object.__setattr__(self.policy_metadata, "name", "mutated_mid_run")
         return None
 
@@ -681,11 +681,7 @@ class _FrozenDataclassBypassPolicy(SimulatorPolicy):
         # None of these replacements may alter engine-owned transition semantics.
         object.__setattr__(observation, "ego_index", 1)
         object.__setattr__(observation, "dt", 1000.0)
-        object.__setattr__(
-            observation,
-            "next_valid",
-            np.array([True, False]),
-        )
+        assert not hasattr(observation, "next_valid")
         object.__setattr__(
             observation.frame,
             "x",
@@ -729,8 +725,8 @@ def test_engine_uses_private_transition_state_after_policy_callback() -> None:
     assert rollout.sim_name == "frozen_bypass"
 
 
-class _MutatedPolicyStep(SimulatorPolicy):
-    def initialize(self, scenario: Scenario, seed: int):
+class _MutatedPolicyStep(HistoryOnlySimulatorPolicy):
+    def initialize(self, scenario: HistoryOnlyPolicyContext, seed: int):
         return None
 
     def step(self, state, observation):

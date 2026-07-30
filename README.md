@@ -68,14 +68,19 @@ M6 is now in progress under an
 Its v1 scope is one typed identity control plus a source-templated ego-braking family
 with primary `b=2.0 m/s²` and secondary `b=4.0 m/s²` doses, an enforced
 history-only/privileged policy boundary, paired 40-transition NumPy evaluation, and a
-bounded 20-transition Waymax reference view. Four broader intervention families are
-explicitly deferred. No M6 WOMD eligibility count or policy outcome has been opened,
-and no M6 result claim is available yet.
+bounded 20-transition Waymax reference view. The
+[portable data-free implementation checkpoint](docs/plans/2026-07-29-m6-data-free-implementation-checkpoint.md)
+records the implemented foundations, accepted synthetic/Waymax reviews, and exact
+resume sequence. The official verifier/CLI, eligibility scan, compute pilot, WOMD
+outcomes, live determinism evidence, result claims, and presentation closure remain
+deferred. Four broader intervention families are explicitly deferred. No M6 WOMD
+eligibility count or policy outcome has been opened, and no M6 result claim is
+available yet.
 
-**Tests:** current full repository suite: 876 passed + 1 expected local-data skip;
-fresh clean core-only environment: 790 passed + 28 expected optional/local skips ·
-**Last updated:** 2026-07-29 (M6 outcome-blind pre-registration accepted; implementation
-is in progress and real-WOMD outcomes remain unopened)
+**Tests:** latest confirmed before final M6 result-store hardening: 1,173 passed + 1
+expected local-data skip; the final full-suite rerun after the last fail-closed store
+changes is explicitly deferred to the next session · **Last updated:** 2026-07-29
+(M6 data-free implementation checkpoint; official/WOMD execution remains unopened)
 
 ## Completed work
 

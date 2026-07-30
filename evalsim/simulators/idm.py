@@ -7,11 +7,11 @@ import numpy as np
 
 from evalsim.contracts import (
     AgentType,
+    HistoryOnlyPolicyContext,
+    HistoryOnlyPolicyObservation,
+    HistoryOnlySimulatorPolicy,
     PolicyMetadata,
-    PolicyObservation,
     PolicyStep,
-    Scenario,
-    SimulatorPolicy,
 )
 
 IDM_VERSION = "0.1.0"
@@ -70,7 +70,7 @@ class _IDMState:
 
 
 @dataclass(frozen=True, slots=True)
-class IDMPolicy(SimulatorPolicy):
+class IDMPolicy(HistoryOnlySimulatorPolicy):
     """Apply IDM to vehicles; use constant velocity for nonvehicle agents."""
 
     params: IDMParameters = IDMParameters()
@@ -79,9 +79,15 @@ class IDMPolicy(SimulatorPolicy):
         if not isinstance(self.params, IDMParameters):
             raise TypeError("IDMPolicy.params must be IDMParameters")
 
-    def initialize(self, scenario: Scenario, seed: int) -> _IDMState:
+    def initialize(
+        self,
+        context: HistoryOnlyPolicyContext,
+        seed: int,
+    ) -> _IDMState:
         # No logged future or mutable run state is retained.
-        return _IDMState(agent_count=scenario.num_agents)
+        if not isinstance(context, HistoryOnlyPolicyContext):
+            raise TypeError("IDMPolicy requires HistoryOnlyPolicyContext")
+        return _IDMState(agent_count=len(context.agent_ids))
 
     @staticmethod
     def _motion_direction(
@@ -97,7 +103,7 @@ class IDMPolicy(SimulatorPolicy):
     def _nearest_leader(
         self,
         follower_index: int,
-        observation: PolicyObservation,
+        observation: HistoryOnlyPolicyObservation,
     ) -> tuple[float, float] | None:
         frame = observation.frame
         follower_direction, _ = self._motion_direction(
@@ -264,7 +270,7 @@ class IDMPolicy(SimulatorPolicy):
     def step(
         self,
         state: _IDMState,
-        observation: PolicyObservation,
+        observation: HistoryOnlyPolicyObservation,
     ) -> PolicyStep:
         if not isinstance(state, _IDMState):
             raise TypeError("IDMPolicy received incompatible policy state")
@@ -277,7 +283,6 @@ class IDMPolicy(SimulatorPolicy):
             if (
                 index == observation.ego_index
                 or not observation.frame.valid[index]
-                or not observation.next_valid[index]
                 or observation.agent_types[index] != AgentType.VEHICLE
             ):
                 continue

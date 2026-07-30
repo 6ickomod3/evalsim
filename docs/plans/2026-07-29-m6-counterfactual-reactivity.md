@@ -3,7 +3,9 @@
 **Date:** 2026-07-29
 **Status:** Accepted outcome-blind pre-registration. Independent architecture,
 methods/statistics, and privacy/claim reviews returned no P1/P2 finding. Implementation
-may begin; no M6 WOMD eligibility or policy outcome has been opened.
+is in progress under a
+[portable data-free checkpoint](2026-07-29-m6-data-free-implementation-checkpoint.md);
+no M6 WOMD eligibility or policy outcome has been opened.
 **Depends on:** accepted M4 cohort snapshot
 `a7a20e5de89c9c988f36a4b2f10ff4acc49246f0` and accepted M5 closure
 `a5afdb575d32f9e6342b0cb76407f6193c02d873`
@@ -1317,8 +1319,10 @@ M6 fails or downgrades its claim if:
 ### 14.2 Documentation closure
 
 At accepted-plan commit, update README and the canonical roadmap only to say that M6
-is in progress and link this pre-registration. After, and only after, sealed-result
-acceptance:
+is in progress and link this pre-registration. The tracked
+[data-free implementation checkpoint](2026-07-29-m6-data-free-implementation-checkpoint.md)
+records the reviewed implementation boundary and resume sequence without claiming an
+M6 result. After, and only after, sealed-result acceptance:
 
 - update this document with exact implementation and result closure;
 - update the canonical roadmap;

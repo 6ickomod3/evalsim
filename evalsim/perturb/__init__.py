@@ -1,4 +1,47 @@
-"""Counterfactual ego-perturbation suite (M5).
+"""Source-neutral counterfactual ego interventions."""
 
-Placeholder — implemented in a later milestone.
-"""
+from .m6 import (
+    BRAKE_PULSE_DURATION_S,
+    IDENTITY_FAMILY,
+    LONGITUDINAL_BRAKE_PULSE_FAMILY,
+    M6_ACCESS_CLASS,
+    M6_ANALYSIS_TRANSITIONS,
+    M6_INTERVENTION_VERSION,
+    M6_PLAN_FRAME_COUNT,
+    PRIMARY_BRAKE_MAGNITUDE_MPS2,
+    PRIMARY_ELIGIBILITY_REASONS,
+    REGISTERED_BRAKE_MAGNITUDES_MPS2,
+    SECONDARY_BRAKE_MAGNITUDE_MPS2,
+    InterventionCompilationError,
+    audit_ego_plan_feasibility,
+    compile_identity_plan,
+    compile_longitudinal_brake_pulse_plan,
+    evaluate_primary_brake_eligibility,
+    identity_spec,
+    longitudinal_brake_pulse_spec,
+    validate_registered_ego_plan,
+    zero_dose_reconstruction_matches,
+)
+
+__all__ = [
+    "BRAKE_PULSE_DURATION_S",
+    "IDENTITY_FAMILY",
+    "LONGITUDINAL_BRAKE_PULSE_FAMILY",
+    "M6_ACCESS_CLASS",
+    "M6_ANALYSIS_TRANSITIONS",
+    "M6_INTERVENTION_VERSION",
+    "M6_PLAN_FRAME_COUNT",
+    "PRIMARY_BRAKE_MAGNITUDE_MPS2",
+    "PRIMARY_ELIGIBILITY_REASONS",
+    "REGISTERED_BRAKE_MAGNITUDES_MPS2",
+    "SECONDARY_BRAKE_MAGNITUDE_MPS2",
+    "InterventionCompilationError",
+    "audit_ego_plan_feasibility",
+    "compile_identity_plan",
+    "compile_longitudinal_brake_pulse_plan",
+    "evaluate_primary_brake_eligibility",
+    "identity_spec",
+    "longitudinal_brake_pulse_spec",
+    "validate_registered_ego_plan",
+    "zero_dose_reconstruction_matches",
+]

@@ -6,13 +6,12 @@ from dataclasses import dataclass
 import numpy as np
 
 from evalsim.contracts import (
-    AgentFrame,
     AgentType,
+    HistoryOnlyPolicyObservation,
     PolicyMetadata,
-    PolicyObservation,
     PolicyStep,
-    Scenario,
-    SimulatorPolicy,
+    PrivilegedPolicyContext,
+    PrivilegedSimulatorPolicy,
 )
 
 LOG_REPLAY_VERSION = "0.1.0"
@@ -20,25 +19,30 @@ LOG_REPLAY_VERSION = "0.1.0"
 
 @dataclass(frozen=True, slots=True)
 class _ReplayState:
-    reference: Scenario
+    reference: PrivilegedPolicyContext
 
 
 @dataclass(frozen=True, slots=True)
-class LogReplayPolicy(SimulatorPolicy):
+class LogReplayPolicy(PrivilegedSimulatorPolicy):
     """Replay every recorded non-ego state, deliberately ignoring interaction."""
 
-    def initialize(self, scenario: Scenario, seed: int) -> _ReplayState:
-        # RolloutEngine supplies a defensive scenario copy dedicated to this run.
-        return _ReplayState(reference=scenario)
+    def initialize(
+        self,
+        context: PrivilegedPolicyContext,
+        seed: int,
+    ) -> _ReplayState:
+        if not isinstance(context, PrivilegedPolicyContext):
+            raise TypeError("LogReplayPolicy requires PrivilegedPolicyContext")
+        return _ReplayState(reference=context)
 
     def step(
         self,
         state: _ReplayState,
-        observation: PolicyObservation,
+        observation: HistoryOnlyPolicyObservation,
     ) -> PolicyStep:
         if not isinstance(state, _ReplayState):
             raise TypeError("LogReplayPolicy received incompatible policy state")
-        if state.reference.num_agents != observation.frame.num_agents:
+        if len(state.reference.agent_ids) != observation.frame.num_agents:
             raise ValueError("LogReplayPolicy state does not match observation")
 
         count = observation.frame.num_agents
@@ -48,10 +52,7 @@ class LogReplayPolicy(SimulatorPolicy):
             next_state=state,
             longitudinal_acceleration=np.zeros(count),
             yaw_rate=np.zeros(count),
-            override=AgentFrame.from_scenario(
-                state.reference,
-                observation.next_index,
-            ),
+            override=state.reference.frames[observation.next_index],
             override_mask=override_mask,
         )
 

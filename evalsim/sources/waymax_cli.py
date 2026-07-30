@@ -15,6 +15,7 @@ import numpy as np
 from evalsim.contracts import (
     AgentFrame,
     AgentType,
+    HistoryOnlyPolicyContext,
     PolicyObservation,
     Scenario,
     scenario_from_parquet,
@@ -187,10 +188,6 @@ def _first_policy_observation(scenario: Scenario) -> PolicyObservation:
         next_timestamp=float(scenario.timestamps[next_index]),
         dt=float(scenario.timestamps[next_index] - scenario.timestamps[current]),
         frame=AgentFrame.from_scenario(scenario, current),
-        next_valid=np.asarray(
-            [agent.valid[next_index] for agent in scenario.agents],
-            dtype=bool,
-        ),
         agent_ids=tuple(int(agent.id) for agent in scenario.agents),
         agent_types=tuple(agent.type for agent in scenario.agents),
         lengths=np.asarray([agent.length for agent in scenario.agents]),
@@ -299,12 +296,13 @@ def _run_policy_acceptance(scenario: Scenario) -> dict[str, bool]:
     current = int(scenario.metadata.get("current_index", 0))
     next_index = current + 1
     observation = _first_policy_observation(scenario)
+    history_context = HistoryOnlyPolicyContext.from_scenario(scenario)
     cv_step = cv_policy.step(
-        cv_policy.initialize(scenario, seed=2026),
+        cv_policy.initialize(history_context, seed=2026),
         observation,
     )
     idm_step = idm_policy.step(
-        idm_policy.initialize(scenario, seed=2026),
+        idm_policy.initialize(history_context, seed=2026),
         observation,
     )
 

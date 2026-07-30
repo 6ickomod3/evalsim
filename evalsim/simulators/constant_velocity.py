@@ -7,11 +7,11 @@ import numpy as np
 
 from evalsim.contracts import (
     AgentType,
+    HistoryOnlyPolicyContext,
+    HistoryOnlyPolicyObservation,
+    HistoryOnlySimulatorPolicy,
     PolicyMetadata,
-    PolicyObservation,
     PolicyStep,
-    Scenario,
-    SimulatorPolicy,
 )
 
 CONSTANT_VELOCITY_VERSION = "0.1.0"
@@ -23,22 +23,26 @@ class _ConstantVelocityState:
 
 
 @dataclass(frozen=True, slots=True)
-class ConstantVelocityPolicy(SimulatorPolicy):
+class ConstantVelocityPolicy(HistoryOnlySimulatorPolicy):
     """Extrapolate each world agent's active-segment velocity without interaction."""
 
     def initialize(
         self,
-        scenario: Scenario,
+        context: HistoryOnlyPolicyContext,
         seed: int,
     ) -> _ConstantVelocityState:
         # Intentionally retain no trajectory data: future logged world states cannot
         # influence constant-velocity controls.
-        return _ConstantVelocityState(agent_count=scenario.num_agents)
+        if not isinstance(context, HistoryOnlyPolicyContext):
+            raise TypeError(
+                "ConstantVelocityPolicy requires HistoryOnlyPolicyContext"
+            )
+        return _ConstantVelocityState(agent_count=len(context.agent_ids))
 
     def step(
         self,
         state: _ConstantVelocityState,
-        observation: PolicyObservation,
+        observation: HistoryOnlyPolicyObservation,
     ) -> PolicyStep:
         if not isinstance(state, _ConstantVelocityState):
             raise TypeError(

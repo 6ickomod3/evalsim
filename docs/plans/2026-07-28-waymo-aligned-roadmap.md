@@ -42,15 +42,22 @@ work.
   bounded native Waymax parity ran over the unchanged 128-case cohort. The official
   result passed exact 6,656/1,024/312/144 row-domain verification, deterministic
   scorecard re-derivation, and independent semantic, statistical, and privacy/claim
-  reviews. The current full repository suite has 876 passing tests and one expected
-  local-data skip; a fresh environment without JAX, jaxlib, TensorFlow, Flax, or
-  Waymax has 790 passing tests and 28 expected optional/local skips.
+  reviews. M6 now has a
+  [portable data-free implementation checkpoint](2026-07-29-m6-data-free-implementation-checkpoint.md):
+  its contract, access-control, typed-plan, synthetic-oracle, bounded Waymax, and
+  guarded-store foundations are implemented, and the synthetic and Waymax boundaries
+  have completed adversarial review. The latest full-suite result before final
+  result-store hardening was 1,173 passing tests and one expected local-data skip. The
+  final full-suite rerun after the last fail-closed store changes is explicitly
+  deferred to the next session.
 - **Available locally:** WOMD v1.3.1 TFExample validation shards `00000`–`00009`.
   Additional files in the directory do not expand the frozen M4 population.
-- **Not yet accepted:** counterfactual ego control, evaluator stress tests, learned
-  evaluators, multimodal/video/VLM evaluation, and a scalable resumable pipeline.
-  M5 supports fixed-cohort metric comparisons, but not an overall policy winner,
-  simulator superiority, WOMD-population inference, or production-readiness claim.
+- **Not yet accepted:** the M6 official verifier/CLI, eligibility scan, compute pilot,
+  WOMD/Waymax outcome execution, live determinism evidence, sealed result, and result
+  claim; evaluator stress tests; learned evaluators; multimodal/video/VLM evaluation;
+  and a scalable resumable pipeline. M5 supports fixed-cohort metric comparisons, but
+  not an overall policy winner, simulator superiority, WOMD-population inference, or
+  production-readiness claim.
 
 Plans and downloaded files do not count as implemented evidence. M5's accepted
 aggregate result applies only to its frozen complete-case conditional cohort and
@@ -315,7 +322,11 @@ now in progress under its accepted outcome-blind pre-registration.
 ### M6 — Counterfactual closed-loop reactivity 🚧
 
 **Accepted pre-registration:** [exact M6 v1 scope](2026-07-29-m6-counterfactual-reactivity.md).
-No M6 WOMD eligibility count or policy outcome has been opened.
+**Implementation checkpoint:** [portable data-free state and exact resume
+sequence](2026-07-29-m6-data-free-implementation-checkpoint.md).
+No M6 WOMD eligibility count or policy outcome has been opened. Non-data-free
+terminalization and live determinism remain fail-closed pending the official
+verifier/CLI.
 
 **Question:** What happens when ego leaves the logged future, and can the evaluation
 separate nonreactivity from a deliberately costly simulated response?
