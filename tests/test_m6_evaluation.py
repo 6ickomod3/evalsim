@@ -958,3 +958,33 @@ def test_equal_horizon_sham_rejects_plus_999_clamp_counts() -> None:
             legacy_trace=legacy.trace,
             sham_trace=sham.trace,
         )
+
+
+def test_official_phase_observer_wraps_actual_rollouts_metrics_and_statistics() -> None:
+    cases = tuple(
+        M6EvaluationCase(index, _straight_scenario(index))
+        for index in range(10)
+    )
+    observed: list[tuple[str, int]] = []
+    tick = 0
+
+    def clock_ns() -> int:
+        nonlocal tick
+        tick += 1_000_000
+        return tick
+
+    result = m6_evaluation._run_m6_numpy_evaluation_with_phase_observer(
+        cases,
+        lambda name, duration: observed.append((name, duration)),
+        clock_ns,
+    )
+    assert result.pair_n == 10
+    assert observed[0] == ("numpy_rollouts", 1_000_000)
+    assert [name for name, _duration in observed[1:-1]] == [
+        phase
+        for _case in range(10)
+        for _policy in m6_evaluation.M6_NUMPY_POLICY_ORDER
+        for phase in ("numpy_rollouts", "paired_metrics")
+    ]
+    assert observed[-1] == ("statistics", 1_000_000)
+    assert all(duration == 1_000_000 for _name, duration in observed)

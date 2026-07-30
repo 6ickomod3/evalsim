@@ -54,6 +54,7 @@ from evalsim.simulators.waymax_m6 import (
     source_state_mutation_sha256,
     validate_m6_waymax_pair,
 )
+from evalsim.simulators.waymax_reference import M4_MAX_OBJECTS
 
 M6_WAYMAX_MEASURE_SCHEMA_VERSION = "m6-waymax-paired-measures-1.0.0"
 M6_WAYMAX_STATISTICS_SCHEMA_VERSION = "m6-waymax-paired-statistics-1.0.0"
@@ -148,12 +149,17 @@ _NO_EXECUTION_DETERMINISM_ROW_DOMAIN = (
 _NO_EXECUTION_DETERMINISM_TABLE_DOMAIN = (
     b"evalsim-m6-waymax-no-execution-determinism-table-v1"
 )
+_LIVE_DETERMINISM_ROW_DOMAIN = b"evalsim-m6-waymax-live-determinism-row-v1"
+_LIVE_DETERMINISM_TABLE_DOMAIN = (
+    b"evalsim-m6-waymax-live-determinism-table-v1"
+)
 _PAIR_VIEW_ISSUER = object()
 _ISSUED_SCALAR_TABLE_ISSUER = object()
 _PARSED_SCALAR_TABLE_ISSUER = object()
 _STORED_RECONSTRUCTION_ISSUER = object()
 _VERIFIED_STORED_SELECTION_ISSUER = object()
 _NO_EXECUTION_DETERMINISM_ISSUER = object()
+_LIVE_DETERMINISM_ISSUER = object()
 _CELL_RESULT_ISSUER = object()
 _MATRIX_RESULT_ISSUER = object()
 
@@ -1532,6 +1538,636 @@ def validate_m6_waymax_no_execution_determinism_table(
         selection=selection,
         primary_domain=primary_domain,
     )
+    return value
+
+
+_COMPACT_FLOAT_FIELDS = ("x", "y", "yaw", "vx", "vy")
+_COMPACT_BOOLEAN_FIELDS = (
+    "valid",
+    "requested_control",
+    "effective_control",
+    "lifecycle_fallback",
+    "initialized_overlap_excluded",
+)
+
+
+def _compact_storage_ids(value: CompactM6WaymaxRollout) -> set[int]:
+    return {
+        id(value),
+        *(id(getattr(value, name)) for name in CompactM6WaymaxRollout._fields),
+    }
+
+
+def _compacts_share_storage(
+    left: CompactM6WaymaxRollout,
+    right: CompactM6WaymaxRollout,
+) -> bool:
+    if _compact_storage_ids(left) & _compact_storage_ids(right):
+        return True
+    return any(
+        np.shares_memory(
+            np.asarray(getattr(left, name)),
+            np.asarray(getattr(right, name)),
+        )
+        for name in CompactM6WaymaxRollout._fields
+    )
+
+
+def _validated_live_compact_sha256(
+    compact: CompactM6WaymaxRollout,
+) -> str:
+    """Validate and hash one defensive typed compact snapshot."""
+
+    if not isinstance(compact, CompactM6WaymaxRollout):
+        raise TypeError("live determinism inputs must be typed compact rollouts")
+    object_shape = (M6_WAYMAX_TRANSITIONS, M4_MAX_OBJECTS)
+    arrays = {
+        name: np.asarray(getattr(compact, name))
+        for name in CompactM6WaymaxRollout._fields
+    }
+    for name in _COMPACT_FLOAT_FIELDS:
+        value = arrays[name]
+        if value.shape != object_shape or value.dtype != np.dtype(np.float32):
+            raise ValueError(
+                f"live determinism compact {name} must be float32 [20, 128]"
+            )
+        if not bool(np.all(np.isfinite(value))):
+            raise ValueError(f"live determinism compact {name} must be finite")
+    for name in _COMPACT_BOOLEAN_FIELDS:
+        value = arrays[name]
+        if value.shape != object_shape or value.dtype != np.dtype(np.bool_):
+            raise ValueError(
+                f"live determinism compact {name} must be bool [20, 128]"
+            )
+    timestamps = arrays["timestamp_micros"]
+    if timestamps.shape != object_shape or (
+        np.issubdtype(timestamps.dtype, np.bool_)
+        or not np.issubdtype(timestamps.dtype, np.integer)
+    ):
+        raise ValueError(
+            "live determinism compact timestamp_micros must be integer [20, 128]"
+        )
+    timestep = arrays["timestep"]
+    if timestep.shape != (M6_WAYMAX_TRANSITIONS,) or (
+        np.issubdtype(timestep.dtype, np.bool_)
+        or not np.issubdtype(timestep.dtype, np.integer)
+    ):
+        raise ValueError("live determinism compact timestep must be integer [20]")
+    snapshots: dict[str, np.ndarray] = {}
+    for name in CompactM6WaymaxRollout._fields:
+        snapshot = np.array(arrays[name], copy=True, order="C")
+        snapshot.setflags(write=False)
+        snapshots[name] = snapshot
+    frozen = CompactM6WaymaxRollout(
+        *(snapshots[name] for name in CompactM6WaymaxRollout._fields)
+    )
+    digest = _compact_sha256(frozen)
+    if _compact_sha256(compact) != digest:
+        _fail(
+            "live_determinism_compact_mutated",
+            "a compact rollout changed while its digest was issued",
+        )
+    return digest
+
+
+@dataclass(frozen=True, slots=True)
+class M6WaymaxLiveDeterminismExecution:
+    """Typed raw outputs for one selected position × bundle × condition."""
+
+    selection_position: int
+    bundle: str
+    condition: str
+    qualification: M6WaymaxEligibility = field(repr=False, compare=False)
+    eager_pass_1: CompactM6WaymaxRollout = field(repr=False, compare=False)
+    eager_pass_2: CompactM6WaymaxRollout = field(repr=False, compare=False)
+    jit_eager: CompactM6WaymaxRollout | None = field(
+        default=None, repr=False, compare=False
+    )
+    jit_compiled: CompactM6WaymaxRollout | None = field(
+        default=None, repr=False, compare=False
+    )
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "selection_position",
+            _strict_int(self.selection_position, "selection_position"),
+        )
+        self.revalidate()
+
+    def revalidate(self) -> None:
+        if self.selection_position >= M6_WAYMAX_MAX_SCENES:
+            raise ValueError("selection_position must lie in [0, 15]")
+        if self.bundle not in M6_WAYMAX_BUNDLES:
+            raise ValueError("live determinism bundle is not registered")
+        if self.condition not in M6_WAYMAX_DETERMINISM_CONDITIONS:
+            raise ValueError("live determinism condition is not registered")
+        if not isinstance(self.qualification, M6WaymaxEligibility):
+            raise TypeError("qualification must be M6WaymaxEligibility")
+        self.qualification.revalidate()
+        if not self.qualification.eligible:
+            raise ValueError("live determinism requires an eligible qualification")
+        compacts = (self.eager_pass_1, self.eager_pass_2)
+        if any(not isinstance(value, CompactM6WaymaxRollout) for value in compacts):
+            raise TypeError("eager passes must be typed compact rollouts")
+        if _compacts_share_storage(*compacts):
+            _fail(
+                "live_determinism_eager_replay",
+                "the two eager passes must be independently supplied outputs",
+            )
+        if self.selection_position == 0:
+            if not isinstance(self.jit_eager, CompactM6WaymaxRollout) or not isinstance(
+                self.jit_compiled, CompactM6WaymaxRollout
+            ):
+                raise TypeError(
+                    "selection position zero requires eager and compiled JIT outputs"
+                )
+            all_compacts = (*compacts, self.jit_eager, self.jit_compiled)
+            for index, left in enumerate(all_compacts):
+                for right in all_compacts[index + 1 :]:
+                    if _compacts_share_storage(left, right):
+                        _fail(
+                            "live_determinism_jit_replay",
+                            "all eager/JIT outputs must be independently supplied",
+                        )
+        elif self.jit_eager is not None or self.jit_compiled is not None:
+            raise ValueError(
+                "only selection position zero may carry JIT evidence"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class M6WaymaxLiveDeterminismRow:
+    """One factory-issued live pass or exact unselected NA row."""
+
+    selection_position: int
+    bundle: str
+    condition: str
+    cohort_index: int | None
+    qualification_binding_sha256: str | None
+    status: Literal["passed", "not_applicable"]
+    eager_pass_1_sha256: str | None
+    eager_pass_2_sha256: str | None
+    jit_eager_sha256: str | None
+    jit_compiled_sha256: str | None
+    row_binding_sha256: str | None = field(default=None, repr=False)
+    _issued_original_binding_sha256: str = field(
+        init=False, repr=False, compare=False
+    )
+    _issuance_capability: InitVar[object] = None
+
+    STORE_FIELDS = M6WaymaxNoExecutionDeterminismRow.STORE_FIELDS
+
+    def __post_init__(self, _issuance_capability: object) -> None:
+        if _issuance_capability is not _LIVE_DETERMINISM_ISSUER:
+            raise TypeError("M6WaymaxLiveDeterminismRow is factory-issued only")
+        object.__setattr__(
+            self,
+            "selection_position",
+            _strict_int(self.selection_position, "selection_position"),
+        )
+        if self.cohort_index is not None:
+            object.__setattr__(
+                self,
+                "cohort_index",
+                _strict_int(self.cohort_index, "cohort_index"),
+            )
+        self._validate_semantics()
+        expected = self._binding_sha256()
+        if self.row_binding_sha256 is not None and self.row_binding_sha256 != expected:
+            raise ValueError("row_binding_sha256 does not bind the live row")
+        object.__setattr__(self, "row_binding_sha256", expected)
+        object.__setattr__(self, "_issued_original_binding_sha256", expected)
+
+    def _validate_semantics(self) -> None:
+        if self.selection_position >= M6_WAYMAX_MAX_SCENES:
+            raise ValueError("selection_position must lie in [0, 15]")
+        if self.bundle not in M6_WAYMAX_BUNDLES:
+            raise ValueError("live determinism row bundle is not registered")
+        if self.condition not in M6_WAYMAX_DETERMINISM_CONDITIONS:
+            raise ValueError("live determinism row condition is not registered")
+        digests = (
+            self.eager_pass_1_sha256,
+            self.eager_pass_2_sha256,
+            self.jit_eager_sha256,
+            self.jit_compiled_sha256,
+        )
+        if self.status == "not_applicable":
+            if self.cohort_index is not None or (
+                self.qualification_binding_sha256 is not None
+            ) or any(value is not None for value in digests):
+                raise ValueError(
+                    "unselected live determinism rows must be exact NA"
+                )
+            return
+        if self.status != "passed" or self.cohort_index is None:
+            raise ValueError("selected live determinism rows must pass")
+        _sha256(
+            self.qualification_binding_sha256,
+            "qualification_binding_sha256",
+        )
+        eager_1 = _sha256(self.eager_pass_1_sha256, "eager_pass_1_sha256")
+        eager_2 = _sha256(self.eager_pass_2_sha256, "eager_pass_2_sha256")
+        if eager_1 != eager_2:
+            raise ValueError("independent eager compact outputs disagree")
+        if self.selection_position == 0:
+            jit_eager = _sha256(self.jit_eager_sha256, "jit_eager_sha256")
+            jit_compiled = _sha256(
+                self.jit_compiled_sha256, "jit_compiled_sha256"
+            )
+            if eager_1 != jit_eager or jit_eager != jit_compiled:
+                raise ValueError("position-zero eager and JIT outputs disagree")
+        elif self.jit_eager_sha256 is not None or self.jit_compiled_sha256 is not None:
+            raise ValueError("nonzero positions cannot carry JIT comparison hashes")
+
+    def to_store_dict(self) -> dict[str, Any]:
+        return {
+            "selection_position": self.selection_position,
+            "bundle": self.bundle,
+            "condition": self.condition,
+            "cohort_index": self.cohort_index,
+            "qualification_binding_sha256": self.qualification_binding_sha256,
+            "status": self.status,
+            "eager_pass_1_sha256": self.eager_pass_1_sha256,
+            "eager_pass_2_sha256": self.eager_pass_2_sha256,
+            "jit_eager_sha256": self.jit_eager_sha256,
+            "jit_compiled_sha256": self.jit_compiled_sha256,
+        }
+
+    def _binding_sha256(self) -> str:
+        return hashlib.sha256(
+            _LIVE_DETERMINISM_ROW_DOMAIN
+            + b"\x00"
+            + _canonical_json(self.to_store_dict()).encode("utf-8")
+        ).hexdigest()
+
+    def revalidate(self) -> None:
+        try:
+            self._validate_semantics()
+            expected = self._binding_sha256()
+            if expected != self.row_binding_sha256 or (
+                expected != self._issued_original_binding_sha256
+            ):
+                raise ValueError("live row binding changed")
+        except M6WaymaxMeasureError:
+            raise
+        except (TypeError, ValueError) as exc:
+            _fail(
+                "live_determinism_row_mutated",
+                f"live determinism row failed revalidation: {exc}",
+            )
+
+
+def _validate_live_determinism_rows(
+    rows: Sequence[M6WaymaxLiveDeterminismRow],
+) -> tuple[M6WaymaxLiveDeterminismRow, ...]:
+    normalized = tuple(rows)
+    if len(normalized) != M6_WAYMAX_DETERMINISM_ROW_COUNT:
+        raise ValueError("live determinism table must contain 64 rows")
+    if any(not isinstance(row, M6WaymaxLiveDeterminismRow) for row in normalized):
+        raise TypeError("live determinism rows must be factory-issued row values")
+    for row in normalized:
+        row.revalidate()
+    keys = tuple(
+        (row.selection_position, row.bundle, row.condition)
+        for row in normalized
+    )
+    if keys != _no_execution_determinism_keys():
+        raise ValueError("live determinism rows must be the canonical 16x2x2 grid")
+    return normalized
+
+
+def _validate_live_determinism_layout(
+    rows: Sequence[M6WaymaxLiveDeterminismRow],
+    selected_member_count: int,
+) -> None:
+    selected_identities: set[tuple[int, str]] = set()
+    rows_per_position = len(M6_WAYMAX_BUNDLES) * len(
+        M6_WAYMAX_DETERMINISM_CONDITIONS
+    )
+    for position in range(M6_WAYMAX_MAX_SCENES):
+        start = position * rows_per_position
+        group = rows[start : start + rows_per_position]
+        if position < selected_member_count:
+            if any(row.status != "passed" for row in group):
+                raise ValueError("every selected determinism row must pass")
+            identities = {
+                (row.cohort_index, row.qualification_binding_sha256)
+                for row in group
+            }
+            if len(identities) != 1:
+                raise ValueError(
+                    "one selected position must use one cohort/qualification"
+                )
+            identity = next(iter(identities))
+            assert identity[0] is not None and identity[1] is not None
+            if identity in selected_identities:
+                raise ValueError("selected determinism identity was replayed")
+            selected_identities.add((identity[0], identity[1]))
+        elif any(row.status != "not_applicable" for row in group):
+            raise ValueError("every unselected determinism slot must be exact NA")
+
+
+def _live_determinism_table_sha256(
+    *,
+    selected_member_count: int,
+    selection_binding_sha256: str,
+    primary_domain_sha256: str,
+    rows: Sequence[M6WaymaxLiveDeterminismRow],
+) -> str:
+    digest = hashlib.sha256()
+    digest.update(_LIVE_DETERMINISM_TABLE_DOMAIN)
+    digest.update(b"\x00")
+    digest.update(struct.pack(">I", selected_member_count))
+    digest.update(bytes.fromhex(selection_binding_sha256))
+    digest.update(bytes.fromhex(primary_domain_sha256))
+    digest.update(struct.pack(">I", len(rows)))
+    for row in rows:
+        assert row.row_binding_sha256 is not None
+        digest.update(bytes.fromhex(row.row_binding_sha256))
+    return digest.hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class M6WaymaxLiveDeterminismTable(Sequence[M6WaymaxLiveDeterminismRow]):
+    """Factory-issued promotable live evidence over the exact 64-row grid."""
+
+    selected_member_count: int
+    selection_binding_sha256: str
+    primary_domain_sha256: str
+    rows: tuple[M6WaymaxLiveDeterminismRow, ...]
+    table_binding_sha256: str | None = field(default=None, repr=False)
+    promotable: bool = True
+    _issued_original_binding_sha256: str = field(
+        init=False, repr=False, compare=False
+    )
+    _issuance_capability: InitVar[object] = None
+
+    def __post_init__(self, _issuance_capability: object) -> None:
+        if _issuance_capability is not _LIVE_DETERMINISM_ISSUER:
+            raise TypeError("M6WaymaxLiveDeterminismTable is factory-issued only")
+        count = _strict_int(
+            self.selected_member_count,
+            "selected_member_count",
+            minimum=M6_WAYMAX_MIN_SUPPORTED_N,
+        )
+        if count > M6_WAYMAX_MAX_SCENES:
+            raise ValueError("selected_member_count must lie in [8, 16]")
+        object.__setattr__(self, "selected_member_count", count)
+        _sha256(self.selection_binding_sha256, "selection_binding_sha256")
+        _sha256(self.primary_domain_sha256, "primary_domain_sha256")
+        rows = _validate_live_determinism_rows(self.rows)
+        _validate_live_determinism_layout(rows, count)
+        object.__setattr__(self, "rows", rows)
+        if self.promotable is not True:
+            raise ValueError("live determinism evidence must remain promotable")
+        expected = _live_determinism_table_sha256(
+            selected_member_count=count,
+            selection_binding_sha256=self.selection_binding_sha256,
+            primary_domain_sha256=self.primary_domain_sha256,
+            rows=rows,
+        )
+        if self.table_binding_sha256 is not None and (
+            self.table_binding_sha256 != expected
+        ):
+            raise ValueError("table_binding_sha256 does not bind live rows")
+        object.__setattr__(self, "table_binding_sha256", expected)
+        object.__setattr__(self, "_issued_original_binding_sha256", expected)
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    def __getitem__(self, index: int | slice):
+        return self.rows[index]
+
+    def __iter__(self):
+        return iter(self.rows)
+
+    def to_store_rows(self) -> tuple[dict[str, Any], ...]:
+        self.revalidate()
+        return tuple(row.to_store_dict() for row in self.rows)
+
+    def revalidate(
+        self,
+        *,
+        selection: M6WaymaxSelection | None = None,
+        primary_domain: M6WaymaxPrimaryDomain | None = None,
+    ) -> None:
+        try:
+            rows = _validate_live_determinism_rows(self.rows)
+            _validate_live_determinism_layout(rows, self.selected_member_count)
+            expected = _live_determinism_table_sha256(
+                selected_member_count=self.selected_member_count,
+                selection_binding_sha256=self.selection_binding_sha256,
+                primary_domain_sha256=self.primary_domain_sha256,
+                rows=rows,
+            )
+            if expected != self.table_binding_sha256 or (
+                expected != self._issued_original_binding_sha256
+            ) or self.promotable is not True:
+                raise ValueError("live determinism table binding changed")
+        except M6WaymaxMeasureError:
+            raise
+        except (TypeError, ValueError) as exc:
+            _fail(
+                "live_determinism_table_mutated",
+                f"live determinism table failed revalidation: {exc}",
+            )
+        if (selection is None) != (primary_domain is None):
+            raise ValueError("selection and primary_domain must be supplied together")
+        if selection is None:
+            return
+        assert primary_domain is not None
+        selection_binding = _validate_selection(
+            selection, primary_domain=primary_domain
+        )
+        if not selection.supported:
+            _fail(
+                "live_determinism_selection_unsupported",
+                "live evidence requires a supported canonical selection",
+            )
+        if (
+            selection_binding != self.selection_binding_sha256
+            or primary_domain.domain_sha256 != self.primary_domain_sha256
+            or len(selection.members) != self.selected_member_count
+        ):
+            _fail(
+                "live_determinism_selection_mismatch",
+                "live evidence belongs to a different canonical selection",
+            )
+        rows_per_position = len(M6_WAYMAX_BUNDLES) * len(
+            M6_WAYMAX_DETERMINISM_CONDITIONS
+        )
+        for position, member in enumerate(selection.members):
+            start = position * rows_per_position
+            group = self.rows[start : start + rows_per_position]
+            if any(
+                row.cohort_index != member.cohort_index
+                or row.qualification_binding_sha256
+                != member.qualification_binding_sha256
+                for row in group
+            ):
+                _fail(
+                    "live_determinism_selection_mismatch",
+                    "live row cohort/qualification differs from selection",
+                )
+
+
+def build_m6_waymax_live_determinism_table(
+    executions: Sequence[M6WaymaxLiveDeterminismExecution],
+    *,
+    selection: M6WaymaxSelection,
+    primary_domain: M6WaymaxPrimaryDomain,
+) -> M6WaymaxLiveDeterminismTable:
+    """Hash independently produced typed outputs into live determinism evidence."""
+
+    selection_binding = _validate_selection(
+        selection, primary_domain=primary_domain
+    )
+    if not selection.supported:
+        _fail(
+            "live_determinism_selection_unsupported",
+            "unsupported selections must use the no-execution placeholder",
+        )
+    if isinstance(executions, (str, bytes)) or not isinstance(executions, Sequence):
+        raise TypeError("executions must be a sequence of typed live evidence")
+    normalized = tuple(executions)
+    if any(
+        not isinstance(item, M6WaymaxLiveDeterminismExecution)
+        for item in normalized
+    ):
+        raise TypeError(
+            "executions must contain M6WaymaxLiveDeterminismExecution values"
+        )
+    expected_order = tuple(
+        key
+        for key in _no_execution_determinism_keys()
+        if key[0] < len(selection.members)
+    )
+    by_key: dict[
+        tuple[int, str, str], M6WaymaxLiveDeterminismExecution
+    ] = {}
+    seen_compacts: list[CompactM6WaymaxRollout] = []
+    for item in normalized:
+        item.revalidate()
+        key = (item.selection_position, item.bundle, item.condition)
+        if key in by_key:
+            raise ValueError("live determinism execution key is duplicated")
+        by_key[key] = item
+        compacts = [item.eager_pass_1, item.eager_pass_2]
+        if item.jit_eager is not None:
+            compacts.append(item.jit_eager)
+        if item.jit_compiled is not None:
+            compacts.append(item.jit_compiled)
+        for compact in compacts:
+            if any(_compacts_share_storage(compact, prior) for prior in seen_compacts):
+                _fail(
+                    "live_determinism_execution_replay",
+                    "one compact output was replayed across evidence slots",
+                )
+            seen_compacts.append(compact)
+    if tuple(by_key) != expected_order:
+        raise ValueError(
+            "live determinism executions must use canonical selected 2x2 order"
+        )
+
+    issued: dict[tuple[int, str, str], M6WaymaxLiveDeterminismRow] = {}
+    for key in expected_order:
+        item = by_key[key]
+        member = selection.members[item.selection_position]
+        qualification = item.qualification
+        if (
+            qualification.cohort_index != member.cohort_index
+            or qualification.qualification_binding_sha256
+            != member.qualification_binding_sha256
+            or qualification.source_binding_sha256 != member.source_binding_sha256
+            or qualification.primary_entry_sha256 != member.primary_entry_sha256
+            or qualification.scenario_id != member.scenario_id
+            or qualification.target_index != member.target_index
+            or qualification.target_agent_id != member.target_agent_id
+            or qualification.target_slot != member.target_slot
+        ):
+            _fail(
+                "live_determinism_selection_mismatch",
+                "execution qualification differs from its selected position",
+            )
+        eager_1 = _validated_live_compact_sha256(item.eager_pass_1)
+        eager_2 = _validated_live_compact_sha256(item.eager_pass_2)
+        if eager_1 != eager_2:
+            _fail(
+                "live_determinism_eager_mismatch",
+                "independent eager compact outputs disagree",
+            )
+        jit_eager_sha256 = None
+        jit_compiled_sha256 = None
+        if item.selection_position == 0:
+            assert item.jit_eager is not None and item.jit_compiled is not None
+            jit_eager_sha256 = _validated_live_compact_sha256(item.jit_eager)
+            jit_compiled_sha256 = _validated_live_compact_sha256(
+                item.jit_compiled
+            )
+            if not (
+                eager_1 == jit_eager_sha256 == jit_compiled_sha256
+            ):
+                _fail(
+                    "live_determinism_jit_mismatch",
+                    "position-zero eager and JIT outputs disagree",
+                )
+        issued[key] = M6WaymaxLiveDeterminismRow(
+            selection_position=item.selection_position,
+            bundle=item.bundle,
+            condition=item.condition,
+            cohort_index=member.cohort_index,
+            qualification_binding_sha256=member.qualification_binding_sha256,
+            status="passed",
+            eager_pass_1_sha256=eager_1,
+            eager_pass_2_sha256=eager_2,
+            jit_eager_sha256=jit_eager_sha256,
+            jit_compiled_sha256=jit_compiled_sha256,
+            _issuance_capability=_LIVE_DETERMINISM_ISSUER,
+        )
+    rows = tuple(
+        issued.get(key)
+        or M6WaymaxLiveDeterminismRow(
+            selection_position=key[0],
+            bundle=key[1],
+            condition=key[2],
+            cohort_index=None,
+            qualification_binding_sha256=None,
+            status="not_applicable",
+            eager_pass_1_sha256=None,
+            eager_pass_2_sha256=None,
+            jit_eager_sha256=None,
+            jit_compiled_sha256=None,
+            _issuance_capability=_LIVE_DETERMINISM_ISSUER,
+        )
+        for key in _no_execution_determinism_keys()
+    )
+    table = M6WaymaxLiveDeterminismTable(
+        selected_member_count=len(selection.members),
+        selection_binding_sha256=selection_binding,
+        primary_domain_sha256=primary_domain.domain_sha256,
+        rows=rows,
+        _issuance_capability=_LIVE_DETERMINISM_ISSUER,
+    )
+    table.revalidate(selection=selection, primary_domain=primary_domain)
+    return table
+
+
+def validate_m6_waymax_live_determinism_table(
+    value: Any,
+    *,
+    selection: M6WaymaxSelection,
+    primary_domain: M6WaymaxPrimaryDomain,
+) -> M6WaymaxLiveDeterminismTable:
+    """Reject mappings/replays and validate factory-issued live evidence."""
+
+    if not isinstance(value, M6WaymaxLiveDeterminismTable):
+        raise TypeError(
+            "live determinism evidence must be a factory-issued "
+            "M6WaymaxLiveDeterminismTable"
+        )
+    value.revalidate(selection=selection, primary_domain=primary_domain)
     return value
 
 
@@ -3607,7 +4243,11 @@ def m6_waymax_measure_contract() -> Mapping[str, Any]:
             "determinism_conditions": (
                 M6_WAYMAX_DETERMINISM_CONDITIONS
             ),
-            "live_determinism_issuance_available": False,
+            "live_determinism_issuance_available": True,
+            "live_determinism_execution_type": (
+                "M6WaymaxLiveDeterminismExecution"
+            ),
+            "live_determinism_table_type": "M6WaymaxLiveDeterminismTable",
             "no_execution_determinism_table_type": (
                 "M6WaymaxNoExecutionDeterminismTable"
             ),
@@ -3646,6 +4286,9 @@ __all__ = [
     "M6WaymaxNoExecutionDeterminismRow",
     "M6WaymaxNoExecutionDeterminismTable",
     "M6WaymaxIssuedScalarTable",
+    "M6WaymaxLiveDeterminismExecution",
+    "M6WaymaxLiveDeterminismRow",
+    "M6WaymaxLiveDeterminismTable",
     "M6WaymaxPairedMeasureResult",
     "M6WaymaxParsedScalarTable",
     "M6WaymaxReweightingBand",
@@ -3658,12 +4301,14 @@ __all__ = [
     "analyze_m6_waymax_matrix",
     "build_m6_waymax_scene_scalar_table",
     "build_m6_waymax_data_free_determinism_table",
+    "build_m6_waymax_live_determinism_table",
     "build_m6_waymax_unsupported_determinism_table",
     "build_m6_waymax_twenty_transition_pair_view",
     "compute_m6_waymax_paired_measures",
     "m6_waymax_measure_contract",
     "parse_m6_waymax_scene_scalar_table",
     "reconstruct_m6_waymax_stored_cells",
+    "validate_m6_waymax_live_determinism_table",
     "validate_m6_waymax_no_execution_determinism_table",
     "verify_m6_waymax_stored_selection",
 ]

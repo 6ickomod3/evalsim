@@ -8,7 +8,6 @@ dist/
 .venv/
 venv/
 env/
-.python-version
 
 # Testing / coverage
 .pytest_cache/

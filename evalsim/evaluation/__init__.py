@@ -67,6 +67,24 @@ from .m6 import (
     evaluate_m6_source_eligibility,
     run_m6_numpy_evaluation,
 )
+from .m6_official import (
+    M6_OFFICIAL_ADAPTER_VERSION,
+    M6_OFFICIAL_POPULATION_SIZE,
+    M6OfficialAdapterError,
+    M6OfficialCaseCollector,
+    M6OfficialNumpyRows,
+    m6_case_from_reloaded_member,
+    m6_eligibility_rows,
+    m6_negative_timing_observation_rows,
+    m6_primary_scene_scalar_rows,
+    m6_secondary_scene_scalar_rows,
+    run_m6_official_numpy,
+)
+from .m6_pilot import (
+    M6_NUMPY_PILOT_SCHEMA_VERSION,
+    M6NumpyPilotObservation,
+    run_m6_numpy_pilot,
+)
 
 __all__ = [
     "M5_ERROR_ORACLE_METRICS",
@@ -104,6 +122,9 @@ __all__ = [
     "M6_NUMPY_POLICY_ACCESS_ROLES",
     "M6_NUMPY_POLICY_ORDER",
     "M6_NUMPY_SEED",
+    "M6_NUMPY_PILOT_SCHEMA_VERSION",
+    "M6_OFFICIAL_ADAPTER_VERSION",
+    "M6_OFFICIAL_POPULATION_SIZE",
     "M6EligibilityLedger",
     "M6EligibilityLedgerEntry",
     "M6EvaluationCase",
@@ -113,6 +134,10 @@ __all__ = [
     "M6PrimaryOutcomeBlocked",
     "M6SecondaryPlanEntry",
     "NumpyPolicyExecutor",
+    "M6OfficialAdapterError",
+    "M6OfficialCaseCollector",
+    "M6OfficialNumpyRows",
+    "M6NumpyPilotObservation",
     "PolicyExecutor",
     "ScorecardCellInput",
     "SyntheticM5CohortAdapter",
@@ -124,10 +149,17 @@ __all__ = [
     "canonical_m6_policies",
     "evaluate_m6_source_eligibility",
     "evaluate_m5_case",
+    "m6_case_from_reloaded_member",
+    "m6_eligibility_rows",
+    "m6_negative_timing_observation_rows",
+    "m6_primary_scene_scalar_rows",
+    "m6_secondary_scene_scalar_rows",
     "metric_store_row",
     "run_m5_evaluation",
     "run_m6_numpy_evaluation",
+    "run_m6_numpy_pilot",
     "run_synthetic_m5_evaluation",
     "select_m5_parity_members",
+    "run_m6_official_numpy",
     "synthetic_source_evidence",
 ]

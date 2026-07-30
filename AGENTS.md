@@ -57,11 +57,22 @@
 
 ## Project workflow
 
+- The tracked .python-version pins the repository environment to exact CPython
+  3.11.5; keep the repository-local .venv and default uv sync aligned with it.
 - Use `uv` and the repository-local `.venv`.
+- Recreate the development/test environment with
+  `uv sync --frozen --extra dev --python 3.11.5`.
 - Run `uv run pytest` after code changes.
 - Preserve the contract-first architecture: downstream components consume the
   `Scenario`, `Rollout`, `SimulatorPolicy`, and `Metric` contracts rather than depending
   directly on WOMD or Waymax representations.
+- Run the official M6 command only from the repository root as
+  `.venv/bin/python -I -S -B evalsim/cli/m6_bootstrap.py ...`. Keep the unsafe
+  `evalsim-m6-official` project console entry disabled; the tracked bootstrap is the
+  required capture-first, isolated, no-site, no-bytecode boundary.
+- Before official M6 execution, create the immutable runtime with
+  `uv sync --frozen --extra waymo --python 3.11.5` (no `dev` extra), then require the
+  bootstrap's complete environment-catalog recheck to pass before data access.
 - From M3 onward, retain synthetic scenarios as analytic oracles but require a real-WOMD
   acceptance path for every core evaluation feature. Use Waymax repeatedly as a
   data/execution/reference adapter while keeping it behind the project contracts.

@@ -19,10 +19,11 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from functools import lru_cache
+import hashlib
 import json
 from numbers import Integral
 from types import MappingProxyType
-from typing import Iterable, Protocol, Sequence, runtime_checkable
+from typing import Any, Callable, Iterable, MutableMapping, Protocol, Sequence, runtime_checkable
 
 import numpy as np
 
@@ -810,11 +811,212 @@ def run_m6_numpy_evaluation(
     )
 
 
+def _run_m6_numpy_evaluation_with_phase_observer(
+    cases: Iterable[M6EvaluationCase],
+    phase_observer: Callable[[str, int], None],
+    clock_ns: Callable[[], int],
+) -> M6EvaluationResult:
+    """Run the fixed evaluator while reporting actual phase nanoseconds."""
+
+    if not callable(phase_observer) or not callable(clock_ns):
+        raise TypeError("phase_observer and clock_ns must be callable")
+    return _run_m6_numpy_evaluation_with_executor(
+        cases,
+        executor=_NumpyM6TypedPlanExecutor(),
+        include_local_secondary=True,
+        phase_observer=phase_observer,
+        clock_ns=clock_ns,
+    )
+
+
+def _observe_m6_phase(
+    name: str,
+    operation: Callable[[], Any],
+    *,
+    phase_observer: Callable[[str, int], None] | None,
+    clock_ns: Callable[[], int] | None,
+) -> Any:
+    if phase_observer is None:
+        return operation()
+    assert clock_ns is not None
+    start = clock_ns()
+    result = operation()
+    stop = clock_ns()
+    if type(start) is not int or type(stop) is not int or stop <= start:
+        raise M6EvaluationError("m6_phase_clock_did_not_advance")
+    phase_observer(name, stop - start)
+    return result
+
+
+@dataclass(frozen=True, slots=True)
+class _M6PolicyExecutionProducts:
+    legacy: TracedRollout
+    baseline: TracedRollout
+    intervention: TracedRollout
+    primary_pair: CounterfactualPair
+    secondary_rollout: TracedRollout | None
+    secondary_pair: CounterfactualPair | None
+
+
+def _execute_prepared_policy_rollouts(
+    execution: _M6TypedPlanExecutor,
+    case: _PreparedCase,
+    *,
+    policy_name: str,
+    policy: SimulatorPolicy,
+) -> _M6PolicyExecutionProducts:
+    """Execute only the ordered legacy/identity/b=2[/b=4] policy conditions."""
+
+    legacy = _execute_legacy(
+        execution,
+        case,
+        policy,
+        policy_name=policy_name,
+    )
+    baseline = _execute_condition(
+        execution,
+        case,
+        policy,
+        policy_name=policy_name,
+        condition="identity",
+        plan=case.identity_plan,
+    )
+    _validate_sham_gate(
+        case,
+        policy_name=policy_name,
+        legacy=legacy,
+        baseline=baseline,
+    )
+    intervention = _execute_condition(
+        execution,
+        case,
+        policy,
+        policy_name=policy_name,
+        condition="primary_b2",
+        plan=case.primary_plan,
+    )
+    primary_pair = _build_pair(
+        case,
+        baseline=baseline.rollout,
+        intervention=intervention.rollout,
+        intervention_plan=case.primary_plan,
+        policy_name=policy_name,
+        condition="primary_b2",
+    )
+    _assert_registered_nonreactivity(
+        primary_pair,
+        cohort_index=case.cohort_index,
+        policy_name=policy_name,
+        condition="primary_b2",
+    )
+    secondary_rollout = None
+    secondary_pair = None
+    if case.secondary_plan is not None:
+        secondary_rollout = _execute_condition(
+            execution,
+            case,
+            policy,
+            policy_name=policy_name,
+            condition="secondary_b4",
+            plan=case.secondary_plan,
+        )
+        secondary_pair = _build_pair(
+            case,
+            baseline=baseline.rollout,
+            intervention=secondary_rollout.rollout,
+            intervention_plan=case.secondary_plan,
+            policy_name=policy_name,
+            condition="secondary_b4",
+        )
+        _assert_registered_nonreactivity(
+            secondary_pair,
+            cohort_index=case.cohort_index,
+            policy_name=policy_name,
+            condition="secondary_b4",
+        )
+    return _M6PolicyExecutionProducts(
+        legacy=legacy,
+        baseline=baseline,
+        intervention=intervention,
+        primary_pair=primary_pair,
+        secondary_rollout=secondary_rollout,
+        secondary_pair=secondary_pair,
+    )
+
+
+def _analyze_prepared_policy(
+    products: _M6PolicyExecutionProducts,
+    case: _PreparedCase,
+    *,
+    policy_name: str,
+    access_role: str,
+    primary_metrics: Sequence[object],
+    secondary_metrics: Sequence[object],
+) -> tuple[M6PairedSceneResult, M6PairedSceneResult | None]:
+    """Compute the paired measures and issue typed scene results."""
+
+    primary_scene = M6PairedSceneResult(
+        cohort_index=case.cohort_index,
+        policy_name=policy_name,
+        policy_access_role=access_role,
+        pair=products.primary_pair,
+        legacy_rollout=products.legacy.rollout,
+        legacy_trace=products.legacy.trace,
+        baseline_trace=products.baseline.trace,
+        intervention_trace=products.intervention.trace,
+        primary_metric_results=_evaluate_metrics(
+            products.primary_pair,
+            primary_metrics,
+            cohort_index=case.cohort_index,
+            policy_name=policy_name,
+            family="primary",
+        ),
+        secondary_metric_results=_evaluate_metrics(
+            products.primary_pair,
+            secondary_metrics,
+            cohort_index=case.cohort_index,
+            policy_name=policy_name,
+            family="local_secondary",
+        ),
+    )
+    secondary_scene = None
+    if products.secondary_pair is not None:
+        if products.secondary_rollout is None:
+            raise M6EvaluationError("m6_secondary_execution_product_incomplete")
+        secondary_scene = M6PairedSceneResult(
+            cohort_index=case.cohort_index,
+            policy_name=policy_name,
+            policy_access_role=access_role,
+            pair=products.secondary_pair,
+            legacy_rollout=products.legacy.rollout,
+            legacy_trace=products.legacy.trace,
+            baseline_trace=products.baseline.trace,
+            intervention_trace=products.secondary_rollout.trace,
+            primary_metric_results=_evaluate_metrics(
+                products.secondary_pair,
+                primary_metrics,
+                cohort_index=case.cohort_index,
+                policy_name=policy_name,
+                family="secondary_b4_primary_measures",
+            ),
+            secondary_metric_results=_evaluate_metrics(
+                products.secondary_pair,
+                secondary_metrics,
+                cohort_index=case.cohort_index,
+                policy_name=policy_name,
+                family="secondary_b4_local_measures",
+            ),
+        )
+    return primary_scene, secondary_scene
 def _run_m6_numpy_evaluation_with_executor(
+
+
     cases: Iterable[M6EvaluationCase],
     *,
     executor: _M6TypedPlanExecutor,
     include_local_secondary: bool = False,
+    phase_observer: Callable[[str, int], None] | None = None,
+    clock_ns: Callable[[], int] | None = None,
 ) -> M6EvaluationResult:
     """Private failure-injection seam used only by evaluator tests."""
 
@@ -822,6 +1024,11 @@ def _run_m6_numpy_evaluation_with_executor(
         raise TypeError("include_local_secondary must be a bool")
     if not isinstance(executor, _M6TypedPlanExecutor):
         raise TypeError("executor must implement the private M6 execution protocol")
+    if (phase_observer is None) != (clock_ns is None) or (
+        phase_observer is not None
+        and (not callable(phase_observer) or not callable(clock_ns))
+    ):
+        raise TypeError("phase observer and clock must be supplied together")
     validated = _validated_cases(cases)
     ledger = _eligibility_ledger(validated)
     if ledger.eligible_n < M6_MINIMUM_PRIMARY_PAIR_N:
@@ -831,10 +1038,15 @@ def _run_m6_numpy_evaluation_with_executor(
     policy_entries = _validated_policies(canonical_m6_policies())
     execution = executor
 
-    prepared, secondary_ledger = _prepare_plans(
-        validated,
-        ledger,
-        include_local_secondary=include_local_secondary,
+    prepared, secondary_ledger = _observe_m6_phase(
+        "numpy_rollouts",
+        lambda: _prepare_plans(
+            validated,
+            ledger,
+            include_local_secondary=include_local_secondary,
+        ),
+        phase_observer=phase_observer,
+        clock_ns=clock_ns,
     )
     primary_metrics = m6_primary_paired_metrics()
     secondary_metrics = (
@@ -850,130 +1062,41 @@ def _run_m6_numpy_evaluation_with_executor(
 
     for case in prepared:
         for policy_name, access_role, policy in policy_entries:
-            legacy = _execute_legacy(
-                execution,
-                case,
-                policy,
-                policy_name=policy_name,
+            products = _observe_m6_phase(
+                "numpy_rollouts",
+                lambda: _execute_prepared_policy_rollouts(
+                    execution,
+                    case,
+                    policy_name=policy_name,
+                    policy=policy,
+                ),
+                phase_observer=phase_observer,
+                clock_ns=clock_ns,
             )
-            baseline = _execute_condition(
-                execution,
-                case,
-                policy,
-                policy_name=policy_name,
-                condition="identity",
-                plan=case.identity_plan,
-            )
-            _validate_sham_gate(
-                case,
-                policy_name=policy_name,
-                legacy=legacy,
-                baseline=baseline,
-            )
-            intervention = _execute_condition(
-                execution,
-                case,
-                policy,
-                policy_name=policy_name,
-                condition="primary_b2",
-                plan=case.primary_plan,
-            )
-            pair = _build_pair(
-                case,
-                baseline=baseline.rollout,
-                intervention=intervention.rollout,
-                intervention_plan=case.primary_plan,
-                policy_name=policy_name,
-                condition="primary_b2",
-            )
-            _assert_registered_nonreactivity(
-                pair,
-                cohort_index=case.cohort_index,
-                policy_name=policy_name,
-                condition="primary_b2",
-            )
-            primary_results = _evaluate_metrics(
-                pair,
-                primary_metrics,
-                cohort_index=case.cohort_index,
-                policy_name=policy_name,
-                family="primary",
-            )
-            secondary_results = _evaluate_metrics(
-                pair,
-                secondary_metrics,
-                cohort_index=case.cohort_index,
-                policy_name=policy_name,
-                family="local_secondary",
-            )
-            scene = M6PairedSceneResult(
-                cohort_index=case.cohort_index,
-                policy_name=policy_name,
-                policy_access_role=access_role,
-                pair=pair,
-                legacy_rollout=legacy.rollout,
-                legacy_trace=legacy.trace,
-                baseline_trace=baseline.trace,
-                intervention_trace=intervention.trace,
-                primary_metric_results=primary_results,
-                secondary_metric_results=secondary_results,
+            scene, secondary_scene = _observe_m6_phase(
+                "paired_metrics",
+                lambda: _analyze_prepared_policy(
+                    products,
+                    case,
+                    policy_name=policy_name,
+                    access_role=access_role,
+                    primary_metrics=primary_metrics,
+                    secondary_metrics=secondary_metrics,
+                ),
+                phase_observer=phase_observer,
+                clock_ns=clock_ns,
             )
             primary_scene_results.append(scene)
-            for result in primary_results:
+            for result in scene.primary_metric_results:
                 effects[(policy_name, result.metric_name)].append(
                     _scene_effect(case.cohort_index, result)
                 )
+            if secondary_scene is not None:
+                secondary_scene_results.append(secondary_scene)
 
-            if case.secondary_plan is not None:
-                secondary_rollout = _execute_condition(
-                    execution,
-                    case,
-                    policy,
-                    policy_name=policy_name,
-                    condition="secondary_b4",
-                    plan=case.secondary_plan,
-                )
-                secondary_pair = _build_pair(
-                    case,
-                    baseline=baseline.rollout,
-                    intervention=secondary_rollout.rollout,
-                    intervention_plan=case.secondary_plan,
-                    policy_name=policy_name,
-                    condition="secondary_b4",
-                )
-                _assert_registered_nonreactivity(
-                    secondary_pair,
-                    cohort_index=case.cohort_index,
-                    policy_name=policy_name,
-                    condition="secondary_b4",
-                )
-                secondary_scene_results.append(
-                    M6PairedSceneResult(
-                        cohort_index=case.cohort_index,
-                        policy_name=policy_name,
-                        policy_access_role=access_role,
-                        pair=secondary_pair,
-                        legacy_rollout=legacy.rollout,
-                        legacy_trace=legacy.trace,
-                        baseline_trace=baseline.trace,
-                        intervention_trace=secondary_rollout.trace,
-                        primary_metric_results=_evaluate_metrics(
-                            secondary_pair,
-                            primary_metrics,
-                            cohort_index=case.cohort_index,
-                            policy_name=policy_name,
-                            family="secondary_b4_primary_measures",
-                        ),
-                        secondary_metric_results=_evaluate_metrics(
-                            secondary_pair,
-                            secondary_metrics,
-                            cohort_index=case.cohort_index,
-                            policy_name=policy_name,
-                            family="secondary_b4_local_measures",
-                        ),
-                    )
-                )
-
+    statistics_start = (
+        clock_ns() if phase_observer is not None and clock_ns is not None else None
+    )
     primary_fingerprint = prepared[0].primary_plan.configuration_fingerprint
     if any(
         case.primary_plan.configuration_fingerprint != primary_fingerprint
@@ -995,6 +1118,12 @@ def _run_m6_numpy_evaluation_with_executor(
         matrix = analyze_m6_primary_matrix(cell_inputs)
     except Exception as exc:
         raise M6EvaluationError("m6_primary_matrix_analysis_failed") from exc
+    if statistics_start is not None:
+        assert phase_observer is not None and clock_ns is not None
+        statistics_stop = clock_ns()
+        if type(statistics_stop) is not int or statistics_stop <= statistics_start:
+            raise M6EvaluationError("m6_phase_clock_did_not_advance")
+        phase_observer("statistics", statistics_stop - statistics_start)
 
     result = M6EvaluationResult(
         eligibility_ledger=ledger,
@@ -1006,6 +1135,190 @@ def _run_m6_numpy_evaluation_with_executor(
     )
     _assert_caller_sources_unchanged(validated)
     return result
+
+
+def _run_m6_numpy_pilot_execution(
+    cases: Iterable[M6EvaluationCase],
+    ledger: M6EligibilityLedger,
+    selected_cohort_indices: Sequence[int],
+    selection_binding_sha256: str,
+    *,
+    clock_ns: Callable[[], int],
+) -> tuple[tuple[int, ...], str]:
+    """Execute the exact policy/plan/metric block without returning outcomes.
+
+    This narrow primitive exists so the outcome-suppressed pilot and full evaluator
+    share one execution implementation. Its tuple return is private to the pilot
+    adapter and contains only ceil-millisecond scene durations plus a digest binding
+    the ordered selection to the complete source ledger.
+    """
+
+    if not callable(clock_ns):
+        raise TypeError("clock_ns must be callable")
+    validated = _validated_cases(cases)
+    if (
+        len(validated) != M6_MAX_PRIMARY_PAIR_N
+        or tuple(case.cohort_index for case in validated)
+        != tuple(range(M6_MAX_PRIMARY_PAIR_N))
+    ):
+        raise M6EvaluationError(
+            "m6_pilot_requires_complete_128_case_cohort"
+        )
+    if not isinstance(ledger, M6EligibilityLedger):
+        raise TypeError("ledger must be an M6EligibilityLedger")
+    supplied = M6EligibilityLedger(
+        tuple(
+            M6EligibilityLedgerEntry(
+                cohort_index=entry.cohort_index,
+                eligibility=entry.eligibility,
+                source_snapshot=entry.source_snapshot,
+            )
+            for entry in ledger.entries
+        )
+    )
+    reconstructed = _eligibility_ledger(validated)
+    if (
+        supplied.input_n != M6_MAX_PRIMARY_PAIR_N
+        or tuple(entry.cohort_index for entry in supplied.entries)
+        != tuple(range(M6_MAX_PRIMARY_PAIR_N))
+        or tuple(entry.cohort_index for entry in supplied.entries)
+        != tuple(entry.cohort_index for entry in reconstructed.entries)
+        or any(
+            not _eligibility_exact(left.eligibility, right.eligibility)
+            or not _scenario_snapshots_exact(
+                left.source_snapshot,
+                right.source_snapshot,
+            )
+            for left, right in zip(
+                supplied.entries,
+                reconstructed.entries,
+                strict=True,
+            )
+        )
+    ):
+        raise M6EvaluationError(
+            "m6_pilot_source_ledger_drifted"
+        )
+    if isinstance(selected_cohort_indices, (str, bytes, dict)):
+        raise TypeError("selected_cohort_indices must be an ordered sequence")
+    try:
+        raw_indices = tuple(selected_cohort_indices)
+    except TypeError as exc:
+        raise TypeError(
+            "selected_cohort_indices must be an ordered sequence"
+        ) from exc
+    if not 1 <= len(raw_indices) <= 8:
+        raise M6EvaluationError("m6_pilot_requires_between_1_and_8_scenes")
+    normalized: list[int] = []
+    for value in raw_indices:
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, Integral):
+            raise TypeError("selected cohort indices must be integers")
+        normalized.append(_cohort_index(value))
+    selected = tuple(normalized)
+    if len(set(selected)) != len(selected):
+        raise M6EvaluationError("m6_pilot_selection_indices_not_unique")
+    eligible = set(reconstructed.eligible_indices)
+    if any(index not in eligible for index in selected):
+        raise M6EvaluationError("m6_pilot_selection_contains_ineligible_case")
+    if (
+        not isinstance(selection_binding_sha256, str)
+        or len(selection_binding_sha256) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in selection_binding_sha256
+        )
+    ):
+        raise ValueError("selection_binding_sha256 must be lowercase SHA-256")
+
+    selected_set = set(selected)
+    selected_validated = tuple(
+        case for case in validated if case.cohort_index in selected_set
+    )
+    selected_ledger = M6EligibilityLedger(
+        tuple(
+            entry
+            for entry in reconstructed.entries
+            if entry.cohort_index in selected_set
+        )
+    )
+    plan_timing_ns: dict[int, int] = {}
+    prepared, _secondary_ledger = _prepare_plans(
+        selected_validated,
+        selected_ledger,
+        include_local_secondary=True,
+        plan_timing_ns=plan_timing_ns,
+        clock_ns=clock_ns,
+    )
+    prepared_by_index = {case.cohort_index: case for case in prepared}
+    if set(prepared_by_index) != selected_set:
+        raise M6EvaluationError("m6_pilot_prepared_selection_drifted")
+    policy_entries = _validated_policies(canonical_m6_policies())
+    execution = _NumpyM6TypedPlanExecutor()
+    primary_metrics = m6_primary_paired_metrics()
+    secondary_metrics = m6_secondary_paired_metrics()
+    durations: list[int] = []
+    for cohort_index in selected:
+        before = clock_ns()
+        if isinstance(before, bool) or not isinstance(before, int):
+            raise M6EvaluationError("m6_pilot_clock_must_return_integer_ns")
+        case = prepared_by_index[cohort_index]
+        for policy_name, access_role, policy in policy_entries:
+            products = _execute_prepared_policy_rollouts(
+                execution,
+                case,
+                policy_name=policy_name,
+                policy=policy,
+            )
+            primary_scene, secondary_scene = _analyze_prepared_policy(
+                products,
+                case,
+                policy_name=policy_name,
+                access_role=access_role,
+                primary_metrics=primary_metrics,
+                secondary_metrics=secondary_metrics,
+            )
+            primary_scene.revalidate()
+            if secondary_scene is not None:
+                secondary_scene.revalidate()
+            del primary_scene, secondary_scene
+        after = clock_ns()
+        if (
+            isinstance(after, bool)
+            or not isinstance(after, int)
+            or after <= before
+        ):
+            raise M6EvaluationError(
+                "m6_pilot_clock_did_not_advance"
+            )
+        plan_duration_ns = plan_timing_ns.get(cohort_index)
+        if type(plan_duration_ns) is not int or plan_duration_ns <= 0:
+            raise M6EvaluationError(
+                "m6_pilot_plan_timing_missing"
+            )
+        duration_ns = plan_duration_ns + after - before
+        durations.append((duration_ns + 999_999) // 1_000_000)
+    _assert_caller_sources_unchanged(validated)
+
+    digest = hashlib.sha256(b"evalsim-m6-numpy-pilot-selection-v1\0")
+    digest.update(bytes.fromhex(selection_binding_sha256))
+    for entry in reconstructed.entries:
+        digest.update(entry.cohort_index.to_bytes(4, "big"))
+        disposition = json.dumps(
+            entry.eligibility.to_dict(),
+            allow_nan=False,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii")
+        digest.update(len(disposition).to_bytes(8, "big"))
+        digest.update(disposition)
+        digest.update(
+            bytes.fromhex(entry.source_snapshot._integrity_fingerprint)
+        )
+    digest.update(len(selected).to_bytes(4, "big"))
+    for cohort_index in selected:
+        digest.update(cohort_index.to_bytes(4, "big"))
+    return tuple(durations), digest.hexdigest()
 
 
 def assert_m6_sham_matches_legacy_prefix(
@@ -1427,7 +1740,37 @@ def _prepare_plans(
     ledger: M6EligibilityLedger,
     *,
     include_local_secondary: bool,
+    plan_timing_ns: MutableMapping[int, int] | None = None,
+    clock_ns: Callable[[], int] | None = None,
 ) -> tuple[tuple[_PreparedCase, ...], tuple[M6SecondaryPlanEntry, ...]]:
+    if (plan_timing_ns is None) != (clock_ns is None):
+        raise TypeError("plan timing accumulator and clock must be supplied together")
+    if plan_timing_ns is not None and (
+        not isinstance(plan_timing_ns, MutableMapping) or plan_timing_ns
+    ):
+        raise TypeError("plan_timing_ns must be an empty mutable mapping")
+    if clock_ns is not None and not callable(clock_ns):
+        raise TypeError("clock_ns must be callable")
+
+    def start_plan_timing() -> int | None:
+        if clock_ns is None:
+            return None
+        started = clock_ns()
+        if type(started) is not int:
+            raise M6EvaluationError("m6_plan_clock_must_return_integer_ns")
+        return started
+
+    def finish_plan_timing(cohort_index: int, started: int | None) -> None:
+        if clock_ns is None:
+            return
+        assert started is not None and plan_timing_ns is not None
+        stopped = clock_ns()
+        if type(stopped) is not int or stopped <= started:
+            raise M6EvaluationError("m6_plan_clock_did_not_advance")
+        plan_timing_ns[cohort_index] = (
+            plan_timing_ns.get(cohort_index, 0) + stopped - started
+        )
+
     by_index = {case.cohort_index: case for case in cases}
     prepared_parts: list[
         tuple[
@@ -1440,6 +1783,7 @@ def _prepare_plans(
     for entry in ledger.entries:
         if not entry.eligible:
             continue
+        plan_started = start_plan_timing()
         case = by_index[entry.cohort_index]
         try:
             case.source_snapshot.revalidate()
@@ -1450,10 +1794,13 @@ def _prepare_plans(
                 PRIMARY_BRAKE_MAGNITUDE_MPS2,
             )
         except Exception as exc:
+            finish_plan_timing(case.cohort_index, plan_started)
+            plan_started = None
             raise M6EvaluationError(
                 "m6_accepted_case_primary_plan_compilation_failed: "
                 f"cohort_index={case.cohort_index}"
             ) from exc
+        finish_plan_timing(case.cohort_index, plan_started)
         prepared_parts.append(
             (case, entry.eligibility, identity, primary)
         )
@@ -1479,12 +1826,15 @@ def _prepare_plans(
     if include_local_secondary:
         # Freeze the complete b=4 subset before the first policy outcome.
         for case, _, _, _ in prepared_parts:
+            plan_started = start_plan_timing()
             try:
                 secondary = compile_longitudinal_brake_pulse_plan(
                     case.source_snapshot.to_scenario(),
                     SECONDARY_BRAKE_MAGNITUDE_MPS2,
                 )
             except InterventionCompilationError as exc:
+                finish_plan_timing(case.cohort_index, plan_started)
+                plan_started = None
                 if exc.code != "secondary_ego_plan_infeasible":
                     raise M6EvaluationError(
                         "m6_secondary_plan_unexpected_compilation_failure: "
@@ -1498,11 +1848,14 @@ def _prepare_plans(
                     )
                 )
             except Exception as exc:
+                finish_plan_timing(case.cohort_index, plan_started)
+                plan_started = None
                 raise M6EvaluationError(
                     "m6_secondary_plan_compilation_failed: "
                     f"cohort_index={case.cohort_index}"
                 ) from exc
             else:
+                finish_plan_timing(case.cohort_index, plan_started)
                 secondary_by_index[case.cohort_index] = secondary
                 secondary_entries.append(
                     M6SecondaryPlanEntry(

@@ -21,6 +21,9 @@ from evalsim.evaluation.m6_waymax_metrics import (
     M6_WAYMAX_DETERMINISM_ROW_COUNT,
     M6_WAYMAX_RESAMPLES,
     M6WaymaxIssuedScalarTable,
+    M6WaymaxLiveDeterminismExecution,
+    M6WaymaxLiveDeterminismRow,
+    M6WaymaxLiveDeterminismTable,
     M6WaymaxMatrixResult,
     M6WaymaxMeasureError,
     M6WaymaxNoExecutionDeterminismRow,
@@ -32,6 +35,7 @@ from evalsim.evaluation.m6_waymax_metrics import (
     analyze_m6_waymax_cells,
     analyze_m6_waymax_matrix,
     build_m6_waymax_data_free_determinism_table,
+    build_m6_waymax_live_determinism_table,
     build_m6_waymax_scene_scalar_table,
     build_m6_waymax_unsupported_determinism_table,
     build_m6_waymax_twenty_transition_pair_view,
@@ -39,6 +43,7 @@ from evalsim.evaluation.m6_waymax_metrics import (
     m6_waymax_measure_contract,
     parse_m6_waymax_scene_scalar_table,
     reconstruct_m6_waymax_stored_cells,
+    validate_m6_waymax_live_determinism_table,
     validate_m6_waymax_no_execution_determinism_table,
     verify_m6_waymax_stored_selection,
 )
@@ -537,6 +542,63 @@ def _invented_views(
                     target_agent_id=member.target_agent_id,
                 )
             )
+    return tuple(rows)
+
+
+def _determinism_compact(token: int) -> CompactM6WaymaxRollout:
+    shape = (20, 128)
+    x = np.zeros(shape, dtype=np.float32)
+    x[0, 0] = np.float32(token)
+    timestamps = np.broadcast_to(
+        np.arange(1, 21, dtype=np.int64)[:, np.newaxis] * 100_000,
+        shape,
+    ).copy()
+    return CompactM6WaymaxRollout(
+        x=x,
+        y=np.zeros(shape, dtype=np.float32),
+        yaw=np.zeros(shape, dtype=np.float32),
+        vx=np.zeros(shape, dtype=np.float32),
+        vy=np.zeros(shape, dtype=np.float32),
+        valid=np.ones(shape, dtype=bool),
+        timestamp_micros=timestamps,
+        timestep=np.arange(1, 21, dtype=np.int32),
+        requested_control=np.zeros(shape, dtype=bool),
+        effective_control=np.zeros(shape, dtype=bool),
+        lifecycle_fallback=np.zeros(shape, dtype=bool),
+        initialized_overlap_excluded=np.zeros(shape, dtype=bool),
+    )
+
+
+def _live_determinism_executions(
+    selection: M6WaymaxSelection,
+) -> tuple[M6WaymaxLiveDeterminismExecution, ...]:
+    rows = []
+    for position, member in enumerate(selection.members):
+        for bundle_index, bundle in enumerate(M6_WAYMAX_BUNDLES):
+            for condition_index, condition in enumerate(
+                M6_WAYMAX_DETERMINISM_CONDITIONS
+            ):
+                token = 1 + position * 4 + bundle_index * 2 + condition_index
+                rows.append(
+                    M6WaymaxLiveDeterminismExecution(
+                        selection_position=position,
+                        bundle=bundle,
+                        condition=condition,
+                        qualification=member,
+                        eager_pass_1=_determinism_compact(token),
+                        eager_pass_2=_determinism_compact(token),
+                        jit_eager=(
+                            _determinism_compact(token)
+                            if position == 0
+                            else None
+                        ),
+                        jit_compiled=(
+                            _determinism_compact(token)
+                            if position == 0
+                            else None
+                        ),
+                    )
+                )
     return tuple(rows)
 
 
@@ -1161,7 +1223,7 @@ def test_data_free_determinism_placeholder_is_exact_and_unforgeable() -> None:
     )
     assert (
         m6_waymax_measure_contract()["live_determinism_issuance_available"]
-        is False
+        is True
     )
 
     invented = _digest("caller-invented-equal-execution")
@@ -1327,6 +1389,152 @@ def test_unsupported_determinism_placeholder_binds_canonical_selection(
             primary_domain=domain,
         )
     assert placeholder_calls == 0
+
+
+def test_live_determinism_table_is_exact_bound_and_factory_issued() -> None:
+    selection, domain = _invented_selection_fixture(8)
+    table = build_m6_waymax_live_determinism_table(
+        _live_determinism_executions(selection),
+        selection=selection,
+        primary_domain=domain,
+    )
+    assert isinstance(table, M6WaymaxLiveDeterminismTable)
+    assert table.promotable is True
+    assert table.selected_member_count == 8
+    assert len(table) == M6_WAYMAX_DETERMINISM_ROW_COUNT == 64
+    assert table.selection_binding_sha256 == (
+        _waymax_metrics._selection_binding_sha256(selection)
+    )
+    assert table.primary_domain_sha256 == domain.domain_sha256
+    assert (
+        validate_m6_waymax_live_determinism_table(
+            table,
+            selection=selection,
+            primary_domain=domain,
+        )
+        is table
+    )
+    store_rows = table.to_store_rows()
+    assert all(
+        set(row) == M6WaymaxLiveDeterminismRow.STORE_FIELDS
+        for row in store_rows
+    )
+    for row in table:
+        if row.selection_position < len(selection.members):
+            member = selection.members[row.selection_position]
+            assert row.status == "passed"
+            assert row.cohort_index == member.cohort_index
+            assert row.qualification_binding_sha256 == (
+                member.qualification_binding_sha256
+            )
+            assert row.eager_pass_1_sha256 == row.eager_pass_2_sha256
+            if row.selection_position == 0:
+                assert row.jit_eager_sha256 == row.eager_pass_1_sha256
+                assert row.jit_compiled_sha256 == row.jit_eager_sha256
+            else:
+                assert row.jit_eager_sha256 is None
+                assert row.jit_compiled_sha256 is None
+        else:
+            assert row.status == "not_applicable"
+            assert all(
+                getattr(row, name) is None
+                for name in (
+                    "cohort_index",
+                    "qualification_binding_sha256",
+                    "eager_pass_1_sha256",
+                    "eager_pass_2_sha256",
+                    "jit_eager_sha256",
+                    "jit_compiled_sha256",
+                )
+            )
+    with pytest.raises(TypeError, match="factory-issued"):
+        dataclasses.replace(table.rows[0])
+    with pytest.raises(TypeError, match="factory-issued"):
+        dataclasses.replace(table)
+
+
+def test_live_determinism_rejects_hash_invention_replay_and_output_drift() -> None:
+    selection, domain = _invented_selection_fixture(8)
+    executions = _live_determinism_executions(selection)
+    with pytest.raises(TypeError, match="M6WaymaxLiveDeterminismExecution"):
+        build_m6_waymax_live_determinism_table(
+            tuple({"eager_pass_1_sha256": _digest("invented")} for _ in executions),
+            selection=selection,
+            primary_domain=domain,
+        )
+
+    first = executions[0]
+    with pytest.raises(M6WaymaxMeasureError, match="eager_replay"):
+        dataclasses.replace(first, eager_pass_2=first.eager_pass_1)
+
+    drifted = copy.deepcopy(first.eager_pass_2)
+    drifted.x[0, 0] += np.float32(1.0)
+    mismatched = list(executions)
+    mismatched[0] = dataclasses.replace(first, eager_pass_2=drifted)
+    with pytest.raises(M6WaymaxMeasureError, match="eager_mismatch"):
+        build_m6_waymax_live_determinism_table(
+            tuple(mismatched), selection=selection, primary_domain=domain
+        )
+
+    jit_drifted = copy.deepcopy(first.jit_compiled)
+    assert jit_drifted is not None
+    jit_drifted.x[0, 0] += np.float32(2.0)
+    mismatched[0] = dataclasses.replace(first, jit_compiled=jit_drifted)
+    with pytest.raises(M6WaymaxMeasureError, match="jit_mismatch"):
+        build_m6_waymax_live_determinism_table(
+            tuple(mismatched), selection=selection, primary_domain=domain
+        )
+
+    replayed = list(executions)
+    replayed[1] = dataclasses.replace(
+        replayed[1], eager_pass_1=first.eager_pass_1
+    )
+    with pytest.raises(M6WaymaxMeasureError, match="execution_replay"):
+        build_m6_waymax_live_determinism_table(
+            tuple(replayed), selection=selection, primary_domain=domain
+        )
+
+
+def test_live_determinism_rejects_incomplete_wrong_selection_and_mutation() -> None:
+    selection, domain = _invented_selection_fixture(8)
+    executions = _live_determinism_executions(selection)
+    with pytest.raises(ValueError, match="canonical selected"):
+        build_m6_waymax_live_determinism_table(
+            executions[:-1], selection=selection, primary_domain=domain
+        )
+
+    wrong_qualification = list(executions)
+    wrong_qualification[4] = dataclasses.replace(
+        wrong_qualification[4], qualification=selection.members[0]
+    )
+    with pytest.raises(M6WaymaxMeasureError, match="selection_mismatch"):
+        build_m6_waymax_live_determinism_table(
+            tuple(wrong_qualification),
+            selection=selection,
+            primary_domain=domain,
+        )
+
+    table = build_m6_waymax_live_determinism_table(
+        executions, selection=selection, primary_domain=domain
+    )
+    wrong_selection, wrong_domain = _invented_selection_fixture(9)
+    with pytest.raises(M6WaymaxMeasureError, match="selection_mismatch"):
+        validate_m6_waymax_live_determinism_table(
+            table,
+            selection=wrong_selection,
+            primary_domain=wrong_domain,
+        )
+
+    mutated = copy.deepcopy(table)
+    object.__setattr__(
+        mutated.rows[0],
+        "eager_pass_1_sha256",
+        _digest("mutated-live-row"),
+    )
+    with pytest.raises(M6WaymaxMeasureError, match="row_mutated"):
+        validate_m6_waymax_live_determinism_table(
+            mutated, selection=selection, primary_domain=domain
+        )
 
 
 def test_verified_stored_selection_is_nonpromotable_reconstruction_only() -> None:

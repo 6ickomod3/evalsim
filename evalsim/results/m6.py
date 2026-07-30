@@ -43,6 +43,10 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from evalsim.cli.m6_official import (
+    M6ModeExecutionEvidence as _M6ModeExecutionEvidence,
+    _consume_m6_pending_reservation,
+)
 from evalsim.sources.waymax import WAYMAX_COMMIT
 from evalsim.perturb.m6 import (
     M6_INTERVENTION_VERSION,
@@ -52,14 +56,28 @@ from evalsim.perturb.m6 import (
 )
 from evalsim.evaluation.m6_waymax_metrics import (
     M6WaymaxIssuedScalarTable,
+    M6WaymaxLiveDeterminismTable,
     M6WaymaxMatrixResult,
+    M6WaymaxNoExecutionDeterminismTable,
+    M6WaymaxParsedScalarTable,
     M6WaymaxSceneScalar,
+    _analyze_safe_scalar_cells,
+    _normalize_safe_scalar_table,
     analyze_m6_waymax_cells,
     build_m6_waymax_data_free_determinism_table,
     m6_waymax_measure_contract,
     parse_m6_waymax_scene_scalar_table,
     reconstruct_m6_waymax_stored_cells,
     verify_m6_waymax_stored_selection,
+)
+from evalsim.evaluation.m6_waymax_official import (
+    M6_WAYMAX_NUMPY_COMPARISON_POLICIES,
+    M6_WAYMAX_NUMPY_COMPARISON_ROW_COUNT,
+    M6WaymaxNumpyComparisonTable,
+    M6WaymaxOfficialEvidence,
+    M6WaymaxOfficialFieldComparisonTable,
+    m6_stored_eligibility_rows_sha256,
+    m6_waymax_selection_binding_sha256,
 )
 from evalsim.simulators.waymax_m6 import (
     M6_WAYMAX_BUNDLES,
@@ -88,16 +106,23 @@ from evalsim.stats.m6 import (
 )
 
 
-M6_RESULT_STORE_SCHEMA_VERSION = "m6-result-store-3.0.0"
-M6_ELIGIBILITY_RECEIPT_SCHEMA_VERSION = "m6-eligibility-receipt-3.0.0"
+M6_RESULT_STORE_SCHEMA_VERSION = "m6-result-store-6.2.0"
+M6_COMPUTE_PILOT_REPORT_SCHEMA_VERSION = (
+    "m6-compute-pilot-report-1.1.0"
+)
+M6_ELIGIBILITY_RECEIPT_SCHEMA_VERSION = "m6-eligibility-receipt-5.0.0"
 M6_WAYMAX_SELECTION_RECEIPT_SCHEMA_VERSION = (
     "m6-waymax-selection-receipt-1.0.0"
 )
 M6_DETERMINISM_RECEIPT_SCHEMA_VERSION = "m6-determinism-receipt-3.0.0"
-M6_PROMOTED_AGGREGATE_SCHEMA_VERSION = "m6-promoted-aggregate-2.0.0"
-M6_TYPED_PROVENANCE_SCHEMA_VERSION = "m6-typed-provenance-1.0.0"
+M6_PROMOTED_AGGREGATE_SCHEMA_VERSION = "m6-promoted-aggregate-3.0.0"
+M6_TYPED_PROVENANCE_SCHEMA_VERSION = "m6-typed-provenance-2.0.0"
 M6_EXECUTION_SCHEMA_VERSION = "m6-execution-evidence-1.0.0"
-M6_CLAIM_LIMITATIONS_SCHEMA_VERSION = "m6-claim-limitations-1.0.0"
+M6_CLAIM_LIMITATIONS_SCHEMA_VERSION = "m6-claim-limitations-2.0.0"
+M6_MECHANICAL_VERIFICATION_SCHEMA_VERSION = (
+    "m6-mechanical-verification-1.0.0"
+)
+M6_REVIEW_DECISION_SCHEMA_VERSION = "m6-review-decision-1.0.0"
 M6_CONFIG_VERSION = "m6-counterfactual-config-1.0.0"
 M6_PLAN_VERSION = "m6-counterfactual-reactivity-1.0.0"
 
@@ -126,6 +151,7 @@ WAYMAX_ACCOUNTING = "waymax-accounting"
 WAYMAX_QUALIFICATION = "waymax-qualification"
 WAYMAX_SCENE_SCALARS = "waymax-scene-scalars"
 WAYMAX_FIELD_COMPARISONS = "waymax-field-comparisons"
+WAYMAX_NUMPY_COMPARISONS = "waymax-numpy-comparisons"
 WAYMAX_DETERMINISM = "waymax-determinism"
 TYPED_PROVENANCE = "typed-provenance"
 EXECUTION_SUMMARY = "execution-summary"
@@ -136,8 +162,10 @@ ELIGIBILITY_RECEIPT_PATH = "eligibility-receipt.json"
 WAYMAX_SELECTION_RECEIPT_PATH = "waymax-selection-receipt.json"
 DETERMINISM_RECEIPT_PATH = "determinism-receipt.json"
 CLAIM_LIMITATIONS_PATH = "claim-limitations.json"
+REVIEW_REQUEST_PATH = "review-request.json"
 MANIFEST_PATH = "result-manifest.json"
 PENDING_MARKER = "PENDING"
+AWAITING_REVIEW_MARKER = "AWAITING_REVIEW"
 COMMITTED_MARKER = "COMMITTED"
 TERMINAL_SUCCESS_MARKER = "TERMINAL_SUCCESS"
 TERMINAL_FAILURE_MARKER = "TERMINAL_FAILURE"
@@ -160,6 +188,7 @@ _DATASET_PATHS: Mapping[str, str] = MappingProxyType(
         WAYMAX_QUALIFICATION: "waymax-qualification.parquet",
         WAYMAX_SCENE_SCALARS: "waymax-scene-scalars.parquet",
         WAYMAX_FIELD_COMPARISONS: "waymax-field-comparisons.parquet",
+        WAYMAX_NUMPY_COMPARISONS: "waymax-numpy-comparisons.parquet",
         WAYMAX_DETERMINISM: "waymax-determinism.parquet",
         TYPED_PROVENANCE: "typed-provenance.parquet",
         EXECUTION_SUMMARY: "execution-summary.parquet",
@@ -182,6 +211,12 @@ M6_PRIMARY_POLICY_ROLES = (
     ("log_replay", "privileged"),
     ("constant_velocity", "history_only"),
     ("idm", "history_only"),
+)
+_M6_WAYMAX_NUMPY_POLICY_ACCESS: Mapping[str, str] = MappingProxyType(
+    {
+        "log_replay": "privileged",
+        "idm": "history_only",
+    }
 )
 M6_PRIMARY_METRICS = (
     ("additional_target_braking_impulse_mps", "1.0.0", "m/s"),
@@ -215,6 +250,7 @@ M6_REVIEW_ROLE_DOMAIN = (
     "methods_statistics",
     "privacy_claim",
 )
+M6_REVIEW_COUNT_MAX = 2**31 - 1
 
 M6_WAYMAX_REJECTION_REASONS = (
     "waymax_cadence_mismatch",
@@ -251,6 +287,9 @@ M6_DATA_FREE_WAYMAX_PRIMARY_DOMAIN_SHA256 = hashlib.sha256(
 ).hexdigest()
 M6_DATA_FREE_WAYMAX_SELECTION_BINDING_SHA256 = hashlib.sha256(
     b"evalsim-m6-data-free-waymax-selection-not-applicable-v1"
+).hexdigest()
+M6_DATA_FREE_WAYMAX_NUMPY_ELIGIBILITY_LEDGER_SHA256 = hashlib.sha256(
+    b"evalsim-m6-data-free-numpy-eligibility-not-applicable-v1"
 ).hexdigest()
 M6_WAYMAX_CONDITIONS = ("identity", "primary_brake")
 M6_WAYMAX_MAX_SELECTED = M6_WAYMAX_MAX_SCENES
@@ -389,6 +428,13 @@ M6_ACCEPTED_BOUNDED_CLAIM = (
     "and response-cost measures detected nonresponse and controlled synthetic "
     "overreaction without a simulator winner or real-world causal/safety claim."
 )
+M6_BLOCKED_BOUNDED_CLAIM = (
+    "Executed the fixed M6 typed paired ego-braking evaluation on the accepted "
+    "local WOMD cohort, but the preregistered support gate for the bounded "
+    "real-data reactivity claim was not met. This aggregate therefore publishes "
+    "implementation and descriptive evidence only and does not claim that "
+    "real-scene world-agent reactivity was detected."
+)
 M6_FIXED_LIMITATIONS = (
     "No real-world, human-driver, fleet, or WOMD-population causal effect is "
     "estimated.",
@@ -431,8 +477,11 @@ _ALLOWED_PRIMARY_STATUSES = frozenset(
 )
 _CREATE_SENTINEL = object()
 _AGGREGATE_SENTINEL = object()
+_VERIFIED_PROVENANCE_SENTINEL = object()
 _OBSERVED_PREFLIGHT_SENTINEL = object()
 _TERMINAL_CAPABILITY_SENTINEL = object()
+_MECHANICAL_VERIFICATION_SENTINEL = object()
+_REVIEW_DECISION_SENTINEL = object()
 M6_PREFLIGHT_CHECK_DOMAIN = (
     "accepted_m4_verified",
     "git_live_main_verified",
@@ -520,6 +569,27 @@ COMPUTE_PILOT_SUMMARY_SCHEMA = _schema(
         pa.field("waymax_ms", pa.int64(), nullable=False),
         pa.field("verification_ms", pa.int64(), nullable=False),
         pa.field("fresh_worker_peak_rss_bytes", pa.int64(), nullable=False),
+        pa.field("selection_binding_sha256", pa.string(), nullable=False),
+        pa.field(
+            "selected_cohort_indices_sha256",
+            pa.string(),
+            nullable=False,
+        ),
+        pa.field(
+            "numpy_observation_content_sha256",
+            pa.string(),
+            nullable=False,
+        ),
+        pa.field(
+            "waymax_observation_content_sha256",
+            pa.string(),
+            nullable=False,
+        ),
+        pa.field(
+            "pilot_report_binding_sha256",
+            pa.string(),
+            nullable=False,
+        ),
         pa.field("passed", pa.bool_(), nullable=False),
     ),
     COMPUTE_PILOT_SUMMARY,
@@ -776,6 +846,41 @@ WAYMAX_FIELD_COMPARISONS_SCHEMA = _schema(
     ),
     WAYMAX_FIELD_COMPARISONS,
 )
+WAYMAX_NUMPY_COMPARISONS_SCHEMA = _schema(
+    (
+        pa.field("selection_position", pa.int32(), nullable=False),
+        pa.field("cohort_index", pa.int32(), nullable=True),
+        pa.field(
+            "qualification_binding_sha256",
+            pa.string(),
+            nullable=True,
+        ),
+        pa.field("primary_domain_sha256", pa.string(), nullable=False),
+        pa.field("selection_binding_sha256", pa.string(), nullable=False),
+        pa.field(
+            "numpy_eligibility_ledger_sha256",
+            pa.string(),
+            nullable=False,
+        ),
+        pa.field(
+            "stored_eligibility_rows_sha256",
+            pa.string(),
+            nullable=False,
+        ),
+        pa.field("policy_name", pa.string(), nullable=False),
+        pa.field("policy_access_role", pa.string(), nullable=False),
+        pa.field("metric_name", pa.string(), nullable=False),
+        pa.field("metric_version", pa.string(), nullable=False),
+        pa.field("value_unit", pa.string(), nullable=False),
+        pa.field("value", pa.float64(), nullable=True),
+        pa.field("responded", pa.bool_(), nullable=True),
+        pa.field("responder_latency_s", pa.float64(), nullable=True),
+        pa.field("view_binding_sha256", pa.string(), nullable=True),
+        pa.field("source_pairing_complete", pa.bool_(), nullable=False),
+        pa.field("status", pa.string(), nullable=False),
+    ),
+    WAYMAX_NUMPY_COMPARISONS,
+)
 WAYMAX_DETERMINISM_SCHEMA = _schema(
     (
         pa.field("selection_position", pa.int32(), nullable=False),
@@ -806,8 +911,18 @@ TYPED_PROVENANCE_SCHEMA = _schema(
         pa.field("approved_git_commit", pa.string(), nullable=False),
         pa.field("git_tree", pa.string(), nullable=False),
         pa.field("executable_source_sha256", pa.string(), nullable=False),
+        pa.field(
+            "executable_source_paths",
+            pa.list_(pa.field("element", pa.string(), nullable=False)),
+            nullable=False,
+        ),
         pa.field("uv_lock_sha256", pa.string(), nullable=False),
         pa.field("runtime_config_sha256", pa.string(), nullable=False),
+        pa.field(
+            "verification_context_sha256",
+            pa.string(),
+            nullable=False,
+        ),
         pa.field("accepted_m4_manifest_sha256", pa.string(), nullable=True),
         pa.field(
             "accepted_m4_provenance_sha256",
@@ -876,6 +991,11 @@ EXECUTION_SUMMARY_SCHEMA = _schema(
             pa.int32(),
             nullable=False,
         ),
+        pa.field(
+            "waymax_numpy_comparison_rows",
+            pa.int32(),
+            nullable=False,
+        ),
         pa.field("waymax_determinism_rows", pa.int32(), nullable=False),
         pa.field("stage_timing_rows", pa.int32(), nullable=False),
         pa.field("review_decision_rows", pa.int32(), nullable=False),
@@ -892,12 +1012,18 @@ STAGE_TIMINGS_SCHEMA = _schema(
 REVIEW_DECISIONS_SCHEMA = _schema(
     (
         pa.field("role", pa.string(), nullable=False),
+        pa.field("approved_git_commit", pa.string(), nullable=False),
         pa.field("decision", pa.string(), nullable=False),
         pa.field("p1_count", pa.int32(), nullable=False),
         pa.field("p2_count", pa.int32(), nullable=False),
         pa.field("p3_count", pa.int32(), nullable=False),
         pa.field(
             "evidence_catalog_sha256",
+            pa.string(),
+            nullable=False,
+        ),
+        pa.field(
+            "mechanical_verification_sha256",
             pa.string(),
             nullable=False,
         ),
@@ -921,6 +1047,7 @@ M6_RESULT_SCHEMAS: Mapping[str, pa.Schema] = MappingProxyType(
         WAYMAX_QUALIFICATION: WAYMAX_QUALIFICATION_SCHEMA,
         WAYMAX_SCENE_SCALARS: WAYMAX_SCENE_SCALARS_SCHEMA,
         WAYMAX_FIELD_COMPARISONS: WAYMAX_FIELD_COMPARISONS_SCHEMA,
+        WAYMAX_NUMPY_COMPARISONS: WAYMAX_NUMPY_COMPARISONS_SCHEMA,
         WAYMAX_DETERMINISM: WAYMAX_DETERMINISM_SCHEMA,
         TYPED_PROVENANCE: TYPED_PROVENANCE_SCHEMA,
         EXECUTION_SUMMARY: EXECUTION_SUMMARY_SCHEMA,
@@ -940,6 +1067,14 @@ class M6ResultStoreStateError(M6ResultStoreError):
 
 class M6ResultStoreIntegrityError(M6ResultStoreError):
     """Stored bytes, permissions, schemas, or domains are invalid."""
+
+
+@dataclass(frozen=True, slots=True)
+class _M6GuardedSnapshot:
+    """Exact authenticated bytes and file identity from one guarded descriptor."""
+
+    payload: bytes = field(repr=False)
+    identity: tuple[int, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1093,6 +1228,7 @@ class M6EligibilityReceipt:
         rows: dict[str, int] = {
             ELIGIBILITY_LEDGER: self.population_size,
             WAYMAX_QUALIFICATION: self.eligible_count,
+            TYPED_PROVENANCE: 1,
         }
         if self.mode == COMPUTE_PILOT_MODE:
             rows[COMPUTE_PILOT_SUMMARY] = 1
@@ -1123,11 +1259,17 @@ class M6EligibilityReceipt:
                         * len(M6_WAYMAX_CONDITIONS)
                         * len(M6_WAYMAX_COMPARISON_FIELDS)
                     ),
+                    WAYMAX_NUMPY_COMPARISONS: (
+                        M6_WAYMAX_NUMPY_COMPARISON_ROW_COUNT
+                    ),
                     WAYMAX_DETERMINISM: M6_WAYMAX_DETERMINISM_ROW_COUNT,
-                    TYPED_PROVENANCE: 1,
                     EXECUTION_SUMMARY: 1,
                     STAGE_TIMINGS: len(M6_STAGE_DOMAIN),
-                    REVIEW_DECISIONS: len(M6_REVIEW_ROLE_DOMAIN),
+                    REVIEW_DECISIONS: (
+                        0
+                        if self.mode == DATA_FREE_MODE
+                        else len(M6_REVIEW_ROLE_DOMAIN)
+                    ),
                 }
             )
         return MappingProxyType(rows)
@@ -1631,6 +1773,18 @@ class VerifiedM6ResultStore:
 
 
 @dataclass(frozen=True, slots=True)
+class VerifiedM6RejectedReviewStore:
+    """Authenticated terminal record of an explicitly rejected official review."""
+
+    run_path: Path
+    receipt: M6EligibilityReceipt
+    verification: M6MechanicalVerificationReceipt
+    review_decisions: tuple[Mapping[str, Any], ...]
+    execution_summary: Mapping[str, Any]
+    artifacts: tuple[M6ArtifactRecord, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class M6SanitizedAggregate:
     """Immutable canonical ASCII JSON representation of the seven public domains."""
 
@@ -1669,6 +1823,64 @@ class M6SanitizedAggregate:
 
 
 @dataclass(frozen=True, slots=True)
+class M6VerifiedProvenance:
+    """Verifier-issued source/runtime/M4 facts for one exact local mode."""
+
+    mode: str
+    source_paths: tuple[str, ...]
+    store_row: Mapping[str, Any] = field(repr=False, compare=False)
+    context_sha256: str = field(repr=False)
+    _factory_sentinel: object = field(repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self._factory_sentinel is not _VERIFIED_PROVENANCE_SENTINEL:
+            raise M6ResultStoreStateError(
+                "typed provenance can only be issued by a verified source context"
+            )
+        _profile(self.mode)
+        paths = _normalize_m6_source_paths(self.source_paths)
+        row = dict(self.store_row)
+        if row.get("executable_source_paths") != list(paths):
+            raise M6ResultStoreIntegrityError(
+                "typed provenance source-path catalog binding drifted"
+            )
+        context = _text(
+            row.get("verification_context_sha256"),
+            "verification_context_sha256",
+        )
+        if (
+            _SHA256.fullmatch(context) is None
+            or context != self.context_sha256
+            or context
+            != _m6_verified_provenance_context_sha256(
+                self.mode,
+                paths,
+                {
+                    name: value
+                    for name, value in row.items()
+                    if name
+                    not in {
+                        "executable_source_paths",
+                        "verification_context_sha256",
+                    }
+                },
+            )
+        ):
+            raise M6ResultStoreIntegrityError(
+                "typed provenance verification-context binding drifted"
+            )
+        object.__setattr__(self, "source_paths", paths)
+        object.__setattr__(self, "store_row", MappingProxyType(row))
+
+    def revalidate(self) -> None:
+        self.__post_init__()
+
+    def to_store_row(self) -> dict[str, Any]:
+        self.revalidate()
+        return dict(self.store_row)
+
+
+@dataclass(frozen=True, slots=True)
 class M6ObservedPreflightResult:
     """Exact observation minted only by the trusted official verifier boundary.
 
@@ -1684,6 +1896,7 @@ class M6ObservedPreflightResult:
     manifest_sha256: str
     committed_sha256: str
     evidence_catalog_sha256: str
+    provenance_context_sha256: str
     checks: Mapping[str, bool]
     _factory_sentinel: object = field(repr=False, compare=False)
 
@@ -1695,16 +1908,12 @@ class M6ObservedPreflightResult:
         profile = _profile(self.mode)
         if profile.data_free:
             raise ValueError("data_free terminalization self-verifies")
-        if (
-            type(self.result_path) is not str
-            or not self.result_path.startswith("outputs/m6/")
-            or Path(self.result_path).as_posix() != self.result_path
-        ):
-            raise ValueError("observed preflight result path is invalid")
+        _validate_m6_result_path_text(self.result_path)
         for name in (
             "manifest_sha256",
             "committed_sha256",
             "evidence_catalog_sha256",
+            "provenance_context_sha256",
         ):
             if (
                 type(getattr(self, name)) is not str
@@ -1739,6 +1948,9 @@ class M6ObservedPreflightResult:
                     ),
                     "manifest_sha256": self.manifest_sha256,
                     "mode": self.mode,
+                    "provenance_context_sha256": (
+                        self.provenance_context_sha256
+                    ),
                     "result_path": self.result_path,
                 }
             )
@@ -1754,6 +1966,7 @@ class M6TerminalCapability:
     manifest_sha256: str
     committed_sha256: str
     evidence_catalog_sha256: str
+    provenance_context_sha256: str
     observed_preflight_sha256: str
     nonce: bytes = field(repr=False)
     _factory_sentinel: object = field(repr=False, compare=False)
@@ -1763,16 +1976,376 @@ class M6TerminalCapability:
             raise M6ResultStoreStateError(
                 "terminal capabilities can only be minted by the M6 verifier hook"
             )
+        profile = _profile(self.mode)
+        if profile.data_free:
+            raise ValueError(
+                "data_free terminalization accepts no verifier capability"
+            )
+        _validate_m6_result_path_text(self.result_path)
         if type(self.nonce) is not bytes or len(self.nonce) != 32:
             raise ValueError("terminal capability nonce is invalid")
         for name in (
             "manifest_sha256",
             "committed_sha256",
             "evidence_catalog_sha256",
+            "provenance_context_sha256",
             "observed_preflight_sha256",
         ):
-            if _SHA256.fullmatch(getattr(self, name)) is None:
+            value = getattr(self, name)
+            if type(value) is not str or _SHA256.fullmatch(value) is None:
                 raise ValueError(f"{name} must be SHA-256")
+
+
+@dataclass(frozen=True, slots=True)
+class M6MechanicalVerificationReceipt:
+    """Fact-only verification of one sealed post-outcome precursor."""
+
+    mode: str
+    result_path: str
+    approved_git_commit: str
+    evidence_catalog_sha256: str
+    review_challenge: str = field(repr=False)
+    _factory_sentinel: object = field(repr=False, compare=False)
+    verification_sha256: str | None = field(default=None, repr=False)
+    _issued_original_verification_sha256: str = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def __post_init__(self) -> None:
+        if self._factory_sentinel is not _MECHANICAL_VERIFICATION_SENTINEL:
+            raise M6ResultStoreStateError(
+                "mechanical verification receipts are verifier-issued only"
+            )
+        profile = _profile(self.mode)
+        if not profile.complete_results:
+            raise ValueError(
+                "mechanical verification requires a complete-result mode"
+            )
+        _validate_m6_result_path_text(self.result_path)
+        if (
+            type(self.approved_git_commit) is not str
+            or _GIT_OBJECT.fullmatch(self.approved_git_commit) is None
+        ):
+            raise ValueError(
+                "mechanical verification commit must be a 40-hex Git object"
+            )
+        for name in ("evidence_catalog_sha256", "review_challenge"):
+            value = getattr(self, name)
+            if type(value) is not str or _SHA256.fullmatch(value) is None:
+                raise ValueError(
+                    f"mechanical verification {name} must be SHA-256"
+                )
+        expected = self._binding_sha256()
+        if (
+            self.verification_sha256 is not None
+            and self.verification_sha256 != expected
+        ):
+            raise ValueError("mechanical verification binding is invalid")
+        object.__setattr__(self, "verification_sha256", expected)
+        object.__setattr__(
+            self,
+            "_issued_original_verification_sha256",
+            expected,
+        )
+
+    def _payload(self) -> dict[str, Any]:
+        return {
+            "approved_git_commit": self.approved_git_commit,
+            "evidence_catalog_sha256": self.evidence_catalog_sha256,
+            "mode": self.mode,
+            "result_path": self.result_path,
+            "review_challenge": self.review_challenge,
+            "schema_version": M6_MECHANICAL_VERIFICATION_SCHEMA_VERSION,
+        }
+
+    def _binding_sha256(self) -> str:
+        return hashlib.sha256(
+            b"evalsim-m6-mechanical-verification-v1\x00"
+            + _canonical_json_bytes(self._payload())
+        ).hexdigest()
+
+    def revalidate(self) -> None:
+        expected = self._binding_sha256()
+        if (
+            expected != self.verification_sha256
+            or expected != self._issued_original_verification_sha256
+        ):
+            raise M6ResultStoreIntegrityError(
+                "mechanical verification receipt changed after issuance"
+            )
+        self.__post_init__()
+
+    def to_dict(self) -> dict[str, Any]:
+        self.revalidate()
+        return {
+            **self._payload(),
+            "verification_sha256": self.verification_sha256,
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        value: Mapping[str, Any],
+    ) -> "M6MechanicalVerificationReceipt":
+        expected = {
+            "approved_git_commit",
+            "evidence_catalog_sha256",
+            "mode",
+            "result_path",
+            "review_challenge",
+            "schema_version",
+            "verification_sha256",
+        }
+        if set(value) != expected or value.get("schema_version") != (
+            M6_MECHANICAL_VERIFICATION_SCHEMA_VERSION
+        ):
+            raise M6ResultStoreIntegrityError(
+                "mechanical verification fields/schema are not exact"
+            )
+        try:
+            return cls(
+                mode=_json_text(value["mode"], "review mode"),
+                result_path=_json_text(
+                    value["result_path"],
+                    "review result path",
+                ),
+                approved_git_commit=_json_text(
+                    value["approved_git_commit"],
+                    "review approved commit",
+                ),
+                evidence_catalog_sha256=_json_text(
+                    value["evidence_catalog_sha256"],
+                    "review evidence catalog",
+                ),
+                review_challenge=_json_text(
+                    value["review_challenge"],
+                    "review challenge",
+                ),
+                verification_sha256=_json_text(
+                    value["verification_sha256"],
+                    "mechanical verification binding",
+                ),
+                _factory_sentinel=_MECHANICAL_VERIFICATION_SENTINEL,
+            )
+        except M6ResultStoreIntegrityError:
+            raise
+        except (TypeError, ValueError, M6ResultStoreError) as exc:
+            raise M6ResultStoreIntegrityError(
+                "mechanical verification receipt is invalid"
+            ) from exc
+
+
+@dataclass(frozen=True, slots=True)
+class M6ReviewDecisionReceipt:
+    """One explicit reviewer decision bound to verified precursor facts."""
+
+    mode: str
+    result_path: str
+    role: str
+    approved_git_commit: str
+    evidence_catalog_sha256: str
+    mechanical_verification_sha256: str
+    review_challenge: str = field(repr=False)
+    decision: str
+    p1_count: int
+    p2_count: int
+    p3_count: int
+    _factory_sentinel: object = field(repr=False, compare=False)
+    receipt_sha256: str | None = field(default=None, repr=False)
+    _issued_original_receipt_sha256: str = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def __post_init__(self) -> None:
+        if self._factory_sentinel is not _REVIEW_DECISION_SENTINEL:
+            raise M6ResultStoreStateError(
+                "review decisions must be explicitly issued after verification"
+            )
+        profile = _profile(self.mode)
+        if not profile.complete_results or profile.data_free:
+            raise ValueError(
+                "independent result-review decisions are official-mode only"
+            )
+        _validate_m6_result_path_text(self.result_path)
+        if self.role not in M6_REVIEW_ROLE_DOMAIN:
+            raise ValueError("review receipt role is not registered")
+        if (
+            type(self.approved_git_commit) is not str
+            or _GIT_OBJECT.fullmatch(self.approved_git_commit) is None
+        ):
+            raise ValueError("review receipt commit must be a 40-hex Git object")
+        for name in (
+            "evidence_catalog_sha256",
+            "mechanical_verification_sha256",
+            "review_challenge",
+        ):
+            value = getattr(self, name)
+            if type(value) is not str or _SHA256.fullmatch(value) is None:
+                raise ValueError(f"review receipt {name} must be SHA-256")
+        counts = (self.p1_count, self.p2_count, self.p3_count)
+        if any(
+            type(value) is not int
+            or value < 0
+            or value > M6_REVIEW_COUNT_MAX
+            for value in counts
+        ):
+            raise ValueError(
+                "review finding counts must fit the persisted int32 domain"
+            )
+        if self.decision not in {"accept", "reject"}:
+            raise ValueError("review decision must be accept or reject")
+        expected = self._binding_sha256()
+        if self.receipt_sha256 is not None and self.receipt_sha256 != expected:
+            raise ValueError("review receipt binding is invalid")
+        object.__setattr__(self, "receipt_sha256", expected)
+        object.__setattr__(
+            self,
+            "_issued_original_receipt_sha256",
+            expected,
+        )
+
+    def _payload(self) -> dict[str, Any]:
+        return {
+            "approved_git_commit": self.approved_git_commit,
+            "decision": self.decision,
+            "evidence_catalog_sha256": self.evidence_catalog_sha256,
+            "mechanical_verification_sha256": (
+                self.mechanical_verification_sha256
+            ),
+            "mode": self.mode,
+            "p1_count": self.p1_count,
+            "p2_count": self.p2_count,
+            "p3_count": self.p3_count,
+            "result_path": self.result_path,
+            "review_challenge": self.review_challenge,
+            "role": self.role,
+            "schema_version": M6_REVIEW_DECISION_SCHEMA_VERSION,
+        }
+
+    def _binding_sha256(self) -> str:
+        return hashlib.sha256(
+            b"evalsim-m6-explicit-review-decision-v2\x00"
+            + _canonical_json_bytes(self._payload())
+        ).hexdigest()
+
+    def revalidate(self) -> None:
+        expected = self._binding_sha256()
+        if (
+            expected != self.receipt_sha256
+            or expected != self._issued_original_receipt_sha256
+        ):
+            raise M6ResultStoreIntegrityError(
+                "review decision changed after issuance"
+            )
+        self.__post_init__()
+
+    def to_dict(self) -> dict[str, Any]:
+        self.revalidate()
+        return {
+            **self._payload(),
+            "receipt_sha256": self.receipt_sha256,
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        value: Mapping[str, Any],
+    ) -> "M6ReviewDecisionReceipt":
+        expected = {
+            "approved_git_commit",
+            "decision",
+            "evidence_catalog_sha256",
+            "mechanical_verification_sha256",
+            "mode",
+            "p1_count",
+            "p2_count",
+            "p3_count",
+            "receipt_sha256",
+            "result_path",
+            "review_challenge",
+            "role",
+            "schema_version",
+        }
+        if set(value) != expected or value.get("schema_version") != (
+            M6_REVIEW_DECISION_SCHEMA_VERSION
+        ):
+            raise M6ResultStoreIntegrityError(
+                "review decision fields/schema are not exact"
+            )
+        try:
+            return cls(
+                mode=_json_text(value["mode"], "review mode"),
+                result_path=_json_text(
+                    value["result_path"],
+                    "review result path",
+                ),
+                role=_json_text(value["role"], "review role"),
+                approved_git_commit=_json_text(
+                    value["approved_git_commit"],
+                    "review approved commit",
+                ),
+                evidence_catalog_sha256=_json_text(
+                    value["evidence_catalog_sha256"],
+                    "review evidence catalog",
+                ),
+                mechanical_verification_sha256=_json_text(
+                    value["mechanical_verification_sha256"],
+                    "review mechanical verification",
+                ),
+                review_challenge=_json_text(
+                    value["review_challenge"],
+                    "review challenge",
+                ),
+                decision=_json_text(value["decision"], "review decision"),
+                p1_count=_json_integer(
+                    value["p1_count"],
+                    "review P1 count",
+                    minimum=0,
+                    maximum=M6_REVIEW_COUNT_MAX,
+                ),
+                p2_count=_json_integer(
+                    value["p2_count"],
+                    "review P2 count",
+                    minimum=0,
+                    maximum=M6_REVIEW_COUNT_MAX,
+                ),
+                p3_count=_json_integer(
+                    value["p3_count"],
+                    "review P3 count",
+                    minimum=0,
+                    maximum=M6_REVIEW_COUNT_MAX,
+                ),
+                receipt_sha256=_json_text(
+                    value["receipt_sha256"],
+                    "review receipt binding",
+                ),
+                _factory_sentinel=_REVIEW_DECISION_SENTINEL,
+            )
+        except M6ResultStoreIntegrityError:
+            raise
+        except (TypeError, ValueError, M6ResultStoreError) as exc:
+            raise M6ResultStoreIntegrityError(
+                "review decision receipt is invalid"
+            ) from exc
+
+    def to_store_row(self) -> dict[str, Any]:
+        self.revalidate()
+        return {
+            "role": self.role,
+            "approved_git_commit": self.approved_git_commit,
+            "decision": self.decision,
+            "p1_count": self.p1_count,
+            "p2_count": self.p2_count,
+            "p3_count": self.p3_count,
+            "evidence_catalog_sha256": self.evidence_catalog_sha256,
+            "mechanical_verification_sha256": (
+                self.mechanical_verification_sha256
+            ),
+        }
 
 
 class M6ResultStore:
@@ -1803,9 +2376,17 @@ class M6ResultStore:
         self._receipt: M6EligibilityReceipt | None = None
         self._waymax_selection: M6WaymaxSelection | None = None
         self._waymax_selection_receipt: M6WaymaxSelectionReceipt | None = None
+        self._compute_pilot_execution_evidence: object | None = None
         self._waymax_live_matrix: M6WaymaxMatrixResult | None = None
+        self._waymax_official_evidence: M6WaymaxOfficialEvidence | None = None
+        self._waymax_official_evidence_binding_sha256: str | None = None
+        self._waymax_numpy_eligibility_ledger_sha256: str | None = None
         self._artifacts: dict[str, M6ArtifactRecord] = {}
         self._phase = "pending"
+        self._awaiting_review_anchor_sha256: str | None = None
+        self._awaiting_review_fresh_worker_peak_rss_bytes: int | None = None
+        self._issued_terminal_capability: M6TerminalCapability | None = None
+        self._issued_terminal_capability_nonce_sha256: str | None = None
 
     @classmethod
     def create(
@@ -1861,6 +2442,279 @@ class M6ResultStore:
             capability_nonce=nonce,
             _create_sentinel=_CREATE_SENTINEL,
         )
+
+    @classmethod
+    def adopt_pending(cls, reservation: object) -> "M6ResultStore":
+        """Consume one stdlib-created official PENDING reservation exactly once."""
+
+        (
+            raw_root,
+            raw_name,
+            raw_run_path,
+            raw_mode,
+            nonce,
+        ) = _consume_m6_pending_reservation(reservation)
+        root = _validated_project_root(raw_root)
+        name = _validated_run_name(raw_name)
+        profile = _profile(raw_mode)
+        run_path = root / "outputs" / "m6" / name
+        if raw_run_path != run_path:
+            raise M6ResultStoreIntegrityError(
+                "stdlib PENDING reservation path is noncanonical"
+            )
+        _guard_run_directory(run_path)
+        _validate_run_tree(run_path, allowed_files={PENDING_MARKER})
+        expected = _canonical_json_bytes(
+            _pending_payload(
+                name,
+                profile,
+                hashlib.sha256(nonce).hexdigest(),
+            )
+        )
+        if not _guarded_exact_bytes(
+            run_path / PENDING_MARKER,
+            expected,
+            run_path,
+        ):
+            raise M6ResultStoreIntegrityError(
+                "stdlib PENDING reservation bytes are not exact"
+            )
+        return cls(
+            project_root=root,
+            run_name=name,
+            run_path=run_path,
+            profile=profile,
+            capability_nonce=nonce,
+            _create_sentinel=_CREATE_SENTINEL,
+        )
+
+    @classmethod
+    def adopt_awaiting_review(
+        cls,
+        project_root: str | Path,
+        run_name: str,
+    ) -> "M6ResultStore":
+        """Adopt one exact sealed-PENDING official review request."""
+
+        root = _validated_project_root(project_root)
+        name = _validated_run_name(run_name)
+        relative = Path("outputs") / "m6" / name
+        _require_git_invisible(root, relative)
+        run_path = root / relative
+        _guard_run_directory(run_path)
+        pending_bytes = _read_guarded_bytes(
+            run_path / PENDING_MARKER,
+            run_path,
+        )
+        awaiting_bytes = _read_guarded_bytes(
+            run_path / AWAITING_REVIEW_MARKER,
+            run_path,
+        )
+        pending = _decode_canonical_mapping(pending_bytes, "PENDING marker")
+        awaiting = _decode_canonical_mapping(
+            awaiting_bytes,
+            "AWAITING_REVIEW marker",
+        )
+        expected_fields = {
+            "approved_git_commit",
+            "artifacts",
+            "capability_preimage",
+            "capability_sha256",
+            "evidence_catalog_sha256",
+            "fresh_worker_peak_rss_bytes",
+            "mechanical_verification_sha256",
+            "mode",
+            "result_path",
+            "schema_version",
+            "state",
+            "waymax_evidence_binding_sha256",
+            "waymax_numpy_eligibility_ledger_sha256",
+        }
+        if set(awaiting) != expected_fields:
+            raise M6ResultStoreIntegrityError(
+                "AWAITING_REVIEW fields are not exact"
+            )
+        mode = _json_text(awaiting["mode"], "awaiting review mode")
+        profile = _profile(mode)
+        if mode != OFFICIAL_MODE:
+            raise M6ResultStoreIntegrityError(
+                "only an official store can await independent review"
+            )
+        result_path = _json_text(
+            awaiting["result_path"],
+            "awaiting review result path",
+        )
+        if result_path != relative.as_posix():
+            raise M6ResultStoreIntegrityError(
+                "AWAITING_REVIEW result path drifted"
+            )
+        capability_preimage = _json_text(
+            awaiting["capability_preimage"],
+            "awaiting review capability preimage",
+        )
+        try:
+            nonce = bytes.fromhex(capability_preimage)
+        except ValueError as exc:
+            raise M6ResultStoreIntegrityError(
+                "AWAITING_REVIEW capability is invalid"
+            ) from exc
+        capability_sha256 = _json_text(
+            awaiting["capability_sha256"],
+            "awaiting review capability digest",
+        )
+        if (
+            len(nonce) != 32
+            or hashlib.sha256(nonce).hexdigest() != capability_sha256
+            or pending != _pending_payload(name, profile, capability_sha256)
+            or awaiting["schema_version"] != M6_RESULT_STORE_SCHEMA_VERSION
+            or awaiting["state"] != "AWAITING_REVIEW"
+        ):
+            raise M6ResultStoreIntegrityError(
+                "AWAITING_REVIEW capability/state binding is invalid"
+            )
+        raw_artifacts = _json_array(
+            awaiting["artifacts"],
+            "awaiting review artifacts",
+        )
+        records = tuple(
+            M6ArtifactRecord.from_dict(
+                _json_mapping(item, "awaiting review artifact")
+            )
+            for item in raw_artifacts
+        )
+        paths = tuple(record.path for record in records)
+        if paths != tuple(sorted(set(paths))):
+            raise M6ResultStoreIntegrityError(
+                "AWAITING_REVIEW artifact ordering/domain is invalid"
+            )
+        allowed = {
+            PENDING_MARKER,
+            AWAITING_REVIEW_MARKER,
+            *paths,
+        }
+        _validate_run_tree(run_path, allowed_files=allowed)
+        snapshots = _authenticated_artifact_snapshots(run_path, records)
+        receipt = M6EligibilityReceipt.from_dict(
+            _decode_canonical_mapping(
+                snapshots[ELIGIBILITY_RECEIPT_PATH].payload,
+                "awaiting review eligibility receipt",
+            )
+        )
+        expected_paths = _expected_artifact_paths(receipt) - {
+            _DATASET_PATHS[REVIEW_DECISIONS],
+            _DATASET_PATHS[EXECUTION_SUMMARY],
+        }
+        if receipt.mode != OFFICIAL_MODE or set(paths) != expected_paths:
+            raise M6ResultStoreIntegrityError(
+                "AWAITING_REVIEW precursor artifact domain is incomplete"
+            )
+        for record in records:
+            dataset = _dataset_for_path(record.path)
+            if dataset is not None:
+                table = _parse_guarded_parquet_payload(
+                    snapshots[record.path].payload,
+                    dataset,
+                )
+                if record.rows != table.num_rows:
+                    raise M6ResultStoreIntegrityError(
+                        "AWAITING_REVIEW dataset row count drifted"
+                    )
+        selection_receipt = M6WaymaxSelectionReceipt.from_dict(
+            _decode_canonical_mapping(
+                snapshots[WAYMAX_SELECTION_RECEIPT_PATH].payload,
+                "awaiting review Waymax selection receipt",
+            )
+        )
+        verification = M6MechanicalVerificationReceipt.from_dict(
+            _decode_canonical_mapping(
+                snapshots[REVIEW_REQUEST_PATH].payload,
+                "awaiting review mechanical verification",
+            )
+        )
+        approved_git_commit = _json_text(
+            awaiting["approved_git_commit"],
+            "awaiting review approved commit",
+        )
+        evidence_catalog_sha256 = _json_text(
+            awaiting["evidence_catalog_sha256"],
+            "awaiting review evidence catalog",
+        )
+        mechanical_sha256 = _json_text(
+            awaiting["mechanical_verification_sha256"],
+            "awaiting review mechanical verification digest",
+        )
+        provenance = _normalize_typed_provenance(
+            _parse_guarded_parquet_payload(
+                snapshots[_DATASET_PATHS[TYPED_PROVENANCE]].payload,
+                TYPED_PROVENANCE,
+            ).to_pylist(),
+            receipt,
+        )[0]
+        if (
+            selection_receipt.mode != OFFICIAL_MODE
+            or verification.mode != OFFICIAL_MODE
+            or verification.result_path != result_path
+            or verification.approved_git_commit != approved_git_commit
+            or verification.evidence_catalog_sha256
+            != evidence_catalog_sha256
+            or verification.verification_sha256 != mechanical_sha256
+            or provenance["approved_git_commit"] != approved_git_commit
+            or _review_precursor_sha256(receipt, records)
+            != evidence_catalog_sha256
+        ):
+            raise M6ResultStoreIntegrityError(
+                "AWAITING_REVIEW precursor/verification bindings drifted"
+            )
+        waymax_binding = _json_text(
+            awaiting["waymax_evidence_binding_sha256"],
+            "awaiting review Waymax evidence binding",
+        )
+        numpy_binding = _json_text(
+            awaiting["waymax_numpy_eligibility_ledger_sha256"],
+            "awaiting review NumPy eligibility binding",
+        )
+        rss = _json_integer(
+            awaiting["fresh_worker_peak_rss_bytes"],
+            "awaiting review fresh-worker RSS",
+            minimum=1,
+        )
+        if (
+            _SHA256.fullmatch(waymax_binding) is None
+            or _SHA256.fullmatch(numpy_binding) is None
+        ):
+            raise M6ResultStoreIntegrityError(
+                "AWAITING_REVIEW execution bindings are invalid"
+            )
+        writer = cls(
+            project_root=root,
+            run_name=name,
+            run_path=run_path,
+            profile=profile,
+            capability_nonce=nonce,
+            _create_sentinel=_CREATE_SENTINEL,
+        )
+        writer._receipt = receipt
+        writer._waymax_selection_receipt = selection_receipt
+        writer._artifacts = {record.path: record for record in records}
+        writer._waymax_official_evidence_binding_sha256 = waymax_binding
+        writer._waymax_numpy_eligibility_ledger_sha256 = numpy_binding
+        writer._phase = "awaiting_review"
+        writer._awaiting_review_anchor_sha256 = hashlib.sha256(
+            awaiting_bytes
+        ).hexdigest()
+        writer._awaiting_review_fresh_worker_peak_rss_bytes = rss
+        return writer
+
+    @property
+    def awaiting_review_fresh_worker_peak_rss_bytes(self) -> int:
+        if (
+            self._phase != "awaiting_review"
+            or self._awaiting_review_fresh_worker_peak_rss_bytes is None
+        ):
+            raise M6ResultStoreStateError(
+                "writer is not an adopted awaiting-review store"
+            )
+        return self._awaiting_review_fresh_worker_peak_rss_bytes
 
     @property
     def project_relative_path(self) -> Path:
@@ -2004,17 +2858,149 @@ class M6ResultStore:
 
     def write_compute_pilot_summary(
         self,
-        row: Mapping[str, Any],
+        evidence: object,
     ) -> M6ArtifactRecord:
+        """Persist one runner-issued, observation-bound aggregate pilot report."""
+
         try:
             self._assert_pending_capability()
             receipt = self._require_receipt()
+            selection_receipt = self._require_waymax_selection_receipt()
+            qualification = self._read_dataset_rows(WAYMAX_QUALIFICATION)
             if self.profile.mode != COMPUTE_PILOT_MODE:
                 raise M6ResultStoreStateError(
                     "compute pilot evidence is compute_pilot-mode-only"
                 )
-            normalized = _normalize_compute_pilot((row,), receipt)
-            return self._write_dataset(COMPUTE_PILOT_SUMMARY, normalized)
+            if type(evidence) is not _M6ModeExecutionEvidence:
+                raise TypeError(
+                    "compute pilot summary requires runner-issued mode evidence"
+                )
+            if self._compute_pilot_execution_evidence is not None:
+                raise M6ResultStoreStateError(
+                    "compute pilot evidence already exists"
+                )
+            evidence.revalidate_pilot(
+                run_name=self.run_name,
+                result_path=self.project_relative_path.as_posix(),
+                selection=self._waymax_selection,
+                verified_provenance=evidence.pilot_verified_provenance,
+            )
+            if (
+                evidence.mode != COMPUTE_PILOT_MODE
+                or evidence.selection is not self._waymax_selection
+                or tuple(dict(row) for row in evidence.eligibility_rows)
+                != self._read_dataset_rows(ELIGIBILITY_LEDGER)
+                or evidence.pilot_summary is None
+                or evidence.pilot_verified_provenance is None
+                or evidence.pilot_verified_provenance.mode
+                != COMPUTE_PILOT_MODE
+                or evidence.pilot_selection_binding_sha256
+                != selection_receipt.selection_binding_sha256
+            ):
+                raise M6ResultStoreIntegrityError(
+                    "compute pilot evidence differs from its sealed store context"
+                )
+            summary = dict(evidence.pilot_summary)
+            numpy_observation = evidence.pilot_numpy_observation
+            waymax_observation = evidence.pilot_waymax_observation
+            expected_max_scene_ms = max(
+                numpy_observation.max_scene_ms,
+                waymax_observation.max_scene_ms,
+            )
+            expected_numpy_ms = numpy_observation.total_execution_ms
+            expected_waymax_ms = (
+                waymax_observation.validation_ms
+                + waymax_observation.execution_ms
+            )
+            expected_selected_indices_sha256 = (
+                _m6_compute_pilot_selected_indices_sha256(
+                    qualification,
+                    selection_receipt,
+                )
+            )
+            rounding_overage_ms = _m6_compute_pilot_rounding_overage_ms(
+                numpy_scene_n=numpy_observation.scene_count,
+                waymax_scene_n=waymax_observation.scene_count,
+            )
+            expected_passed = (
+                summary["total_wall_ms"] <= 30 * 60 * 1000
+                and expected_max_scene_ms <= 10 * 60 * 1000
+                and summary["fresh_worker_peak_rss_bytes"] <= 16 * 1024**3
+            )
+            if (
+                summary["pilot_scene_n"] != numpy_observation.scene_count
+                or summary["pilot_scene_n"] != 8
+                or summary["max_scene_ms"] != expected_max_scene_ms
+                or summary["numpy_ms"] != expected_numpy_ms
+                or summary["waymax_ms"] != expected_waymax_ms
+                or summary["total_wall_ms"] + rounding_overage_ms
+                < sum(
+                    summary[name]
+                    for name in (
+                        "decode_ms",
+                        "numpy_ms",
+                        "waymax_ms",
+                        "verification_ms",
+                    )
+                )
+                or summary["fresh_worker_peak_rss_bytes"]
+                < waymax_observation.peak_process_rss_bytes
+                or summary["passed"] is not expected_passed
+                or numpy_observation.source_selection_binding_sha256
+                != selection_receipt.selection_binding_sha256
+                or numpy_observation.selected_cohort_indices_sha256
+                != expected_selected_indices_sha256
+                or waymax_observation.selection_binding_sha256
+                != selection_receipt.selection_binding_sha256
+                or waymax_observation.selected_cohort_indices_sha256
+                != expected_selected_indices_sha256
+                or evidence.pilot_selected_cohort_indices_sha256
+                != expected_selected_indices_sha256
+                or evidence.pilot_verified_provenance.context_sha256
+                != evidence.pilot_verified_provenance.to_store_row()[
+                    "verification_context_sha256"
+                ]
+            ):
+                raise M6ResultStoreIntegrityError(
+                    "compute pilot observations disagree with the aggregate report"
+                )
+            row = {
+                **summary,
+                "selection_binding_sha256": (
+                    evidence.pilot_selection_binding_sha256
+                ),
+                "selected_cohort_indices_sha256": (
+                    evidence.pilot_selected_cohort_indices_sha256
+                ),
+                "numpy_observation_content_sha256": (
+                    evidence.pilot_numpy_observation_content_sha256
+                ),
+                "waymax_observation_content_sha256": (
+                    evidence.pilot_waymax_observation_content_sha256
+                ),
+                "pilot_report_binding_sha256": (
+                    evidence.pilot_report_binding_sha256
+                ),
+            }
+            normalized = _normalize_compute_pilot(
+                (row,),
+                receipt,
+                run_name=self.run_name,
+                result_path=self.project_relative_path.as_posix(),
+                provenance_context_sha256=(
+                    evidence.pilot_verified_provenance.context_sha256
+                ),
+                selection_binding_sha256=(
+                    selection_receipt.selection_binding_sha256
+                ),
+                selected_cohort_indices_sha256=(
+                    expected_selected_indices_sha256
+                ),
+                waymax_scene_n=waymax_observation.scene_count,
+            )
+            record = self._write_dataset(COMPUTE_PILOT_SUMMARY, normalized)
+            self._compute_pilot_execution_evidence = evidence
+            return record
         except BaseException:
             self._poison("compute_pilot_write_failed")
             raise
@@ -2135,9 +3121,7 @@ class M6ResultStore:
 
     def write_waymax_scene_scalars(
         self,
-        issued_table: M6WaymaxIssuedScalarTable | None = None,
-        *,
-        selection: M6WaymaxSelection | None = None,
+        evidence: M6WaymaxOfficialEvidence | None = None,
     ) -> M6ArtifactRecord:
         try:
             self._assert_complete_pending()
@@ -2145,7 +3129,7 @@ class M6ResultStore:
             selection_receipt = self._require_waymax_selection_receipt()
             qualification = self._read_dataset_rows(WAYMAX_QUALIFICATION)
             if self.profile.data_free:
-                if issued_table is not None or selection is not None:
+                if evidence is not None:
                     raise TypeError(
                         "data_free scalar placeholders accept no caller outcomes"
                     )
@@ -2157,21 +3141,14 @@ class M6ResultStore:
                     row.to_store_dict() for row in parsed.rows
                 )
             else:
+                bundle = self._bind_waymax_official_evidence(evidence)
+                issued_table = bundle.scene_scalars
+                selection = bundle.selection
                 if not isinstance(issued_table, M6WaymaxIssuedScalarTable):
                     raise TypeError(
-                        "live scalar writing requires "
-                        "M6WaymaxIssuedScalarTable"
+                        "official scalar writing requires the shared runner-issued "
+                        "M6WaymaxOfficialEvidence bundle"
                     )
-                if not isinstance(selection, M6WaymaxSelection):
-                    raise TypeError(
-                        "live scalar writing requires the canonical "
-                        "M6WaymaxSelection"
-                    )
-                _verify_waymax_selection_receipt_against_selection(
-                    selection_receipt,
-                    selection,
-                    receipt,
-                )
                 issued_table.revalidate(selection=selection)
                 matrix = analyze_m6_waymax_cells(
                     issued_table,
@@ -2198,13 +3175,32 @@ class M6ResultStore:
 
     def write_waymax_field_comparisons(
         self,
-        rows: Iterable[Mapping[str, Any]],
+        evidence: M6WaymaxOfficialEvidence | None = None,
     ) -> M6ArtifactRecord:
         try:
             self._assert_complete_pending()
             receipt = self._require_receipt()
-            self._require_waymax_selection_receipt()
+            selection_receipt = self._require_waymax_selection_receipt()
             qualification = self._read_dataset_rows(WAYMAX_QUALIFICATION)
+            if self.profile.data_free:
+                if evidence is not None:
+                    raise TypeError(
+                        "data_free field comparisons accept no caller evidence"
+                    )
+                rows = m6_data_free_waymax_field_comparison_rows()
+            else:
+                bundle = self._bind_waymax_official_evidence(evidence)
+                table = bundle.field_comparisons
+                if type(table) is not M6WaymaxOfficialFieldComparisonTable:
+                    raise TypeError(
+                        "official field comparisons require the shared "
+                        "M6WaymaxOfficialEvidence bundle"
+                    )
+                table.revalidate(
+                    selection=bundle.selection,
+                    primary_domain=bundle.primary_domain,
+                )
+                rows = table.to_store_rows()
             normalized = (
                 _normalize_waymax_field_comparisons_from_qualification(
                     rows,
@@ -2220,27 +3216,116 @@ class M6ResultStore:
             self._poison("waymax_field_comparisons_write_failed")
             raise
 
+    def write_waymax_numpy_comparisons(
+        self,
+        evidence: M6WaymaxOfficialEvidence | None = None,
+    ) -> M6ArtifactRecord:
+        """Seal the local-only fixed Waymax/NumPy comparison grid."""
+
+        try:
+            self._assert_complete_pending()
+            receipt = self._require_receipt()
+            selection_receipt = self._require_waymax_selection_receipt()
+            eligibility = self._read_dataset_rows(ELIGIBILITY_LEDGER)
+            qualification = self._read_dataset_rows(WAYMAX_QUALIFICATION)
+            if self.profile.data_free:
+                if evidence is not None:
+                    raise TypeError(
+                        "data_free NumPy comparisons accept no caller evidence"
+                    )
+                rows = m6_data_free_waymax_numpy_comparison_rows(
+                    eligibility
+                )
+                expected_numpy_eligibility_sha256 = (
+                    M6_DATA_FREE_WAYMAX_NUMPY_ELIGIBILITY_LEDGER_SHA256
+                )
+            else:
+                bundle = self._bind_waymax_official_evidence(evidence)
+                table = bundle.numpy_comparisons
+                if type(table) is not M6WaymaxNumpyComparisonTable:
+                    raise TypeError(
+                        "official NumPy comparisons require the shared "
+                        "M6WaymaxOfficialEvidence bundle"
+                    )
+                table.revalidate(
+                    selection=bundle.selection,
+                    primary_domain=bundle.primary_domain,
+                    eligibility_ledger=(
+                        bundle._numpy_evidence.typed_result.eligibility_ledger
+                    ),
+                )
+                expected_numpy_eligibility_sha256 = (
+                    table.numpy_eligibility_ledger_sha256
+                )
+                if (
+                    expected_numpy_eligibility_sha256
+                    != self._waymax_numpy_eligibility_ledger_sha256
+                ):
+                    raise M6ResultStoreIntegrityError(
+                        "NumPy eligibility digest differs from the shared "
+                        "official evidence authority"
+                    )
+                rows = table.to_store_rows()
+            normalized = (
+                _normalize_waymax_numpy_comparisons_from_qualification(
+                    rows,
+                    receipt,
+                    eligibility,
+                    qualification,
+                    selection_receipt,
+                    expected_numpy_eligibility_sha256=(
+                        expected_numpy_eligibility_sha256
+                    ),
+                )
+            )
+            return self._write_dataset(
+                WAYMAX_NUMPY_COMPARISONS,
+                normalized,
+            )
+        except BaseException:
+            self._poison("waymax_numpy_comparisons_write_failed")
+            raise
+
     def write_waymax_determinism(
         self,
-        rows: object | None = None,
+        evidence: M6WaymaxOfficialEvidence | None = None,
     ) -> M6ArtifactRecord:
         try:
-            self._assert_pending_capability()
-            if not self.profile.data_free:
-                raise M6ResultStoreStateError(
-                    "non-data-free Waymax determinism writing is disabled "
-                    "until runner-issued evidence is implemented and reviewed"
-                )
-            receipt = self._require_receipt()
             self._assert_complete_pending()
-            if rows is not None:
-                raise TypeError(
-                    "data_free Waymax determinism accepts no caller rows"
-                )
-            self._require_waymax_selection_receipt()
+            receipt = self._require_receipt()
+            selection_receipt = self._require_waymax_selection_receipt()
             qualification = self._read_dataset_rows(WAYMAX_QUALIFICATION)
-            issued = build_m6_waymax_data_free_determinism_table()
-            issued.revalidate()
+            if self.profile.data_free:
+                if evidence is not None:
+                    raise TypeError(
+                        "data_free Waymax determinism accepts no caller evidence"
+                    )
+                issued: (
+                    M6WaymaxLiveDeterminismTable
+                    | M6WaymaxNoExecutionDeterminismTable
+                ) = build_m6_waymax_data_free_determinism_table()
+                issued.revalidate()
+            else:
+                bundle = self._bind_waymax_official_evidence(evidence)
+                issued = bundle.determinism
+                if bundle.supported:
+                    if not isinstance(issued, M6WaymaxLiveDeterminismTable):
+                        raise TypeError(
+                            "supported official evidence requires live "
+                            "determinism in the shared bundle"
+                        )
+                elif not isinstance(
+                    issued,
+                    M6WaymaxNoExecutionDeterminismTable,
+                ):
+                    raise TypeError(
+                        "unsupported official evidence requires exact "
+                        "no-execution determinism in the shared bundle"
+                    )
+                issued.revalidate(
+                    selection=bundle.selection,
+                    primary_domain=bundle.primary_domain,
+                )
             normalized = _normalize_waymax_determinism_from_qualification(
                 issued.to_store_rows(),
                 receipt,
@@ -2277,13 +3362,54 @@ class M6ResultStore:
 
     def write_typed_provenance(
         self,
-        row: Mapping[str, Any],
+        evidence: M6VerifiedProvenance,
     ) -> M6ArtifactRecord:
-        return self._write_complete_dataset(
-            TYPED_PROVENANCE,
-            (row,),
-            _normalize_typed_provenance,
-        )
+        try:
+            self._assert_pending_capability()
+            receipt = self._require_receipt()
+            if (
+                type(evidence) is not M6VerifiedProvenance
+                or evidence._factory_sentinel
+                is not _VERIFIED_PROVENANCE_SENTINEL
+            ):
+                raise TypeError(
+                    "typed provenance requires verifier-issued evidence"
+                )
+            evidence.revalidate()
+            if evidence.mode != receipt.mode:
+                raise M6ResultStoreIntegrityError(
+                    "typed provenance mode differs from the result store"
+                )
+            if self.profile.mode == COMPUTE_PILOT_MODE:
+                pilot = self._compute_pilot_execution_evidence
+                if pilot is None:
+                    raise M6ResultStoreIntegrityError(
+                        "compute pilot provenance preceded its sealed evidence"
+                    )
+                pilot.revalidate_pilot(
+                    run_name=self.run_name,
+                    result_path=self.project_relative_path.as_posix(),
+                    selection=self._waymax_selection,
+                    verified_provenance=evidence,
+                )
+                if pilot.pilot_verified_provenance is not evidence:
+                    raise M6ResultStoreIntegrityError(
+                        "compute pilot provenance identity was transplanted"
+                    )
+            normalized = _normalize_typed_provenance(
+                (evidence.to_store_row(),),
+                receipt,
+            )
+            if normalized[0]["verification_context_sha256"] != (
+                evidence.context_sha256
+            ):
+                raise M6ResultStoreIntegrityError(
+                    "typed provenance context changed during normalization"
+                )
+            return self._write_dataset(TYPED_PROVENANCE, normalized)
+        except BaseException:
+            self._poison("typed_provenance_write_failed")
+            raise
 
     def write_execution_summary(
         self,
@@ -2293,7 +3419,7 @@ class M6ResultStore:
         """Derive execution statuses/counts from already sealed evidence."""
 
         try:
-            self._assert_complete_pending()
+            self._assert_complete_reviewable()
             receipt = self._require_receipt()
             row = _derive_execution_summary(
                 receipt=receipt,
@@ -2328,34 +3454,229 @@ class M6ResultStore:
             _normalize_stage_timings,
         )
 
-    def write_review_decisions(
+    def write_mechanical_verification_receipt(
         self,
-        rows: Iterable[Mapping[str, Any]],
-    ) -> M6ArtifactRecord:
+    ) -> M6MechanicalVerificationReceipt:
+        """Seal fact-only verification plus a fresh post-precursor challenge."""
+
         try:
             self._assert_complete_pending()
+            if self.profile.mode != OFFICIAL_MODE:
+                raise M6ResultStoreStateError(
+                    "persisted review requests are official-mode-only"
+                )
+            verification = issue_m6_mechanical_verification_receipt(self)
+            record = _write_json_artifact(
+                self.run_path,
+                REVIEW_REQUEST_PATH,
+                M6_MECHANICAL_VERIFICATION_SCHEMA_VERSION,
+                verification.to_dict(),
+            )
+            if record.path in self._artifacts:
+                raise FileExistsError(
+                    "mechanical verification receipt already exists"
+                )
+            self._artifacts[record.path] = record
+            return verification
+        except BaseException:
+            self._poison("mechanical_verification_write_failed")
+            raise
+
+    def seal_awaiting_review(
+        self,
+        *,
+        fresh_worker_peak_rss_bytes: int,
+    ) -> M6MechanicalVerificationReceipt:
+        """Seal an official precursor for later independent review."""
+
+        self._assert_complete_pending()
+        if self.profile.mode != OFFICIAL_MODE:
+            raise M6ResultStoreStateError(
+                "only official evidence can enter AWAITING_REVIEW"
+            )
+        receipt = self._require_receipt()
+        expected_paths = _expected_artifact_paths(receipt) - {
+            _DATASET_PATHS[REVIEW_DECISIONS],
+            _DATASET_PATHS[EXECUTION_SUMMARY],
+        }
+        if set(self._artifacts) != expected_paths:
+            raise M6ResultStoreStateError(
+                "AWAITING_REVIEW requires the complete sealed precursor"
+            )
+        if (
+            self._waymax_official_evidence_binding_sha256 is None
+            or self._waymax_numpy_eligibility_ledger_sha256 is None
+            or self._capability_nonce is None
+        ):
+            raise M6ResultStoreStateError(
+                "AWAITING_REVIEW lacks official execution bindings"
+            )
+        rss = _integer(
+            fresh_worker_peak_rss_bytes,
+            name="fresh_worker_peak_rss_bytes",
+            minimum=1,
+        )
+        verification = M6MechanicalVerificationReceipt.from_dict(
+            _decode_canonical_mapping(
+                _read_guarded_bytes(
+                    self.run_path / REVIEW_REQUEST_PATH,
+                    self.run_path,
+                ),
+                "mechanical verification receipt",
+            )
+        )
+        provenance = _normalize_typed_provenance(
+            self._read_dataset_rows(TYPED_PROVENANCE),
+            receipt,
+        )[0]
+        precursor_sha256 = _review_precursor_sha256(
+            receipt,
+            self.artifacts,
+        )
+        if (
+            verification.mode != OFFICIAL_MODE
+            or verification.result_path
+            != self.project_relative_path.as_posix()
+            or verification.approved_git_commit
+            != provenance["approved_git_commit"]
+            or verification.evidence_catalog_sha256 != precursor_sha256
+        ):
+            raise M6ResultStoreIntegrityError(
+                "review request differs from the sealed precursor"
+            )
+        assert verification.verification_sha256 is not None
+        payload = {
+            "approved_git_commit": verification.approved_git_commit,
+            "artifacts": [
+                record.to_dict() for record in self.artifacts
+            ],
+            "capability_preimage": self._capability_nonce.hex(),
+            "capability_sha256": self._capability_sha256,
+            "evidence_catalog_sha256": precursor_sha256,
+            "fresh_worker_peak_rss_bytes": rss,
+            "mechanical_verification_sha256": (
+                verification.verification_sha256
+            ),
+            "mode": OFFICIAL_MODE,
+            "result_path": self.project_relative_path.as_posix(),
+            "schema_version": M6_RESULT_STORE_SCHEMA_VERSION,
+            "state": "AWAITING_REVIEW",
+            "waymax_evidence_binding_sha256": (
+                self._waymax_official_evidence_binding_sha256
+            ),
+            "waymax_numpy_eligibility_ledger_sha256": (
+                self._waymax_numpy_eligibility_ledger_sha256
+            ),
+        }
+        awaiting_bytes = _canonical_json_bytes(payload)
+        _write_bytes_exclusive(
+            self.run_path / AWAITING_REVIEW_MARKER,
+            awaiting_bytes,
+            self.run_path,
+        )
+        self._phase = "awaiting_review"
+        self._awaiting_review_anchor_sha256 = hashlib.sha256(
+            awaiting_bytes
+        ).hexdigest()
+        self._awaiting_review_fresh_worker_peak_rss_bytes = rss
+        self._capability_nonce = None
+        return verification
+
+    def write_review_decisions(
+        self,
+        verification: M6MechanicalVerificationReceipt,
+        receipts: Sequence[M6ReviewDecisionReceipt],
+    ) -> M6ArtifactRecord:
+        """Seal explicit official reviewer decisions for one verified precursor."""
+
+        try:
+            self._assert_complete_reviewable()
+            if self.profile.data_free:
+                raise M6ResultStoreStateError(
+                    "data-free evidence has no independent review decisions"
+                )
             receipt = self._require_receipt()
+            if (
+                type(verification) is not M6MechanicalVerificationReceipt
+                or verification._factory_sentinel
+                is not _MECHANICAL_VERIFICATION_SENTINEL
+            ):
+                raise TypeError(
+                    "review decisions require exact mechanical verification"
+                )
+            verification.revalidate()
+            stored_verification = M6MechanicalVerificationReceipt.from_dict(
+                _decode_canonical_mapping(
+                    _read_guarded_bytes(
+                        self.run_path / REVIEW_REQUEST_PATH,
+                        self.run_path,
+                    ),
+                    "stored mechanical verification",
+                )
+            )
+            if stored_verification.to_dict() != verification.to_dict():
+                raise M6ResultStoreIntegrityError(
+                    "review decisions do not use the stored review request"
+                )
+            issued = tuple(receipts)
+            if (
+                len(issued) != len(M6_REVIEW_ROLE_DOMAIN)
+                or any(
+                    type(item) is not M6ReviewDecisionReceipt
+                    for item in issued
+                )
+                or tuple(item.role for item in issued)
+                != M6_REVIEW_ROLE_DOMAIN
+            ):
+                raise TypeError(
+                    "review writer requires the explicit ordered role domain"
+                )
             evidence_catalog_sha256 = _review_precursor_sha256(
                 receipt,
                 self.artifacts,
             )
-            caller_fields = tuple(
-                field.name
-                for field in REVIEW_DECISIONS_SCHEMA
-                if field.name != "evidence_catalog_sha256"
-            )
-            injected = tuple(
-                {
-                    **_exact_row(raw, caller_fields, REVIEW_DECISIONS),
-                    "evidence_catalog_sha256": evidence_catalog_sha256,
-                }
-                for raw in rows
-            )
+            provenance = _normalize_typed_provenance(
+                self._read_dataset_rows(TYPED_PROVENANCE),
+                receipt,
+            )[0]
+            approved_git_commit = provenance["approved_git_commit"]
+            if (
+                verification.mode != self.profile.mode
+                or verification.result_path
+                != self.project_relative_path.as_posix()
+                or verification.evidence_catalog_sha256
+                != evidence_catalog_sha256
+                or verification.approved_git_commit != approved_git_commit
+            ):
+                raise M6ResultStoreIntegrityError(
+                    "mechanical verification differs from the store precursor"
+                )
+            assert verification.verification_sha256 is not None
+            for item in issued:
+                item.revalidate()
+                if (
+                    item.mode != self.profile.mode
+                    or item.result_path
+                    != self.project_relative_path.as_posix()
+                    or item.evidence_catalog_sha256
+                    != evidence_catalog_sha256
+                    or item.approved_git_commit != approved_git_commit
+                    or item.mechanical_verification_sha256
+                    != verification.verification_sha256
+                    or item.review_challenge != verification.review_challenge
+                ):
+                    raise M6ResultStoreIntegrityError(
+                        "review decision differs from its exact verified precursor"
+                    )
             normalized = _normalize_review_decisions(
-                injected,
+                tuple(item.to_store_row() for item in issued),
                 receipt,
                 expected_evidence_catalog_sha256=(
                     evidence_catalog_sha256
+                ),
+                expected_approved_git_commit=approved_git_commit,
+                expected_mechanical_verification_sha256=(
+                    verification.verification_sha256
                 ),
             )
             return self._write_dataset(REVIEW_DECISIONS, normalized)
@@ -2363,10 +3684,47 @@ class M6ResultStore:
             self._poison("review_decisions_write_failed")
             raise
 
+    def write_data_free_review_absence(self) -> M6ArtifactRecord:
+        """Record an empty review domain, never synthetic reviewer acceptance."""
+
+        try:
+            self._assert_complete_pending()
+            if not self.profile.data_free:
+                raise M6ResultStoreStateError(
+                    "empty review evidence is data-free-only"
+                )
+            receipt = self._require_receipt()
+            _mechanically_verify_m6_precursor(self)
+            normalized = _normalize_review_decisions((), receipt)
+            return self._write_dataset(REVIEW_DECISIONS, normalized)
+        except BaseException:
+            self._poison("data_free_review_absence_write_failed")
+            raise
+
     def write_claim_limitations(self) -> M6ArtifactRecord:
         try:
             self._assert_complete_pending()
-            payload = _claim_limitations_payload(self.profile.mode)
+            receipt = self._require_receipt()
+            determinism = M6DeterminismReceipt.from_dict(
+                _decode_canonical_mapping(
+                    _read_guarded_bytes(
+                        self.run_path / DETERMINISM_RECEIPT_PATH,
+                        self.run_path,
+                    ),
+                    "claim/limitations determinism receipt",
+                )
+            )
+            claim_status = _derive_real_reactivity_claim_status(
+                receipt=receipt,
+                primary_matrix=self._read_dataset_rows(PRIMARY_MATRIX),
+                qualification=self._read_dataset_rows(WAYMAX_QUALIFICATION),
+                accounting=self._read_dataset_rows(WAYMAX_ACCOUNTING),
+                determinism=determinism,
+            )
+            payload = _claim_limitations_payload(
+                self.profile.mode,
+                claim_status,
+            )
             record = _write_json_artifact(
                 self.run_path,
                 CLAIM_LIMITATIONS_PATH,
@@ -2403,15 +3761,51 @@ class M6ResultStore:
 
     def commit(self) -> Path:
         try:
-            self._assert_pending_capability()
+            self._assert_commit_capability()
             receipt = self._require_receipt()
             self._require_complete_artifacts(receipt)
+            if self.profile.mode == OFFICIAL_MODE:
+                if (
+                    self._waymax_official_evidence_binding_sha256 is None
+                    or self._waymax_numpy_eligibility_ledger_sha256 is None
+                    or (
+                        self._phase != "awaiting_review"
+                        and self._waymax_official_evidence is None
+                    )
+                ):
+                    raise M6ResultStoreStateError(
+                        "official commit requires live or adopted sealed "
+                        "Waymax evidence bindings"
+                    )
+                waymax_evidence_binding_sha256 = (
+                    self._waymax_official_evidence_binding_sha256
+                )
+                waymax_numpy_eligibility_ledger_sha256 = (
+                    self._waymax_numpy_eligibility_ledger_sha256
+                )
+            elif self.profile.data_free:
+                waymax_evidence_binding_sha256 = None
+                waymax_numpy_eligibility_ledger_sha256 = (
+                    M6_DATA_FREE_WAYMAX_NUMPY_ELIGIBILITY_LEDGER_SHA256
+                )
+            else:
+                waymax_evidence_binding_sha256 = None
+                waymax_numpy_eligibility_ledger_sha256 = None
             _verify_uncommitted_artifacts(
                 self.run_path,
                 self.profile,
                 receipt,
                 self.artifacts,
                 waymax_selection=self._waymax_selection,
+                waymax_evidence_binding_sha256=(
+                    waymax_evidence_binding_sha256
+                ),
+                waymax_numpy_eligibility_ledger_sha256=(
+                    waymax_numpy_eligibility_ledger_sha256
+                ),
+                reopened_anchor_sha256=(
+                    self._awaiting_review_anchor_sha256
+                ),
             )
             row_domain_sha256 = _row_domain_sha256(receipt)
             schema_fingerprints = _schema_fingerprints_for_receipt(receipt)
@@ -2432,6 +3826,12 @@ class M6ResultStore:
                 "row_domain_sha256": row_domain_sha256,
                 "schema_fingerprints": schema_fingerprints,
                 "schema_version": M6_RESULT_STORE_SCHEMA_VERSION,
+                "waymax_evidence_binding_sha256": (
+                    waymax_evidence_binding_sha256
+                ),
+                "waymax_numpy_eligibility_ledger_sha256": (
+                    waymax_numpy_eligibility_ledger_sha256
+                ),
             }
             manifest_bytes = _canonical_json_bytes(manifest)
             _write_bytes_exclusive(
@@ -2473,39 +3873,79 @@ class M6ResultStore:
     ) -> Path:
         try:
             self._assert_committed_capability()
-            if not self.profile.data_free:
+            (
+                _verified,
+                manifest_sha256,
+                committed_sha256,
+                evidence_catalog_sha256,
+                provenance_context_sha256,
+            ) = _verified_committed_terminal_binding(self)
+            expected_terminal_binding = (
+                manifest_sha256,
+                committed_sha256,
+                evidence_catalog_sha256,
+                provenance_context_sha256,
+            )
+            writer_capability_preimage = self._capability_nonce
+            if (
+                type(writer_capability_preimage) is not bytes
+                or len(writer_capability_preimage) != 32
+                or hashlib.sha256(writer_capability_preimage).hexdigest()
+                != self._capability_sha256
+            ):
                 raise M6ResultStoreStateError(
-                    "non-data-free terminal success is disabled until the "
-                    "official M6 verifier/CLI is implemented and reviewed"
+                    "writer capability preimage no longer matches PENDING"
                 )
-            verify_committed_m6_result_store(
-                self.project_root,
-                self.run_name,
-                allow_data_free=self.profile.data_free,
-                expected_mode=self.profile.mode,
-            )
-            manifest_bytes = _read_guarded_bytes(
-                self.run_path / MANIFEST_PATH,
-                self.run_path,
-            )
-            committed_bytes = _read_guarded_bytes(
-                self.run_path / COMMITTED_MARKER,
-                self.run_path,
-            )
-            manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
-            committed_sha256 = hashlib.sha256(committed_bytes).hexdigest()
-            if capability is not None:
-                raise M6ResultStoreStateError(
-                    "data_free success self-verifies and accepts no external "
-                    "terminal capability"
+            if self.profile.data_free:
+                if capability is not None:
+                    raise M6ResultStoreStateError(
+                        "data_free success self-verifies and accepts no external "
+                        "terminal capability"
+                    )
+                observed_preflight_sha256 = hashlib.sha256(
+                    b"evalsim-m6-data-free-self-verification-v2\x00"
+                    + bytes.fromhex(manifest_sha256)
+                    + bytes.fromhex(committed_sha256)
+                    + bytes.fromhex(evidence_catalog_sha256)
+                    + bytes.fromhex(provenance_context_sha256)
+                ).hexdigest()
+            else:
+                if (
+                    type(capability) is not M6TerminalCapability
+                    or capability is not self._issued_terminal_capability
+                    or self._issued_terminal_capability_nonce_sha256 is None
+                    or hashlib.sha256(capability.nonce).hexdigest()
+                    != self._issued_terminal_capability_nonce_sha256
+                ):
+                    raise M6ResultStoreStateError(
+                        "terminal success requires this store's one-use verifier "
+                        "capability"
+                    )
+                expected_observed = _expected_m6_observed_preflight(
+                    mode=self.profile.mode,
+                    result_path=self.project_relative_path.as_posix(),
+                    manifest_sha256=manifest_sha256,
+                    committed_sha256=committed_sha256,
+                    evidence_catalog_sha256=evidence_catalog_sha256,
+                    provenance_context_sha256=provenance_context_sha256,
                 )
-            evidence_catalog_sha256 = self._review_evidence_catalog_sha256()
-            observed_preflight_sha256 = hashlib.sha256(
-                b"evalsim-m6-data-free-self-verification-v1\x00"
-                + bytes.fromhex(manifest_sha256)
-                + bytes.fromhex(committed_sha256)
-                + bytes.fromhex(evidence_catalog_sha256)
-            ).hexdigest()
+                if (
+                    capability.mode != self.profile.mode
+                    or capability.result_path
+                    != self.project_relative_path.as_posix()
+                    or capability.manifest_sha256 != manifest_sha256
+                    or capability.committed_sha256 != committed_sha256
+                    or capability.evidence_catalog_sha256
+                    != evidence_catalog_sha256
+                    or capability.provenance_context_sha256
+                    != provenance_context_sha256
+                    or capability.observed_preflight_sha256
+                    != expected_observed.canonical_sha256
+                ):
+                    raise M6ResultStoreIntegrityError(
+                        "terminal capability binding drifted"
+                    )
+                observed_preflight_sha256 = capability.observed_preflight_sha256
             success_bytes = _canonical_json_bytes(
                 {
                     "committed_sha256": committed_sha256,
@@ -2513,37 +3953,58 @@ class M6ResultStore:
                     "manifest_sha256": manifest_sha256,
                     "mode": self.profile.mode,
                     "observed_preflight_sha256": observed_preflight_sha256,
+                    "provenance_context_sha256": provenance_context_sha256,
                     "schema_version": M6_RESULT_STORE_SCHEMA_VERSION,
                     "state": "TERMINAL_SUCCESS",
+                    "writer_capability_preimage": (
+                        writer_capability_preimage.hex()
+                    ),
                 }
             )
         except BaseException:
-            if self._phase != "failure":
+            if self._phase not in {"failure", "success", "ambiguous"}:
                 self._poison("pre_terminal_verification_failed")
             raise
 
-        # This is deliberately the last fallible operation.  A post-create fsync
+        # This is deliberately the last fallible operation. A post-create fsync
         # error is reconciled as success only if the exact guarded marker exists.
+        def revalidate_terminal_catalog() -> None:
+            current = _verified_committed_terminal_binding(self)
+            if current[1:] != expected_terminal_binding:
+                raise M6ResultStoreIntegrityError(
+                    "authenticated catalog changed at terminal writer boundary"
+                )
+
         try:
             _write_terminal_success_final(
                 self.run_path / TERMINAL_SUCCESS_MARKER,
                 success_bytes,
                 self.run_path,
+                revalidate=revalidate_terminal_catalog,
             )
+            reopened = verify_m6_result_store(
+                self.project_root,
+                self.run_name,
+                allow_data_free=self.profile.data_free,
+                expected_mode=self.profile.mode,
+            )
+            if reopened.run_path != self.run_path:
+                raise M6ResultStoreIntegrityError(
+                    "terminal verification reopened a different store"
+                )
         except BaseException:
-            if _path_kind(
-                self.run_path / TERMINAL_SUCCESS_MARKER
-            ) == "missing":
+            if _path_kind(self.run_path / TERMINAL_SUCCESS_MARKER) == "missing":
                 self._poison("terminal_success_write_failed")
             else:
-                # The marker exists but directory durability could not be
-                # established.  This writer is permanently ambiguous and must not
-                # report success or create a contradictory failure marker.
                 self._phase = "ambiguous"
                 self._capability_nonce = None
+                self._issued_terminal_capability = None
+                self._issued_terminal_capability_nonce_sha256 = None
             raise
         self._phase = "success"
         self._capability_nonce = None
+        self._issued_terminal_capability = None
+        self._issued_terminal_capability_nonce_sha256 = None
         return self.run_path
 
     def finalize(self) -> Path:
@@ -2556,8 +4017,151 @@ class M6ResultStore:
         return self.mark_terminal_success()
 
     def fail(self, reason_code: str) -> Path:
+        if reason_code == "review_rejected":
+            return self._fail_rejected_review()
         self._assert_not_successful()
         return self._poison(reason_code)
+
+    def _fail_rejected_review(self) -> Path:
+        failure_path = self.run_path / TERMINAL_FAILURE_MARKER
+        if self._phase == "failure" and _path_kind(failure_path) == "file":
+            return failure_path
+        self._assert_awaiting_review_capability()
+        receipt = self._require_receipt()
+        if receipt.mode != OFFICIAL_MODE:
+            raise M6ResultStoreStateError(
+                "review rejection is official-mode-only"
+            )
+        required = {
+            REVIEW_REQUEST_PATH,
+            _DATASET_PATHS[REVIEW_DECISIONS],
+            _DATASET_PATHS[EXECUTION_SUMMARY],
+        }
+        if not required.issubset(self._artifacts):
+            raise M6ResultStoreStateError(
+                "review rejection requires sealed decisions and execution summary"
+            )
+        verification = M6MechanicalVerificationReceipt.from_dict(
+            _decode_canonical_mapping(
+                _read_guarded_bytes(
+                    self.run_path / REVIEW_REQUEST_PATH,
+                    self.run_path,
+                ),
+                "rejected review mechanical verification",
+            )
+        )
+        assert verification.verification_sha256 is not None
+        evidence_catalog_sha256 = _review_precursor_sha256(
+            receipt,
+            self.artifacts,
+        )
+        provenance = _normalize_typed_provenance(
+            self._read_dataset_rows(TYPED_PROVENANCE),
+            receipt,
+        )[0]
+        reviews = _normalize_review_decisions(
+            self._read_dataset_rows(REVIEW_DECISIONS),
+            receipt,
+            expected_evidence_catalog_sha256=evidence_catalog_sha256,
+            expected_approved_git_commit=provenance["approved_git_commit"],
+            expected_mechanical_verification_sha256=(
+                verification.verification_sha256
+            ),
+        )
+        execution = _normalize_execution_summary(
+            self._read_dataset_rows(EXECUTION_SUMMARY),
+            receipt,
+        )[0]
+        if (
+            execution["release_gate_status"] != "rejected"
+            or all(
+                row["decision"] == "accept"
+                and row["p1_count"] == 0
+                and row["p2_count"] == 0
+                for row in reviews
+            )
+        ):
+            raise M6ResultStoreIntegrityError(
+                "review_rejected requires explicit blocking review evidence"
+            )
+        awaiting_digest, awaiting_size = _guarded_sha256(
+            self.run_path / AWAITING_REVIEW_MARKER,
+            self.run_path,
+        )
+        bound_records = tuple(
+            sorted(
+                (
+                    M6ArtifactRecord(
+                        path=AWAITING_REVIEW_MARKER,
+                        schema_identity=(
+                            f"{M6_RESULT_STORE_SCHEMA_VERSION}:awaiting-review"
+                        ),
+                        rows=None,
+                        size_bytes=awaiting_size,
+                        sha256=awaiting_digest,
+                    ),
+                    self._artifacts[REVIEW_REQUEST_PATH],
+                    self._artifacts[_DATASET_PATHS[REVIEW_DECISIONS]],
+                    self._artifacts[_DATASET_PATHS[EXECUTION_SUMMARY]],
+                ),
+                key=lambda record: record.path,
+            )
+        )
+        payload = _canonical_json_bytes(
+            {
+                "artifacts": [record.to_dict() for record in bound_records],
+                "evidence_catalog_sha256": evidence_catalog_sha256,
+                "mechanical_verification_sha256": (
+                    verification.verification_sha256
+                ),
+                "mode": OFFICIAL_MODE,
+                "reason_code": "review_rejected",
+                "result_path": self.project_relative_path.as_posix(),
+                "schema_version": M6_RESULT_STORE_SCHEMA_VERSION,
+                "state": "TERMINAL_FAILURE",
+            }
+        )
+        _write_bytes_exclusive(failure_path, payload, self.run_path)
+        self._phase = "failure"
+        self._capability_nonce = None
+        self._issued_terminal_capability = None
+        self._issued_terminal_capability_nonce_sha256 = None
+        return failure_path
+
+    def _invalidate_terminal_status_failure(self, reason_code: str) -> Path:
+        """Make a store non-promotable when terminal status delivery fails.
+
+        A terminal-success marker is immutable. If delivery fails after that
+        irreversible write, add the contradictory failure marker deliberately;
+        marker-exclusivity verification then rejects the store permanently.
+        Before success this uses the ordinary terminal-failure transition.
+        """
+
+        if type(reason_code) is not str or _REASON_CODE.fullmatch(reason_code) is None:
+            reason_code = "terminal_capture_failed"
+        success_path = self.run_path / TERMINAL_SUCCESS_MARKER
+        if _path_kind(success_path) == "missing":
+            return self.fail(reason_code)
+        _guard_run_directory(self.run_path)
+        _read_guarded_bytes(success_path, self.run_path)
+        failure_path = self.run_path / TERMINAL_FAILURE_MARKER
+        payload = _canonical_json_bytes(
+            {
+                "mode": self.profile.mode,
+                "reason_code": reason_code,
+                "schema_version": M6_RESULT_STORE_SCHEMA_VERSION,
+                "state": "TERMINAL_FAILURE",
+            }
+        )
+        if _path_kind(failure_path) == "missing":
+            _write_bytes_exclusive(failure_path, payload, self.run_path)
+        else:
+            _read_guarded_bytes(failure_path, self.run_path)
+        self._phase = "failure"
+        self._capability_nonce = None
+        self._issued_terminal_capability = None
+        self._issued_terminal_capability_nonce_sha256 = None
+        return failure_path
 
     def _write_complete_dataset(
         self,
@@ -2582,7 +4186,7 @@ class M6ResultStore:
         name: str,
         rows: Sequence[Mapping[str, Any]],
     ) -> M6ArtifactRecord:
-        self._assert_pending_capability()
+        self._assert_commit_capability()
         path_name = _DATASET_PATHS[name]
         if path_name in self._artifacts or os.path.lexists(
             self.run_path / path_name
@@ -2722,6 +4326,73 @@ class M6ResultStore:
             )
         return self._receipt
 
+    def _bind_waymax_official_evidence(
+        self,
+        evidence: M6WaymaxOfficialEvidence | None,
+    ) -> M6WaymaxOfficialEvidence:
+        if type(evidence) is not M6WaymaxOfficialEvidence:
+            raise TypeError(
+                "official Waymax artifacts require one shared runner-issued "
+                "M6WaymaxOfficialEvidence bundle"
+            )
+        evidence.revalidate()
+        selection = self._waymax_selection
+        selection_receipt = self._require_waymax_selection_receipt()
+        binding = evidence.evidence_binding_sha256
+        if type(binding) is not str or _SHA256.fullmatch(binding) is None:
+            raise M6ResultStoreIntegrityError(
+                "official Waymax evidence binding is invalid"
+            )
+        if (
+            evidence.production_authoritative is not True
+            or evidence.selection is not selection
+            or evidence.selection.primary_domain_sha256
+            != selection_receipt.primary_domain_sha256
+            or evidence.selection.selection_sha256
+            != selection_receipt.selector_selection_sha256
+            or evidence.supported
+            is not selection_receipt.selection_supported
+            or (
+                evidence.supported
+                and evidence.promotable is not True
+            )
+            or (
+                not evidence.supported
+                and evidence.promotable is not False
+            )
+        ):
+            raise M6ResultStoreIntegrityError(
+                "official Waymax evidence differs from the sealed selection "
+                "or is not production-authoritative"
+            )
+        numpy_eligibility_sha256 = (
+            evidence.numpy_comparisons.numpy_eligibility_ledger_sha256
+        )
+        if (
+            type(numpy_eligibility_sha256) is not str
+            or _SHA256.fullmatch(numpy_eligibility_sha256) is None
+        ):
+            raise M6ResultStoreIntegrityError(
+                "official NumPy eligibility binding is invalid"
+            )
+        if self._waymax_official_evidence is None:
+            self._waymax_official_evidence = evidence
+            self._waymax_official_evidence_binding_sha256 = binding
+            self._waymax_numpy_eligibility_ledger_sha256 = (
+                numpy_eligibility_sha256
+            )
+        elif (
+            evidence is not self._waymax_official_evidence
+            or binding != self._waymax_official_evidence_binding_sha256
+            or numpy_eligibility_sha256
+            != self._waymax_numpy_eligibility_ledger_sha256
+        ):
+            raise M6ResultStoreIntegrityError(
+                "official Waymax artifacts must share one exact evidence "
+                "bundle and authority"
+            )
+        return evidence
+
     def _require_waymax_selection_receipt(
         self,
     ) -> M6WaymaxSelectionReceipt:
@@ -2738,6 +4409,76 @@ class M6ResultStore:
                 "complete-result artifact is unavailable in this mode"
             )
         self._require_receipt()
+
+    def _assert_complete_reviewable(self) -> None:
+        if self.profile.data_free:
+            self._assert_complete_pending()
+            return
+        self._assert_awaiting_review_capability()
+        if self.profile.mode != OFFICIAL_MODE:
+            raise M6ResultStoreStateError(
+                "only official evidence can resume independent review"
+            )
+        self._require_receipt()
+
+    def _assert_awaiting_review_capability(self) -> None:
+        if (
+            self._phase != "awaiting_review"
+            or self._capability_nonce is None
+            or self._awaiting_review_anchor_sha256 is None
+        ):
+            raise M6ResultStoreStateError(
+                "writer is not an adopted AWAITING_REVIEW store"
+            )
+        if hashlib.sha256(self._capability_nonce).hexdigest() != (
+            self._capability_sha256
+        ):
+            raise M6ResultStoreStateError(
+                "AWAITING_REVIEW capability no longer matches"
+            )
+        _guard_run_directory(self.run_path)
+        if any(
+            _path_kind(self.run_path / name) != "missing"
+            for name in (
+                COMMITTED_MARKER,
+                TERMINAL_SUCCESS_MARKER,
+                TERMINAL_FAILURE_MARKER,
+            )
+        ):
+            raise M6ResultStoreStateError(
+                "AWAITING_REVIEW has an unexpected terminal marker"
+            )
+        expected_pending = _canonical_json_bytes(
+            _pending_payload(
+                self.run_name,
+                self.profile,
+                self._capability_sha256,
+            )
+        )
+        if not _guarded_exact_bytes(
+            self.run_path / PENDING_MARKER,
+            expected_pending,
+            self.run_path,
+        ):
+            raise M6ResultStoreStateError(
+                "AWAITING_REVIEW PENDING binding drifted"
+            )
+        awaiting_bytes = _read_guarded_bytes(
+            self.run_path / AWAITING_REVIEW_MARKER,
+            self.run_path,
+        )
+        if hashlib.sha256(awaiting_bytes).hexdigest() != (
+            self._awaiting_review_anchor_sha256
+        ):
+            raise M6ResultStoreStateError(
+                "AWAITING_REVIEW marker changed after adoption"
+            )
+
+    def _assert_commit_capability(self) -> None:
+        if self._phase == "pending":
+            self._assert_pending_capability()
+        else:
+            self._assert_awaiting_review_capability()
 
     def _assert_pending_capability(self) -> None:
         if self._phase != "pending" or self._capability_nonce is None:
@@ -2826,6 +4567,8 @@ class M6ResultStore:
         if _path_kind(self.run_path) != "directory":
             self._phase = "failure"
             self._capability_nonce = None
+            self._issued_terminal_capability = None
+            self._issued_terminal_capability_nonce_sha256 = None
             return failure_path
         if _path_kind(self.run_path / TERMINAL_SUCCESS_MARKER) != "missing":
             raise M6ResultStoreStateError(
@@ -2855,7 +4598,387 @@ class M6ResultStore:
             )
         self._phase = "failure"
         self._capability_nonce = None
+        self._issued_terminal_capability = None
+        self._issued_terminal_capability_nonce_sha256 = None
         return failure_path
+
+
+def issue_m6_mechanical_verification_receipt(
+    store: M6ResultStore,
+) -> M6MechanicalVerificationReceipt:
+    """Verify sealed precursor facts without making a review decision."""
+
+    if type(store) is not M6ResultStore:
+        raise TypeError(
+            "mechanical verification requires an M6ResultStore"
+        )
+    store._assert_complete_pending()
+    precursor_sha256, approved_git_commit = (
+        _mechanically_verify_m6_precursor(store)
+    )
+    return M6MechanicalVerificationReceipt(
+        mode=store.profile.mode,
+        result_path=store.project_relative_path.as_posix(),
+        approved_git_commit=approved_git_commit,
+        evidence_catalog_sha256=precursor_sha256,
+        review_challenge=secrets.token_hex(32),
+        _factory_sentinel=_MECHANICAL_VERIFICATION_SENTINEL,
+    )
+
+
+def issue_m6_review_decision(
+    verification: M6MechanicalVerificationReceipt,
+    *,
+    role: str,
+    decision: str,
+    p1_count: int,
+    p2_count: int,
+    p3_count: int,
+) -> M6ReviewDecisionReceipt:
+    """Issue one explicit decision after fact-only precursor verification."""
+
+    if (
+        type(verification) is not M6MechanicalVerificationReceipt
+        or verification._factory_sentinel
+        is not _MECHANICAL_VERIFICATION_SENTINEL
+    ):
+        raise TypeError(
+            "review decisions require a verifier-issued precursor receipt"
+        )
+    verification.revalidate()
+    if verification.mode == DATA_FREE_MODE:
+        raise M6ResultStoreStateError(
+            "data-free evidence cannot claim independent result review"
+        )
+    assert verification.verification_sha256 is not None
+    return M6ReviewDecisionReceipt(
+        mode=verification.mode,
+        result_path=verification.result_path,
+        role=role,
+        approved_git_commit=verification.approved_git_commit,
+        evidence_catalog_sha256=verification.evidence_catalog_sha256,
+        mechanical_verification_sha256=(
+            verification.verification_sha256
+        ),
+        review_challenge=verification.review_challenge,
+        decision=decision,
+        p1_count=p1_count,
+        p2_count=p2_count,
+        p3_count=p3_count,
+        _factory_sentinel=_REVIEW_DECISION_SENTINEL,
+    )
+
+
+def _mechanically_verify_m6_precursor(
+    store: M6ResultStore,
+) -> tuple[str, str]:
+    """Authenticate and mechanically verify every pre-decision artifact."""
+
+    receipt = store._require_receipt()
+    excluded = {
+        _DATASET_PATHS[REVIEW_DECISIONS],
+        _DATASET_PATHS[EXECUTION_SUMMARY],
+        REVIEW_REQUEST_PATH,
+    }
+    expected_paths = _expected_artifact_paths(receipt) - excluded
+    records = store.artifacts
+    if {record.path for record in records} != expected_paths:
+        raise M6ResultStoreStateError(
+            "mechanical verification requires the complete sealed precursor"
+        )
+    allowed = {PENDING_MARKER, *expected_paths}
+    _validate_run_tree(store.run_path, allowed_files=allowed)
+    snapshots = _authenticated_artifact_snapshots(store.run_path, records)
+    tables: dict[str, pa.Table] = {}
+    for record in records:
+        dataset = _dataset_for_path(record.path)
+        if dataset is None:
+            continue
+        table = _parse_guarded_parquet_payload(
+            snapshots[record.path].payload,
+            dataset,
+        )
+        if table.num_rows != record.rows:
+            raise M6ResultStoreIntegrityError(
+                "mechanical verification row authentication failed"
+            )
+        tables[dataset] = table
+
+    disk_receipt = M6EligibilityReceipt.from_dict(
+        _decode_canonical_mapping(
+            snapshots[ELIGIBILITY_RECEIPT_PATH].payload,
+            "mechanical-verification eligibility receipt",
+        )
+    )
+    selection_receipt = M6WaymaxSelectionReceipt.from_dict(
+        _decode_canonical_mapping(
+            snapshots[WAYMAX_SELECTION_RECEIPT_PATH].payload,
+            "mechanical-verification Waymax selection receipt",
+        )
+    )
+    if disk_receipt.to_dict() != receipt.to_dict():
+        raise M6ResultStoreIntegrityError(
+            "mechanical-verification receipt differs from writer state"
+        )
+
+    # Architecture fact checks: exact authority, row domains, deterministic repeat,
+    # and negative/timing gates.
+    eligibility = _normalize_eligibility(
+        tables[ELIGIBILITY_LEDGER].to_pylist(),
+        store.profile,
+        expected_receipt=receipt,
+    )
+    qualification = _normalize_waymax_qualification(
+        tables[WAYMAX_QUALIFICATION].to_pylist(),
+        receipt,
+    )
+    if store.profile.mode == OFFICIAL_MODE:
+        evidence = store._waymax_official_evidence
+        if (
+            type(evidence) is not M6WaymaxOfficialEvidence
+            or store._waymax_official_evidence_binding_sha256 is None
+            or evidence.evidence_binding_sha256
+            != store._waymax_official_evidence_binding_sha256
+        ):
+            raise M6ResultStoreIntegrityError(
+                "architecture verification lacks shared official Waymax authority"
+            )
+        evidence.revalidate()
+        _verify_waymax_selection_receipt_against_selection(
+            selection_receipt,
+            evidence.selection,
+            receipt,
+        )
+    elif store.profile.data_free:
+        if store._waymax_official_evidence is not None:
+            raise M6ResultStoreIntegrityError(
+                "data_free architecture verification received live Waymax evidence"
+            )
+    observations = _normalize_negative_timing_observations(
+        tables[NEGATIVE_TIMING_OBSERVATIONS].to_pylist(),
+        receipt,
+    )
+    gates = _normalize_negative_timing_gates(
+        tables[NEGATIVE_TIMING_GATES].to_pylist(),
+        receipt,
+    )
+    if gates != _derive_negative_timing_gates(observations, receipt):
+        raise M6ResultStoreIntegrityError(
+            "architecture verification could not reproduce negative/timing gates"
+        )
+    if any(row["status"] == "failed" or row["violation_n"] for row in gates):
+        raise M6ResultStoreIntegrityError(
+            "architecture verification found a failed negative/timing gate"
+        )
+    _normalize_waymax_determinism_from_qualification(
+        tables[WAYMAX_DETERMINISM].to_pylist(),
+        receipt,
+        qualification,
+    )
+    stored_determinism = M6DeterminismReceipt.from_dict(
+        _decode_canonical_mapping(
+            snapshots[DETERMINISM_RECEIPT_PATH].payload,
+            "mechanical-verification determinism receipt",
+        )
+    )
+    derived_determinism = store._derive_determinism_receipt()
+    store._validate_determinism_receipt(stored_determinism)
+    if stored_determinism.to_dict() != derived_determinism.to_dict():
+        raise M6ResultStoreIntegrityError(
+            "architecture verification could not reproduce determinism receipt"
+        )
+    _normalize_stage_timings(
+        tables[STAGE_TIMINGS].to_pylist(),
+        receipt,
+    )
+
+    # Methods/statistics fact checks: derive matrices, null semantics, and all eight Waymax
+    # numeric/status cells from the sealed scene-level evidence.
+    primary = _normalize_primary_scene_scalars(
+        tables[PRIMARY_SCENE_SCALARS].to_pylist(),
+        receipt,
+    )
+    primary_matrix = _normalize_primary_matrix(
+        tables[PRIMARY_MATRIX].to_pylist(),
+        receipt,
+    )
+    repeat = _normalize_primary_scene_scalars(
+        tables[PRIMARY_REPEAT_SCENE_SCALARS].to_pylist(),
+        receipt,
+    )
+    repeat_matrix = _normalize_primary_matrix(
+        tables[PRIMARY_REPEAT_MATRIX].to_pylist(),
+        receipt,
+    )
+    if (
+        primary_matrix != _derive_primary_matrix_rows(primary, receipt)
+        or repeat_matrix != _derive_primary_matrix_rows(repeat, receipt)
+        or _canonical_rows_sha256(PRIMARY_SCENE_SCALARS, primary)
+        != _canonical_rows_sha256(PRIMARY_SCENE_SCALARS, repeat)
+        or _canonical_rows_sha256(PRIMARY_MATRIX, primary_matrix)
+        != _canonical_rows_sha256(PRIMARY_MATRIX, repeat_matrix)
+    ):
+        raise M6ResultStoreIntegrityError(
+            "methods verification could not reproduce primary statistics"
+        )
+    secondary = _normalize_secondary_scene_scalars(
+        tables[SECONDARY_SCENE_SCALARS].to_pylist(),
+        receipt,
+    )
+    secondary_matrix = _normalize_secondary_matrix(
+        tables[SECONDARY_MATRIX].to_pylist(),
+        receipt,
+    )
+    if secondary_matrix != _derive_secondary_matrix_rows(secondary, receipt):
+        raise M6ResultStoreIntegrityError(
+            "methods verification could not reproduce secondary statistics"
+        )
+    if store.profile.mode == OFFICIAL_MODE:
+        assert store._waymax_official_evidence is not None
+        numpy_source = store._waymax_official_evidence._numpy_evidence
+        numpy_source.typed_result.revalidate()
+        if (
+            tuple(dict(row) for row in numpy_source.eligibility_rows)
+            != eligibility
+            or tuple(
+                dict(row)
+                for row in numpy_source.primary_scene_scalar_rows
+            )
+            != primary
+            or tuple(
+                dict(row)
+                for row in numpy_source.primary_repeat_scene_scalar_rows
+            )
+            != repeat
+            or tuple(
+                dict(row)
+                for row in numpy_source.secondary_scene_scalar_rows
+            )
+            != secondary
+            or tuple(
+                dict(row)
+                for row in numpy_source.negative_timing_observation_rows
+            )
+            != observations
+        ):
+            raise M6ResultStoreIntegrityError(
+                "methods verification found mixed NumPy and Waymax authorities"
+            )
+    scalar_rows = _normalize_waymax_scene_scalars_from_qualification(
+        tables[WAYMAX_SCENE_SCALARS].to_pylist(),
+        receipt,
+        qualification,
+        selection_receipt,
+    )
+    parsed_scalars = parse_m6_waymax_scene_scalar_table(scalar_rows)
+    parsed_scalars.revalidate()
+    rederived_cells = _independently_rederive_waymax_cell_rows(
+        parsed_scalars,
+        receipt,
+    )
+    comparison_rows = _normalize_waymax_field_comparisons_from_qualification(
+        tables[WAYMAX_FIELD_COMPARISONS].to_pylist(),
+        receipt,
+        qualification,
+    )
+    expected_numpy_digest = (
+        M6_DATA_FREE_WAYMAX_NUMPY_ELIGIBILITY_LEDGER_SHA256
+        if store.profile.data_free
+        else store._waymax_numpy_eligibility_ledger_sha256
+    )
+    if expected_numpy_digest is None:
+        raise M6ResultStoreIntegrityError(
+            "methods verification lacks the sealed NumPy eligibility digest"
+        )
+    _normalize_waymax_numpy_comparisons_from_qualification(
+        tables[WAYMAX_NUMPY_COMPARISONS].to_pylist(),
+        receipt,
+        eligibility,
+        qualification,
+        selection_receipt,
+        expected_numpy_eligibility_sha256=expected_numpy_digest,
+    )
+    accounting = _normalize_waymax_accounting(
+        tables[WAYMAX_ACCOUNTING].to_pylist(),
+        receipt,
+    )
+    stored_cells = tuple(
+        row for row in accounting if row["record_type"] == "secondary_cell"
+    )
+    if stored_cells != rederived_cells or accounting != _derive_waymax_accounting(
+        qualification,
+        scalar_rows,
+        comparison_rows,
+        receipt,
+        selection_receipt,
+        matrix=None,
+        stored_cell_rows=rederived_cells,
+    ):
+        raise M6ResultStoreIntegrityError(
+            "methods verification could not independently reproduce Waymax cells"
+        )
+
+    # Privacy/claim fact checks: construct only the promoted projections and scan every
+    # key/value. The local NumPy comparison table and its row-count field are
+    # deliberately absent from this projection.
+    claim = _decode_canonical_mapping(
+        snapshots[CLAIM_LIMITATIONS_PATH].payload,
+        "mechanical-verification claim/limitations",
+    )
+    derived_claim_status = _derive_real_reactivity_claim_status(
+        receipt=receipt,
+        primary_matrix=primary_matrix,
+        qualification=qualification,
+        accounting=accounting,
+        determinism=stored_determinism,
+    )
+    if claim != _claim_limitations_payload(
+        store.profile.mode,
+        derived_claim_status,
+    ):
+        raise M6ResultStoreIntegrityError(
+            "privacy verification found claim/limitations drift"
+        )
+    privacy_projection = {
+        "claim_and_limitations": claim,
+        "negative_control_and_timing_gates": [
+            {
+                "assessed_n": row["assessed_n"],
+                "gate_name": row["gate_name"],
+                "passed_n": row["passed_n"],
+                "status": row["status"],
+                "violation_n": row["violation_n"],
+            }
+            for row in gates
+        ],
+        "primary_matrix": [
+            _promoted_primary_row(row) for row in primary_matrix
+        ],
+        "waymax_scope": _promoted_waymax_scope(accounting),
+    }
+    _assert_promoted_privacy(privacy_projection)
+    public_bytes = _canonical_json_bytes(privacy_projection)
+    if (
+        WAYMAX_NUMPY_COMPARISONS.encode("ascii") in public_bytes
+        or b"waymax_numpy_comparison_rows" in public_bytes
+    ):
+        raise M6ResultStoreIntegrityError(
+            "privacy verification found local-only NumPy evidence in publication"
+        )
+
+    provenance = _normalize_typed_provenance(
+        tables[TYPED_PROVENANCE].to_pylist(),
+        receipt,
+    )[0]
+    precursor_sha256 = _review_precursor_sha256(receipt, records)
+    _validate_run_tree(store.run_path, allowed_files=allowed)
+    for path_name, snapshot in snapshots.items():
+        _assert_guarded_snapshot_current(
+            store.run_path / path_name,
+            store.run_path,
+            snapshot,
+        )
+    return precursor_sha256, provenance["approved_git_commit"]
 
 
 def _make_m6_observed_preflight_result(
@@ -2878,16 +5001,73 @@ def _make_m6_observed_preflight_result(
 def _mint_m6_terminal_capability(
     store: M6ResultStore,
     observed: M6ObservedPreflightResult,
+    verified_provenance: M6VerifiedProvenance,
 ) -> M6TerminalCapability:
-    """Disabled until the official verifier can issue observed capabilities."""
+    """Mint one verifier-bound, one-use authority for an exact COMMITTED store."""
 
-    del observed
-    if not isinstance(store, M6ResultStore):
-        raise TypeError("store must be an M6ResultStore")
-    raise M6ResultStoreStateError(
-        "terminal capability minting is disabled until the official M6 "
-        "verifier/CLI exists"
-    )
+    if type(store) is not M6ResultStore:
+        raise TypeError("store must be an exact M6ResultStore")
+    try:
+        store._assert_committed_capability()
+        if store.profile.data_free:
+            raise M6ResultStoreStateError(
+                "data_free terminalization self-verifies"
+            )
+        if store._issued_terminal_capability is not None:
+            raise M6ResultStoreStateError(
+                "a terminal capability was already issued"
+            )
+        if (
+            type(observed) is not M6ObservedPreflightResult
+            or observed._factory_sentinel is not _OBSERVED_PREFLIGHT_SENTINEL
+        ):
+            raise M6ResultStoreStateError(
+                "terminal capability requires a verifier-minted observation"
+            )
+        (
+            _verified,
+            manifest_sha256,
+            committed_sha256,
+            evidence_catalog_sha256,
+            provenance_context_sha256,
+        ) = _verified_committed_terminal_binding(store)
+        _verify_m6_committed_provenance(
+            _verified,
+            verified_provenance,
+        )
+        expected_observed = _expected_m6_observed_preflight(
+            mode=store.profile.mode,
+            result_path=store.project_relative_path.as_posix(),
+            manifest_sha256=manifest_sha256,
+            committed_sha256=committed_sha256,
+            evidence_catalog_sha256=evidence_catalog_sha256,
+            provenance_context_sha256=provenance_context_sha256,
+        )
+        if observed != expected_observed:
+            raise M6ResultStoreIntegrityError(
+                "verifier observation does not bind the exact committed store"
+            )
+        nonce = secrets.token_bytes(32)
+        capability = M6TerminalCapability(
+            mode=store.profile.mode,
+            result_path=store.project_relative_path.as_posix(),
+            manifest_sha256=manifest_sha256,
+            committed_sha256=committed_sha256,
+            evidence_catalog_sha256=evidence_catalog_sha256,
+            provenance_context_sha256=provenance_context_sha256,
+            observed_preflight_sha256=expected_observed.canonical_sha256,
+            nonce=nonce,
+            _factory_sentinel=_TERMINAL_CAPABILITY_SENTINEL,
+        )
+        store._issued_terminal_capability = capability
+        store._issued_terminal_capability_nonce_sha256 = hashlib.sha256(
+            nonce
+        ).hexdigest()
+        return capability
+    except BaseException:
+        if store._phase == "committed":
+            store._poison("terminal_capability_mint_failed")
+        raise
 
 
 def _normalize_eligibility(
@@ -2987,9 +5167,156 @@ def _normalize_eligibility(
     return tuple(normalized)
 
 
+def m6_compute_pilot_report_binding_sha256(
+    *,
+    run_name: str,
+    result_path: str,
+    provenance_context_sha256: str,
+    selection_binding_sha256: str,
+    selected_cohort_indices_sha256: str,
+    numpy_observation_content_sha256: str,
+    waymax_observation_content_sha256: str,
+    summary: Mapping[str, Any],
+) -> str:
+    """Bind the stable command report without persisting process identities."""
+
+    name = _validated_run_name(run_name)
+    path = _validate_m6_result_path_text(result_path)
+    if path != f"outputs/m6/{name}":
+        raise M6ResultStoreIntegrityError(
+            "compute pilot run name/result path disagree"
+        )
+    bindings = {
+        "provenance_context_sha256": provenance_context_sha256,
+        "selection_binding_sha256": selection_binding_sha256,
+        "selected_cohort_indices_sha256": selected_cohort_indices_sha256,
+        "numpy_observation_content_sha256": (
+            numpy_observation_content_sha256
+        ),
+        "waymax_observation_content_sha256": (
+            waymax_observation_content_sha256
+        ),
+    }
+    if any(
+        type(value) is not str or _SHA256.fullmatch(value) is None
+        for value in bindings.values()
+    ):
+        raise M6ResultStoreIntegrityError(
+            "compute pilot report inputs must be SHA-256 bindings"
+        )
+    expected_summary_fields = {
+        "pilot_scene_n",
+        "total_wall_ms",
+        "max_scene_ms",
+        "decode_ms",
+        "numpy_ms",
+        "waymax_ms",
+        "verification_ms",
+        "fresh_worker_peak_rss_bytes",
+        "passed",
+    }
+    row = dict(summary)
+    if set(row) != expected_summary_fields:
+        raise M6ResultStoreIntegrityError(
+            "compute pilot report summary fields are not exact"
+        )
+    return hashlib.sha256(
+        b"evalsim-m6-compute-pilot-report-v1\x00"
+        + _canonical_json_bytes(
+            {
+                **bindings,
+                "mode": COMPUTE_PILOT_MODE,
+                "result_path": path,
+                "run_name": name,
+                "schema_version": M6_COMPUTE_PILOT_REPORT_SCHEMA_VERSION,
+                "summary": row,
+            }
+        )
+    ).hexdigest()
+
+
+def _m6_compute_pilot_rounding_overage_ms(
+    *,
+    numpy_scene_n: int,
+    waymax_scene_n: int,
+) -> int:
+    """Maximum ceil overcount for the exact timed pilot subphases.
+
+    Decode and verification each contribute one timed subphase. NumPy contributes
+    one independently ceiled duration per selected scene. Waymax contributes one
+    validation subphase and, when supported, one duration per executed scene. The
+    sum of K independently ceiled durations can exceed the encompassing ceiled wall
+    duration by at most K-1 milliseconds, hence ``numpy_n + waymax_n + 2``.
+    """
+
+    numpy_n = _integer(
+        numpy_scene_n,
+        name="numpy_scene_n",
+        minimum=8,
+        maximum=8,
+    )
+    waymax_n = _integer(
+        waymax_scene_n,
+        name="waymax_scene_n",
+        minimum=0,
+        maximum=8,
+    )
+    if waymax_n not in {0, 8}:
+        raise M6ResultStoreIntegrityError(
+            "Waymax pilot scene count must be unsupported zero or exact eight"
+        )
+    return numpy_n + waymax_n + 2
+
+
+def _m6_compute_pilot_selected_indices_sha256(
+    qualification_rows: Sequence[Mapping[str, Any]],
+    selection_receipt: M6WaymaxSelectionReceipt,
+) -> str:
+    """Reconstruct the ordered first-eight pilot selection from safe rows."""
+
+    rows = tuple(qualification_rows)
+    if selection_receipt.selection_supported:
+        selected = sorted(
+            (
+                row
+                for row in rows
+                if row["selected"] is True
+                and row["selection_position"] is not None
+                and row["selection_position"] < 8
+            ),
+            key=lambda row: row["selection_position"],
+        )
+    else:
+        selected = sorted(
+            rows,
+            key=lambda row: (
+                bytes.fromhex(row["rank_sha256"]),
+                row["cohort_index"],
+            ),
+        )[:8]
+    if len(selected) != 8:
+        raise M6ResultStoreIntegrityError(
+            "stored qualification cannot reconstruct exact pilot first-eight"
+        )
+    from evalsim.evaluation.m6_pilot import (
+        m6_numpy_pilot_selected_cohort_indices_sha256,
+    )
+
+    return m6_numpy_pilot_selected_cohort_indices_sha256(
+        tuple(row["cohort_index"] for row in selected)
+    )
+
+
 def _normalize_compute_pilot(
     rows: Iterable[Mapping[str, Any]],
     receipt: M6EligibilityReceipt,
+    *,
+    run_name: str | None = None,
+    result_path: str | None = None,
+    provenance_context_sha256: str | None = None,
+    selection_binding_sha256: str | None = None,
+    selected_cohort_indices_sha256: str | None = None,
+    waymax_scene_n: int | None = None,
 ) -> tuple[dict[str, Any], ...]:
     fields = tuple(field.name for field in COMPUTE_PILOT_SUMMARY_SCHEMA)
     raw_rows = tuple(rows)
@@ -3001,9 +5328,13 @@ def _normalize_compute_pilot(
     pilot_n = _integer(
         row["pilot_scene_n"],
         name="pilot_scene_n",
-        minimum=1,
-        maximum=min(8, receipt.eligible_count),
+        minimum=8,
+        maximum=8,
     )
+    if receipt.eligible_count < 10:
+        raise M6ResultStoreIntegrityError(
+            "compute pilot requires the preregistered primary floor"
+        )
     durations = {
         name: _integer(row[name], name=name, minimum=1)
         for name in (
@@ -3015,7 +5346,15 @@ def _normalize_compute_pilot(
             "verification_ms",
         )
     }
-    if durations["total_wall_ms"] < sum(
+    if waymax_scene_n is None:
+        raise M6ResultStoreIntegrityError(
+            "compute pilot Waymax scene count is required for timing bounds"
+        )
+    rounding_overage_ms = _m6_compute_pilot_rounding_overage_ms(
+        numpy_scene_n=pilot_n,
+        waymax_scene_n=waymax_scene_n,
+    )
+    if durations["total_wall_ms"] + rounding_overage_ms < sum(
         durations[name]
         for name in ("decode_ms", "numpy_ms", "waymax_ms", "verification_ms")
     ):
@@ -3041,11 +5380,96 @@ def _normalize_compute_pilot(
         raise M6ResultStoreIntegrityError(
             "pilot passed flag disagrees with frozen thresholds"
         )
+    bindings = {
+        name: _text(row[name], name)
+        for name in (
+            "selection_binding_sha256",
+            "selected_cohort_indices_sha256",
+            "numpy_observation_content_sha256",
+            "waymax_observation_content_sha256",
+            "pilot_report_binding_sha256",
+        )
+    }
+    if any(_SHA256.fullmatch(value) is None for value in bindings.values()):
+        raise M6ResultStoreIntegrityError(
+            "compute pilot persisted bindings must be SHA-256"
+        )
+    if selected_cohort_indices_sha256 is not None and (
+        bindings["selected_cohort_indices_sha256"]
+        != selected_cohort_indices_sha256
+    ):
+        raise M6ResultStoreIntegrityError(
+            "compute pilot selected first-eight binding differs from qualification"
+        )
+    supplied_context = (
+        run_name,
+        result_path,
+        provenance_context_sha256,
+        selection_binding_sha256,
+    )
+    if any(value is not None for value in supplied_context):
+        if any(value is None for value in supplied_context):
+            raise M6ResultStoreIntegrityError(
+                "compute pilot verification context is incomplete"
+            )
+        assert run_name is not None
+        assert result_path is not None
+        assert provenance_context_sha256 is not None
+        assert selection_binding_sha256 is not None
+        if bindings["selection_binding_sha256"] != selection_binding_sha256:
+            raise M6ResultStoreIntegrityError(
+                "compute pilot selection binding differs from its receipt"
+            )
+        if selected_cohort_indices_sha256 is None:
+            raise M6ResultStoreIntegrityError(
+                "compute pilot report context lacks selected first-eight binding"
+            )
+        summary = {
+            "pilot_scene_n": pilot_n,
+            **durations,
+            "fresh_worker_peak_rss_bytes": rss,
+            "passed": passed,
+        }
+        expected_report = m6_compute_pilot_report_binding_sha256(
+            run_name=run_name,
+            result_path=result_path,
+            provenance_context_sha256=provenance_context_sha256,
+            selection_binding_sha256=selection_binding_sha256,
+            selected_cohort_indices_sha256=(
+                selected_cohort_indices_sha256
+            ),
+            numpy_observation_content_sha256=(
+                bindings["numpy_observation_content_sha256"]
+            ),
+            waymax_observation_content_sha256=(
+                bindings["waymax_observation_content_sha256"]
+            ),
+            summary=summary,
+        )
+        if bindings["pilot_report_binding_sha256"] != expected_report:
+            raise M6ResultStoreIntegrityError(
+                "compute pilot report binding differs from canonical facts"
+            )
     return (
         {
             "pilot_scene_n": pilot_n,
             **durations,
             "fresh_worker_peak_rss_bytes": rss,
+            "selection_binding_sha256": bindings[
+                "selection_binding_sha256"
+            ],
+            "selected_cohort_indices_sha256": bindings[
+                "selected_cohort_indices_sha256"
+            ],
+            "numpy_observation_content_sha256": bindings[
+                "numpy_observation_content_sha256"
+            ],
+            "waymax_observation_content_sha256": bindings[
+                "waymax_observation_content_sha256"
+            ],
+            "pilot_report_binding_sha256": bindings[
+                "pilot_report_binding_sha256"
+            ],
             "passed": passed,
         },
     )
@@ -4329,6 +6753,76 @@ def m6_data_free_waymax_field_comparison_rows(
     )
 
 
+def m6_data_free_waymax_numpy_comparison_rows(
+    eligibility_rows: Iterable[Mapping[str, Any]] | None = None,
+) -> tuple[dict[str, Any], ...]:
+    '''Build the eligibility-bound 128-row data-free NumPy NA grid.'''
+
+    expected_eligibility = tuple(
+        {
+            "cohort_index": index,
+            "primary_eligible": True,
+            "rejection_reason": None,
+            "secondary_b4_feasible": True,
+        }
+        for index in range(10)
+    )
+    supplied_eligibility = (
+        expected_eligibility
+        if eligibility_rows is None
+        else tuple(dict(row) for row in eligibility_rows)
+    )
+    if supplied_eligibility != expected_eligibility:
+        raise M6ResultStoreIntegrityError(
+            "data_free NumPy placeholders require the exact N=10 ledger"
+        )
+    try:
+        stored_eligibility_rows_sha256 = (
+            m6_stored_eligibility_rows_sha256(supplied_eligibility)
+        )
+    except (TypeError, ValueError) as exc:
+        raise M6ResultStoreIntegrityError(
+            "data_free eligibility rows cannot bind NumPy placeholders"
+        ) from exc
+    units = {name: unit for name, _version, unit in M6_PRIMARY_METRICS}
+    versions = {name: version for name, version, _unit in M6_PRIMARY_METRICS}
+    return tuple(
+        {
+            "selection_position": position,
+            "cohort_index": None,
+            "qualification_binding_sha256": None,
+            "primary_domain_sha256": (
+                M6_DATA_FREE_WAYMAX_PRIMARY_DOMAIN_SHA256
+            ),
+            "selection_binding_sha256": (
+                M6_DATA_FREE_WAYMAX_SELECTION_BINDING_SHA256
+            ),
+            "numpy_eligibility_ledger_sha256": (
+                M6_DATA_FREE_WAYMAX_NUMPY_ELIGIBILITY_LEDGER_SHA256
+            ),
+            "stored_eligibility_rows_sha256": (
+                stored_eligibility_rows_sha256
+            ),
+            "policy_name": policy_name,
+            "policy_access_role": _M6_WAYMAX_NUMPY_POLICY_ACCESS[
+                policy_name
+            ],
+            "metric_name": metric_name,
+            "metric_version": versions[metric_name],
+            "value_unit": units[metric_name],
+            "value": None,
+            "responded": None,
+            "responder_latency_s": None,
+            "view_binding_sha256": None,
+            "source_pairing_complete": False,
+            "status": "not_selected",
+        }
+        for position in range(M6_WAYMAX_MAX_SELECTED)
+        for policy_name in M6_WAYMAX_NUMPY_COMPARISON_POLICIES
+        for metric_name, _version, _unit in M6_PRIMARY_METRICS
+    )
+
+
 def m6_data_free_waymax_determinism_rows(
 ) -> tuple[dict[str, Any], ...]:
     """Build the exact fixed 64-row no-Waymax repeat/JIT grid."""
@@ -4926,6 +7420,301 @@ def _normalize_waymax_field_comparisons_from_qualification(
     return tuple(normalized)
 
 
+
+def _normalize_waymax_numpy_comparisons_from_qualification(
+    rows: Iterable[Mapping[str, Any]],
+    receipt: M6EligibilityReceipt,
+    eligibility_rows: Iterable[Mapping[str, Any]],
+    qualification_rows: Iterable[Mapping[str, Any]],
+    selection_receipt: M6WaymaxSelectionReceipt,
+    *,
+    expected_numpy_eligibility_sha256: str,
+) -> tuple[dict[str, Any], ...]:
+    fields = tuple(field.name for field in WAYMAX_NUMPY_COMPARISONS_SCHEMA)
+    eligibility = _normalize_eligibility(
+        eligibility_rows,
+        _profile(receipt.mode),
+        expected_receipt=receipt,
+    )
+    qualification = _normalize_waymax_qualification(
+        qualification_rows,
+        receipt,
+    )
+    selected = _selected_waymax_by_position(qualification)
+    if (
+        selection_receipt.mode != receipt.mode
+        or selection_receipt.selection_member_count != len(selected)
+    ):
+        raise M6ResultStoreIntegrityError(
+            "NumPy comparison selection differs from its sealed receipt"
+        )
+    try:
+        expected_stored_eligibility_sha256 = (
+            m6_stored_eligibility_rows_sha256(eligibility)
+        )
+    except (TypeError, ValueError) as exc:
+        raise M6ResultStoreIntegrityError(
+            "stored eligibility rows cannot bind NumPy comparison evidence"
+        ) from exc
+    metrics = {
+        name: (version, unit)
+        for name, version, unit in M6_PRIMARY_METRICS
+    }
+    expected_keys = tuple(
+        (position, policy_name, metric_name)
+        for position in range(M6_WAYMAX_MAX_SELECTED)
+        for policy_name in M6_WAYMAX_NUMPY_COMPARISON_POLICIES
+        for metric_name, _version, _unit in M6_PRIMARY_METRICS
+    )
+    order = {key: index for index, key in enumerate(expected_keys)}
+    normalized: list[dict[str, Any]] = []
+    seen: set[tuple[int, str, str]] = set()
+    numpy_eligibility_digests: set[str] = set()
+    view_bindings: dict[tuple[int, str], str] = {}
+    for raw in rows:
+        row = _exact_row(raw, fields, WAYMAX_NUMPY_COMPARISONS)
+        position = _integer(
+            row["selection_position"],
+            name="selection_position",
+            minimum=0,
+            maximum=M6_WAYMAX_MAX_SELECTED - 1,
+        )
+        policy_name = _text(row["policy_name"], "policy_name")
+        metric_name = _text(row["metric_name"], "metric_name")
+        key = (position, policy_name, metric_name)
+        if key not in order or key in seen:
+            raise M6ResultStoreIntegrityError(
+                "Waymax/NumPy comparison is duplicate or outside the fixed "
+                "16x2x4 grid"
+            )
+        seen.add(key)
+        policy_access_role = _text(
+            row["policy_access_role"],
+            "policy_access_role",
+        )
+        if (
+            policy_access_role
+            != _M6_WAYMAX_NUMPY_POLICY_ACCESS[policy_name]
+        ):
+            raise M6ResultStoreIntegrityError(
+                "Waymax/NumPy policy access role drifted"
+            )
+        metric_version = _text(row["metric_version"], "metric_version")
+        value_unit = _text(row["value_unit"], "value_unit")
+        if (metric_version, value_unit) != metrics[metric_name]:
+            raise M6ResultStoreIntegrityError(
+                "Waymax/NumPy metric identity drifted"
+            )
+        primary_domain_sha256 = _text(
+            row["primary_domain_sha256"],
+            "primary_domain_sha256",
+        )
+        selection_binding_sha256 = _text(
+            row["selection_binding_sha256"],
+            "selection_binding_sha256",
+        )
+        numpy_eligibility_sha256 = _text(
+            row["numpy_eligibility_ledger_sha256"],
+            "numpy_eligibility_ledger_sha256",
+        )
+        stored_eligibility_sha256 = _text(
+            row["stored_eligibility_rows_sha256"],
+            "stored_eligibility_rows_sha256",
+        )
+        if (
+            primary_domain_sha256
+            != selection_receipt.primary_domain_sha256
+            or selection_binding_sha256
+            != selection_receipt.selection_binding_sha256
+            or stored_eligibility_sha256
+            != expected_stored_eligibility_sha256
+            or _SHA256.fullmatch(numpy_eligibility_sha256) is None
+        ):
+            raise M6ResultStoreIntegrityError(
+                "Waymax/NumPy evidence differs from the sealed selection, "
+                "domain, or eligibility projection"
+            )
+        numpy_eligibility_digests.add(numpy_eligibility_sha256)
+        cohort_index = (
+            None
+            if row["cohort_index"] is None
+            else _integer(
+                row["cohort_index"],
+                name="cohort_index",
+                minimum=0,
+                maximum=receipt.population_size - 1,
+            )
+        )
+        qualification_binding_sha256 = _optional_text(
+            row["qualification_binding_sha256"],
+            "qualification_binding_sha256",
+        )
+        if (
+            qualification_binding_sha256 is not None
+            and _SHA256.fullmatch(qualification_binding_sha256) is None
+        ):
+            raise M6ResultStoreIntegrityError(
+                "NumPy qualification binding must be SHA-256"
+            )
+        value = (
+            None
+            if row["value"] is None
+            else _finite(row["value"], "value")
+        )
+        responded = (
+            None
+            if row["responded"] is None
+            else _boolean(row["responded"], "responded")
+        )
+        responder_latency_s = (
+            None
+            if row["responder_latency_s"] is None
+            else _finite(
+                row["responder_latency_s"],
+                "responder_latency_s",
+                minimum=0.0,
+            )
+        )
+        view_binding_sha256 = _optional_text(
+            row["view_binding_sha256"],
+            "view_binding_sha256",
+        )
+        if (
+            view_binding_sha256 is not None
+            and _SHA256.fullmatch(view_binding_sha256) is None
+        ):
+            raise M6ResultStoreIntegrityError(
+                "NumPy view binding must be SHA-256"
+            )
+        source_pairing_complete = _boolean(
+            row["source_pairing_complete"],
+            "source_pairing_complete",
+        )
+        status = _text(row["status"], "status")
+        selected_row = selected.get(position)
+        if selected_row is None:
+            if (
+                status != "not_selected"
+                or cohort_index is not None
+                or qualification_binding_sha256 is not None
+                or value is not None
+                or responded is not None
+                or responder_latency_s is not None
+                or view_binding_sha256 is not None
+                or source_pairing_complete
+            ):
+                raise M6ResultStoreIntegrityError(
+                    "unused Waymax/NumPy positions must be exact NA"
+                )
+        else:
+            if (
+                status != "selected"
+                or cohort_index != selected_row["cohort_index"]
+                or qualification_binding_sha256
+                != selected_row["qualification_binding_sha256"]
+                or value is None
+                or view_binding_sha256 is None
+                or source_pairing_complete is not True
+            ):
+                raise M6ResultStoreIntegrityError(
+                    "selected Waymax/NumPy row lacks qualification-bound "
+                    "paired evidence"
+                )
+            view_key = (position, policy_name)
+            existing_view = view_bindings.setdefault(
+                view_key,
+                view_binding_sha256,
+            )
+            if existing_view != view_binding_sha256:
+                raise M6ResultStoreIntegrityError(
+                    "one NumPy policy pair uses inconsistent view bindings"
+                )
+            if metric_name == "response_timeliness_s":
+                if responded is None or (
+                    responded
+                    and responder_latency_s is None
+                ) or (
+                    not responded
+                    and responder_latency_s is not None
+                ):
+                    raise M6ResultStoreIntegrityError(
+                        "NumPy response timing fields contradict response status"
+                    )
+            elif responded is not None or responder_latency_s is not None:
+                raise M6ResultStoreIntegrityError(
+                    "NumPy response fields belong only to timeliness"
+                )
+        normalized.append(
+            {
+                "selection_position": position,
+                "cohort_index": cohort_index,
+                "qualification_binding_sha256": (
+                    qualification_binding_sha256
+                ),
+                "primary_domain_sha256": primary_domain_sha256,
+                "selection_binding_sha256": selection_binding_sha256,
+                "numpy_eligibility_ledger_sha256": (
+                    numpy_eligibility_sha256
+                ),
+                "stored_eligibility_rows_sha256": (
+                    stored_eligibility_sha256
+                ),
+                "policy_name": policy_name,
+                "policy_access_role": policy_access_role,
+                "metric_name": metric_name,
+                "metric_version": metric_version,
+                "value_unit": value_unit,
+                "value": value,
+                "responded": responded,
+                "responder_latency_s": responder_latency_s,
+                "view_binding_sha256": view_binding_sha256,
+                "source_pairing_complete": source_pairing_complete,
+                "status": status,
+            }
+        )
+    if seen != set(expected_keys):
+        raise M6ResultStoreIntegrityError(
+            "Waymax/NumPy comparison table is not exactly 128 rows"
+        )
+    if (
+        type(expected_numpy_eligibility_sha256) is not str
+        or _SHA256.fullmatch(expected_numpy_eligibility_sha256) is None
+        or numpy_eligibility_digests
+        != {expected_numpy_eligibility_sha256}
+    ):
+        raise M6ResultStoreIntegrityError(
+            "Waymax/NumPy rows do not bind the independently sealed "
+            "eligibility ledger"
+        )
+    if (
+        receipt.mode == DATA_FREE_MODE
+        and expected_numpy_eligibility_sha256
+        != M6_DATA_FREE_WAYMAX_NUMPY_ELIGIBILITY_LEDGER_SHA256
+    ):
+        raise M6ResultStoreIntegrityError(
+            "data_free Waymax/NumPy eligibility binding is not exact"
+        )
+    normalized.sort(
+        key=lambda row: order[
+            (
+                row["selection_position"],
+                row["policy_name"],
+                row["metric_name"],
+            )
+        ]
+    )
+    result = tuple(normalized)
+    if (
+        receipt.mode == DATA_FREE_MODE
+        and result
+        != m6_data_free_waymax_numpy_comparison_rows(eligibility)
+    ):
+        raise M6ResultStoreIntegrityError(
+            "data_free Waymax/NumPy placeholders are not exact"
+        )
+    return result
+
+
 def _normalize_waymax_determinism_from_qualification(
     rows: Iterable[Mapping[str, Any]],
     receipt: M6EligibilityReceipt,
@@ -5387,6 +8176,102 @@ def _empty_waymax_accounting_row(
     return row
 
 
+def _independently_rederive_waymax_cell_rows(
+    parsed_scalar_table: M6WaymaxParsedScalarTable,
+    receipt: M6EligibilityReceipt,
+) -> tuple[dict[str, Any], ...]:
+    """Recompute every published Waymax cell field from sealed scene scalars."""
+
+    if not isinstance(parsed_scalar_table, M6WaymaxParsedScalarTable):
+        raise TypeError("cell rederivation requires a parsed scalar table")
+    parsed_scalar_table.revalidate()
+    scalar_table, selected_positions, cohort_indices = (
+        _normalize_safe_scalar_table(parsed_scalar_table.rows)
+    )
+    cells = _analyze_safe_scalar_cells(
+        scalar_table=scalar_table,
+        selected_positions=selected_positions,
+        cohort_indices=cohort_indices,
+        intervention_configuration_fingerprint=(
+            M6_WAYMAX_PRIMARY_B2_CONFIGURATION_FINGERPRINT
+        ),
+    )
+    scalar_by_cell = {
+        (bundle, metric): [
+            row
+            for row in scalar_table
+            if row.bundle == bundle
+            and row.metric_name == metric
+            and row.status == "selected"
+        ]
+        for bundle in M6_WAYMAX_BUNDLES
+        for metric, _version, _unit in M6_PRIMARY_METRICS
+    }
+    rederived: list[dict[str, Any]] = []
+    for cell in cells:
+        cell.revalidate()
+        row = _empty_waymax_accounting_row(
+            "secondary_cell",
+            "paired_effect",
+            bundle=cell.bundle,
+            metric_name=cell.metric_name,
+            status=cell.status,
+        )
+        row.update(
+            {
+                "metric_version": cell.metric_version,
+                "unit": cell.value_unit,
+                "pair_n": cell.pair_n,
+                "thresholded_nonzero_n": sum(
+                    _waymax_thresholded_nonzero(
+                        cell.metric_name,
+                        float(item.value),
+                    )
+                    for item in scalar_by_cell[
+                        (cell.bundle, cell.metric_name)
+                    ]
+                ),
+                "responder_n": cell.responder_n,
+                "censor_n": cell.censor_n,
+                "arithmetic_mean": cell.arithmetic_mean,
+                "median": cell.median,
+                "pointwise_level": (
+                    None
+                    if cell.pointwise_band is None
+                    else cell.pointwise_band.level
+                ),
+                "pointwise_lower": (
+                    None
+                    if cell.pointwise_band is None
+                    else cell.pointwise_band.lower
+                ),
+                "pointwise_upper": (
+                    None
+                    if cell.pointwise_band is None
+                    else cell.pointwise_band.upper
+                ),
+                "suppression_reason": (
+                    "waymax_selected_n_below_8"
+                    if cell.status == "unsupported"
+                    else (
+                        "waymax_pair_n_below_10"
+                        if cell.status == "insufficient_n"
+                        else None
+                    )
+                ),
+                "source_pairing_complete": True,
+                "directional_language_allowed": False,
+            }
+        )
+        _validate_waymax_subtype(row)
+        rederived.append(row)
+    if len(rederived) != 8:
+        raise M6ResultStoreIntegrityError(
+            "independent Waymax cell rederivation is incomplete"
+        )
+    return tuple(rederived)
+
+
 def _normalize_waymax_accounting(
     rows: Iterable[Mapping[str, Any]],
     receipt: M6EligibilityReceipt,
@@ -5822,6 +8707,94 @@ def _validate_waymax_cross_rows(
         )
 
 
+def _normalize_m6_source_paths(value: Any) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise M6ResultStoreIntegrityError(
+            "typed provenance source paths must be an ordered sequence"
+        )
+    paths = tuple(value)
+    for path in paths:
+        if type(path) is not str:
+            raise M6ResultStoreIntegrityError(
+                "typed provenance source paths must be exact strings"
+            )
+        parts = path.split("/")
+        if (
+            not parts
+            or any(
+                not part
+                or part in {".", ".."}
+                or re.fullmatch(r"[A-Za-z0-9._-]+", part) is None
+                for part in parts
+            )
+            or path.startswith("/")
+            or "\\" in path
+        ):
+            raise M6ResultStoreIntegrityError(
+                "typed provenance source path is not safe and relative"
+            )
+    if not paths or paths != tuple(sorted(set(paths))):
+        raise M6ResultStoreIntegrityError(
+            "typed provenance source paths must be nonempty, unique, and sorted"
+        )
+    return paths
+
+
+def _m6_verified_provenance_context_sha256(
+    mode: str,
+    source_paths: Sequence[str],
+    row: Mapping[str, Any],
+) -> str:
+    _profile(mode)
+    paths = _normalize_m6_source_paths(source_paths)
+    return hashlib.sha256(
+        b"evalsim-m6-verified-provenance-context-v1\x00"
+        + _canonical_json_bytes(
+            {
+                "mode": mode,
+                "schema_version": M6_TYPED_PROVENANCE_SCHEMA_VERSION,
+                "source_paths": list(paths),
+                "typed_provenance": _json_safe_row(row),
+            }
+        )
+    ).hexdigest()
+
+
+def _issue_m6_verified_provenance(
+    *,
+    mode: str,
+    row: Mapping[str, Any],
+    source_paths: Sequence[str],
+) -> M6VerifiedProvenance:
+    """Issue facts only after the caller has observed the exact local context."""
+
+    _profile(mode)
+    paths = _normalize_m6_source_paths(source_paths)
+    base = dict(row)
+    reserved = {
+        "executable_source_paths",
+        "verification_context_sha256",
+    }
+    expected = {field.name for field in TYPED_PROVENANCE_SCHEMA} - reserved
+    if set(base) != expected:
+        raise M6ResultStoreIntegrityError(
+            "verified provenance input fields do not match the fixed schema"
+        )
+    context = _m6_verified_provenance_context_sha256(mode, paths, base)
+    store_row = {
+        **base,
+        "executable_source_paths": list(paths),
+        "verification_context_sha256": context,
+    }
+    return M6VerifiedProvenance(
+        mode=mode,
+        source_paths=paths,
+        store_row=store_row,
+        context_sha256=context,
+        _factory_sentinel=_VERIFIED_PROVENANCE_SENTINEL,
+    )
+
+
 def _normalize_typed_provenance(
     rows: Iterable[Mapping[str, Any]],
     receipt: M6EligibilityReceipt,
@@ -5937,10 +8910,10 @@ def _normalize_typed_provenance(
         jax_backend,
         jax_device,
     )
-    if receipt.mode == OFFICIAL_MODE:
+    if receipt.mode != DATA_FREE_MODE:
         if any(value is None for value in optional_runtime):
             raise M6ResultStoreIntegrityError(
-                "official typed provenance requires the complete "
+                "non-data-free typed provenance requires the complete "
                 "JAX/TensorFlow/Waymax runtime"
             )
         if (
@@ -5972,18 +8945,42 @@ def _normalize_typed_provenance(
         raise M6ResultStoreIntegrityError(
             "typed provenance intervention fingerprints drifted"
         )
+    source_paths = _normalize_m6_source_paths(
+        row["executable_source_paths"]
+    )
+    normalized = {
+        **fixed,
+        **git_objects,
+        **hashes,
+        **versions,
+        **optional_versions,
+        "waymax_commit": waymax_commit,
+        "jax_backend": jax_backend,
+        "jax_device_class": jax_device,
+        "primary_intervention_fingerprint": primary_fingerprint,
+        "secondary_intervention_fingerprint": secondary_fingerprint,
+    }
+    context = _text(
+        row["verification_context_sha256"],
+        "verification_context_sha256",
+    )
+    if (
+        _SHA256.fullmatch(context) is None
+        or context
+        != _m6_verified_provenance_context_sha256(
+            receipt.mode,
+            source_paths,
+            normalized,
+        )
+    ):
+        raise M6ResultStoreIntegrityError(
+            "typed provenance verification-context binding is invalid"
+        )
     return (
         {
-            **fixed,
-            **git_objects,
-            **hashes,
-            **versions,
-            **optional_versions,
-            "waymax_commit": waymax_commit,
-            "jax_backend": jax_backend,
-            "jax_device_class": jax_device,
-            "primary_intervention_fingerprint": primary_fingerprint,
-            "secondary_intervention_fingerprint": secondary_fingerprint,
+            **normalized,
+            "executable_source_paths": list(source_paths),
+            "verification_context_sha256": context,
         },
     )
 
@@ -6024,9 +9021,14 @@ def _normalize_execution_summary(
         raise M6ResultStoreIntegrityError(
             "real reactivity claim status is invalid"
         )
-    if release_status != "accepted":
+    allowed_release = (
+        {"nonpromotable"}
+        if receipt.mode == DATA_FREE_MODE
+        else {"accepted", "rejected"}
+    )
+    if release_status not in allowed_release:
         raise M6ResultStoreIntegrityError(
-            "terminal evidence requires accepted release gate"
+            "execution release status differs from the mode boundary"
         )
     rss = _integer(
         row["fresh_worker_peak_rss_bytes"],
@@ -6063,6 +9065,9 @@ def _normalize_execution_summary(
         "waymax_field_comparison_rows": receipt.expected_rows[
             WAYMAX_FIELD_COMPARISONS
         ],
+        "waymax_numpy_comparison_rows": receipt.expected_rows[
+            WAYMAX_NUMPY_COMPARISONS
+        ],
         "waymax_determinism_rows": receipt.expected_rows[
             WAYMAX_DETERMINISM
         ],
@@ -6087,6 +9092,92 @@ def _normalize_execution_summary(
             **normalized_counts,
         },
     )
+
+
+def _derive_waymax_and_real_reactivity_statuses(
+    *,
+    receipt: M6EligibilityReceipt,
+    primary_matrix: Iterable[Mapping[str, Any]],
+    qualification: Iterable[Mapping[str, Any]],
+    accounting: Iterable[Mapping[str, Any]],
+    determinism: M6DeterminismReceipt,
+) -> tuple[str, str]:
+    """Independently derive the Waymax gate and bounded-claim status."""
+
+    if (
+        type(determinism) is not M6DeterminismReceipt
+        or determinism.mode != receipt.mode
+    ):
+        raise M6ResultStoreIntegrityError(
+            "claim status requires the mode-bound determinism receipt"
+        )
+    primary = _normalize_primary_matrix(primary_matrix, receipt)
+    normalized_qualification = _normalize_waymax_qualification(
+        qualification,
+        receipt,
+    )
+    normalized_accounting = _normalize_waymax_accounting(
+        accounting,
+        receipt,
+    )
+    selected = sum(
+        row["selected"] is True for row in normalized_qualification
+    )
+    failed_comparison = any(
+        row["record_type"] == "field_comparison"
+        and row["status"] == "failed"
+        for row in normalized_accounting
+    )
+    waymax_status = (
+        "unsupported"
+        if selected < 8
+        else (
+            "accepted"
+            if (
+                not failed_comparison
+                and determinism.waymax_repeat_status == "passed"
+            )
+            else "failed"
+        )
+    )
+    idm_timing = next(
+        row
+        for row in primary
+        if row["policy_name"] == "idm"
+        and row["metric_name"] == "response_timeliness_s"
+    )
+    claim_status = (
+        "supported"
+        if (
+            receipt.mode == OFFICIAL_MODE
+            and waymax_status == "accepted"
+            and int(idm_timing["responder_n"]) >= 10
+        )
+        else "blocked"
+    )
+    return waymax_status, claim_status
+
+
+def _derive_real_reactivity_claim_status(
+    *,
+    receipt: M6EligibilityReceipt,
+    primary_matrix: Iterable[Mapping[str, Any]],
+    qualification: Iterable[Mapping[str, Any]],
+    accounting: Iterable[Mapping[str, Any]],
+    determinism: M6DeterminismReceipt,
+) -> str:
+    """Derive the sole status allowed to select official claim wording."""
+
+    _waymax_status, claim_status = (
+        _derive_waymax_and_real_reactivity_statuses(
+            receipt=receipt,
+            primary_matrix=primary_matrix,
+            qualification=qualification,
+            accounting=accounting,
+            determinism=determinism,
+        )
+    )
+    return claim_status
 
 
 def _derive_execution_summary(
@@ -6121,60 +9212,39 @@ def _derive_execution_summary(
         == _canonical_rows_sha256(PRIMARY_MATRIX, repeat_matrix)
         and determinism.waymax_repeat_status != "failed"
     )
-    qualification = _normalize_waymax_qualification(
-        tables[WAYMAX_QUALIFICATION],
-        receipt,
-    )
-    selected = sum(row["selected"] is True for row in qualification)
-    accounting = _normalize_waymax_accounting(
-        tables[WAYMAX_ACCOUNTING],
-        receipt,
-    )
-    failed_comparison = any(
-        row["record_type"] == "field_comparison"
-        and row["status"] == "failed"
-        for row in accounting
-    )
-    waymax_status = (
-        "unsupported"
-        if selected < 8
-        else (
-            "accepted"
-            if (
-                not failed_comparison
-                and determinism.waymax_repeat_status == "passed"
-            )
-            else "failed"
+    waymax_status, claim_status = (
+        _derive_waymax_and_real_reactivity_statuses(
+            receipt=receipt,
+            primary_matrix=primary,
+            qualification=tables[WAYMAX_QUALIFICATION],
+            accounting=tables[WAYMAX_ACCOUNTING],
+            determinism=determinism,
         )
     )
     gates = _normalize_negative_timing_gates(
         tables[NEGATIVE_TIMING_GATES],
         receipt,
     )
+    review_commit = _normalize_typed_provenance(
+        tables[TYPED_PROVENANCE],
+        receipt,
+    )[0]["approved_git_commit"]
     reviews = _normalize_review_decisions(
         tables[REVIEW_DECISIONS],
         receipt,
-    )
-    idm_timing = next(
-        row
-        for row in primary
-        if row["policy_name"] == "idm"
-        and row["metric_name"] == "response_timeliness_s"
-    )
-    claim_status = (
-        "blocked"
-        if receipt.mode == DATA_FREE_MODE
-        else (
-            "supported"
-            if int(idm_timing["responder_n"]) >= 10
-            else "blocked"
-        )
+        expected_approved_git_commit=review_commit,
     )
     release = (
-        deterministic
+        receipt.mode == OFFICIAL_MODE
+        and deterministic
         and waymax_status != "failed"
         and all(row["status"] != "failed" for row in gates)
-        and all(row["decision"] == "accept" for row in reviews)
+        and all(
+            row["decision"] == "accept"
+            and row["p1_count"] == 0
+            and row["p2_count"] == 0
+            for row in reviews
+        )
     )
     counts = {
         "eligibility_rows": receipt.expected_rows[ELIGIBILITY_LEDGER],
@@ -6206,6 +9276,9 @@ def _derive_execution_summary(
         "waymax_field_comparison_rows": receipt.expected_rows[
             WAYMAX_FIELD_COMPARISONS
         ],
+        "waymax_numpy_comparison_rows": receipt.expected_rows[
+            WAYMAX_NUMPY_COMPARISONS
+        ],
         "waymax_determinism_rows": receipt.expected_rows[
             WAYMAX_DETERMINISM
         ],
@@ -6225,7 +9298,11 @@ def _derive_execution_summary(
         ),
         "waymax_gate_status": waymax_status,
         "real_reactivity_claim_status": claim_status,
-        "release_gate_status": "accepted" if release else "rejected",
+        "release_gate_status": (
+            "nonpromotable"
+            if receipt.mode == DATA_FREE_MODE
+            else ("accepted" if release else "rejected")
+        ),
         "fresh_worker_peak_rss_bytes": rss,
         **counts,
     }
@@ -6273,22 +9350,55 @@ def _normalize_stage_timings(
 
 def _normalize_review_decisions(
     rows: Iterable[Mapping[str, Any]],
-    _receipt: M6EligibilityReceipt,
+    receipt: M6EligibilityReceipt,
     *,
     expected_evidence_catalog_sha256: str | None = None,
+    expected_approved_git_commit: str | None = None,
+    expected_mechanical_verification_sha256: str | None = None,
 ) -> tuple[dict[str, Any], ...]:
     if (
         expected_evidence_catalog_sha256 is not None
         and (
             type(expected_evidence_catalog_sha256) is not str
+            or _SHA256.fullmatch(expected_evidence_catalog_sha256) is None
+        )
+    ):
+        raise M6ResultStoreIntegrityError(
+            "expected review precursor digest must be SHA-256"
+        )
+    if (
+        expected_approved_git_commit is not None
+        and (
+            type(expected_approved_git_commit) is not str
+            or _GIT_OBJECT.fullmatch(expected_approved_git_commit) is None
+        )
+    ):
+        raise M6ResultStoreIntegrityError(
+            "expected review commit must be a 40-hex Git object"
+        )
+    if (
+        expected_mechanical_verification_sha256 is not None
+        and (
+            type(expected_mechanical_verification_sha256) is not str
             or _SHA256.fullmatch(
-                expected_evidence_catalog_sha256
+                expected_mechanical_verification_sha256
             )
             is None
         )
     ):
         raise M6ResultStoreIntegrityError(
-            "expected review precursor digest must be SHA-256"
+            "expected mechanical verification binding must be SHA-256"
+        )
+    raw_rows = tuple(rows)
+    if receipt.mode == DATA_FREE_MODE:
+        if raw_rows:
+            raise M6ResultStoreIntegrityError(
+                "data-free evidence cannot contain review decisions"
+            )
+        return ()
+    if receipt.mode != OFFICIAL_MODE:
+        raise M6ResultStoreIntegrityError(
+            "review decisions are official-mode-only"
         )
     fields = tuple(field.name for field in REVIEW_DECISIONS_SCHEMA)
     order = {
@@ -6296,7 +9406,7 @@ def _normalize_review_decisions(
     }
     normalized: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for raw in rows:
+    for raw in raw_rows:
         row = _exact_row(raw, fields, REVIEW_DECISIONS)
         role = _text(row["role"], "role")
         if role not in order or role in seen:
@@ -6304,31 +9414,48 @@ def _normalize_review_decisions(
                 "review decision is duplicate or unexpected"
             )
         seen.add(role)
-        decision = _text(row["decision"], "decision")
-        if decision not in {"accept", "reject"}:
-            raise M6ResultStoreIntegrityError(
-                "review decision enum is invalid"
+        approved_git_commit = _text(
+            row["approved_git_commit"],
+            "approved_git_commit",
+        )
+        if (
+            _GIT_OBJECT.fullmatch(approved_git_commit) is None
+            or (
+                expected_approved_git_commit is not None
+                and approved_git_commit != expected_approved_git_commit
             )
+        ):
+            raise M6ResultStoreIntegrityError(
+                "review decision differs from the approved source commit"
+            )
+        decision = _text(row["decision"], "decision")
         counts = {
-            name: _integer(row[name], name=name, minimum=0)
+            name: _integer(
+                row[name],
+                name=name,
+                minimum=0,
+                maximum=M6_REVIEW_COUNT_MAX,
+            )
             for name in ("p1_count", "p2_count", "p3_count")
         }
-        expected_decision = (
-            "accept"
-            if counts["p1_count"] == 0 and counts["p2_count"] == 0
-            else "reject"
-        )
-        if decision != expected_decision:
+        if decision not in {"accept", "reject"}:
             raise M6ResultStoreIntegrityError(
-                "review decision differs from P1/P2 counts"
+                "review decision must be accept or reject"
             )
         evidence_catalog_sha256 = _text(
             row["evidence_catalog_sha256"],
             "evidence_catalog_sha256",
         )
-        if _SHA256.fullmatch(evidence_catalog_sha256) is None:
+        mechanical_verification_sha256 = _text(
+            row["mechanical_verification_sha256"],
+            "mechanical_verification_sha256",
+        )
+        if (
+            _SHA256.fullmatch(evidence_catalog_sha256) is None
+            or _SHA256.fullmatch(mechanical_verification_sha256) is None
+        ):
             raise M6ResultStoreIntegrityError(
-                "review evidence catalog binding must be SHA-256"
+                "review precursor bindings must be SHA-256"
             )
         if (
             expected_evidence_catalog_sha256 is not None
@@ -6339,12 +9466,24 @@ def _normalize_review_decisions(
                 "review evidence catalog differs from sealed precursor "
                 "artifacts"
             )
+        if (
+            expected_mechanical_verification_sha256 is not None
+            and mechanical_verification_sha256
+            != expected_mechanical_verification_sha256
+        ):
+            raise M6ResultStoreIntegrityError(
+                "review decision differs from mechanical verification"
+            )
         normalized.append(
             {
                 "role": role,
+                "approved_git_commit": approved_git_commit,
                 "decision": decision,
                 **counts,
                 "evidence_catalog_sha256": evidence_catalog_sha256,
+                "mechanical_verification_sha256": (
+                    mechanical_verification_sha256
+                ),
             }
         )
     if seen != set(M6_REVIEW_ROLE_DOMAIN):
@@ -6355,14 +9494,18 @@ def _normalize_review_decisions(
     if (
         len(
             {
-                row["evidence_catalog_sha256"]
+                (
+                    row["evidence_catalog_sha256"],
+                    row["mechanical_verification_sha256"],
+                    row["approved_git_commit"],
+                )
                 for row in normalized
             }
         )
         != 1
     ):
         raise M6ResultStoreIntegrityError(
-            "all reviews must bind one evidence-catalog precursor digest"
+            "all reviews must bind one verified precursor and commit"
         )
     return tuple(normalized)
 
@@ -6403,6 +9546,593 @@ def verify_m6_result_store(
     )
 
 
+def verify_rejected_m6_review_store(
+    project_root: str | Path,
+    run_name: str,
+) -> VerifiedM6RejectedReviewStore:
+    """Authenticate an official review-rejected terminal store."""
+
+    root = _validated_project_root(project_root)
+    name = _validated_run_name(run_name)
+    relative = Path("outputs") / "m6" / name
+    _require_git_invisible(root, relative)
+    run_path = root / relative
+    _guard_run_directory(run_path)
+    if (
+        _path_kind(run_path / TERMINAL_FAILURE_MARKER) != "file"
+        or _path_kind(run_path / AWAITING_REVIEW_MARKER) != "file"
+        or _path_kind(run_path / PENDING_MARKER) != "file"
+        or _path_kind(run_path / COMMITTED_MARKER) != "missing"
+        or _path_kind(run_path / TERMINAL_SUCCESS_MARKER) != "missing"
+    ):
+        raise M6ResultStoreIntegrityError(
+            "rejected review terminal marker state is not exact"
+        )
+    failure_snapshot = _read_guarded_snapshot(
+        run_path / TERMINAL_FAILURE_MARKER,
+        run_path,
+    )
+    failure = _decode_canonical_mapping(
+        failure_snapshot.payload,
+        "review-rejected TERMINAL_FAILURE",
+    )
+    expected_fields = {
+        "artifacts",
+        "evidence_catalog_sha256",
+        "mechanical_verification_sha256",
+        "mode",
+        "reason_code",
+        "result_path",
+        "schema_version",
+        "state",
+    }
+    if (
+        set(failure) != expected_fields
+        or failure["mode"] != OFFICIAL_MODE
+        or failure["reason_code"] != "review_rejected"
+        or failure["result_path"] != relative.as_posix()
+        or failure["schema_version"] != M6_RESULT_STORE_SCHEMA_VERSION
+        or failure["state"] != "TERMINAL_FAILURE"
+    ):
+        raise M6ResultStoreIntegrityError(
+            "review-rejected failure fields/state are not exact"
+        )
+    bound_records = tuple(
+        M6ArtifactRecord.from_dict(
+            _json_mapping(item, "review-rejected bound artifact")
+        )
+        for item in _json_array(
+            failure["artifacts"],
+            "review-rejected artifacts",
+        )
+    )
+    bound_paths = tuple(record.path for record in bound_records)
+    expected_bound_paths = tuple(
+        sorted(
+            (
+                AWAITING_REVIEW_MARKER,
+                REVIEW_REQUEST_PATH,
+                _DATASET_PATHS[REVIEW_DECISIONS],
+                _DATASET_PATHS[EXECUTION_SUMMARY],
+            )
+        )
+    )
+    if bound_paths != expected_bound_paths:
+        raise M6ResultStoreIntegrityError(
+            "review-rejected bound artifact domain is not exact"
+        )
+    bound_snapshots = _authenticated_artifact_snapshots(
+        run_path,
+        bound_records,
+    )
+    awaiting = _decode_canonical_mapping(
+        bound_snapshots[AWAITING_REVIEW_MARKER].payload,
+        "review-rejected AWAITING_REVIEW",
+    )
+    precursor_records = tuple(
+        M6ArtifactRecord.from_dict(
+            _json_mapping(item, "review-rejected precursor artifact")
+        )
+        for item in _json_array(
+            awaiting.get("artifacts"),
+            "review-rejected precursor artifacts",
+        )
+    )
+    precursor_paths = tuple(record.path for record in precursor_records)
+    if precursor_paths != tuple(sorted(set(precursor_paths))):
+        raise M6ResultStoreIntegrityError(
+            "review-rejected precursor artifact domain is invalid"
+        )
+    precursor_snapshots = _authenticated_artifact_snapshots(
+        run_path,
+        precursor_records,
+    )
+    artifact_by_path = {record.path: record for record in precursor_records}
+    bound_by_path = {record.path: record for record in bound_records}
+    if artifact_by_path.get(REVIEW_REQUEST_PATH) != bound_by_path[
+        REVIEW_REQUEST_PATH
+    ]:
+        raise M6ResultStoreIntegrityError(
+            "review-rejected request binding differs from the precursor"
+        )
+    for path_name in (
+        _DATASET_PATHS[REVIEW_DECISIONS],
+        _DATASET_PATHS[EXECUTION_SUMMARY],
+    ):
+        if path_name in artifact_by_path:
+            raise M6ResultStoreIntegrityError(
+                "review-rejected post-review artifact entered the precursor"
+            )
+        artifact_by_path[path_name] = bound_by_path[path_name]
+    artifact_records = tuple(
+        artifact_by_path[path_name] for path_name in sorted(artifact_by_path)
+    )
+    snapshots = dict(precursor_snapshots)
+    snapshots.update(bound_snapshots)
+    receipt = M6EligibilityReceipt.from_dict(
+        _decode_canonical_mapping(
+            snapshots[ELIGIBILITY_RECEIPT_PATH].payload,
+            "review-rejected eligibility receipt",
+        )
+    )
+    if (
+        receipt.mode != OFFICIAL_MODE
+        or set(artifact_by_path) != _expected_artifact_paths(receipt)
+    ):
+        raise M6ResultStoreIntegrityError(
+            "review-rejected artifact domain is incomplete"
+        )
+    _validate_run_tree(
+        run_path,
+        allowed_files={
+            PENDING_MARKER,
+            AWAITING_REVIEW_MARKER,
+            TERMINAL_FAILURE_MARKER,
+            *artifact_by_path,
+        },
+    )
+    tables: dict[str, pa.Table] = {}
+    for record in artifact_records:
+        dataset = _dataset_for_path(record.path)
+        if dataset is None:
+            continue
+        table = _parse_guarded_parquet_payload(
+            snapshots[record.path].payload,
+            dataset,
+        )
+        if table.num_rows != record.rows:
+            raise M6ResultStoreIntegrityError(
+                "review-rejected dataset row count drifted"
+            )
+        tables[dataset] = table
+    verification = M6MechanicalVerificationReceipt.from_dict(
+        _decode_canonical_mapping(
+            snapshots[REVIEW_REQUEST_PATH].payload,
+            "review-rejected mechanical verification",
+        )
+    )
+    assert verification.verification_sha256 is not None
+    evidence_catalog_sha256 = _review_precursor_sha256(
+        receipt,
+        artifact_records,
+    )
+    if (
+        failure["evidence_catalog_sha256"] != evidence_catalog_sha256
+        or failure["mechanical_verification_sha256"]
+        != verification.verification_sha256
+    ):
+        raise M6ResultStoreIntegrityError(
+            "review-rejected precursor digests drifted"
+        )
+    pending_snapshot = _read_guarded_snapshot(
+        run_path / PENDING_MARKER,
+        run_path,
+    )
+    pending = _decode_canonical_mapping(
+        pending_snapshot.payload,
+        "review-rejected PENDING",
+    )
+    capability_sha256 = _json_text(
+        awaiting.get("capability_sha256"),
+        "review-rejected capability digest",
+    )
+    if pending != _pending_payload(name, _profile(OFFICIAL_MODE), capability_sha256):
+        raise M6ResultStoreIntegrityError(
+            "review-rejected PENDING capability drifted"
+        )
+    _validate_committed_awaiting_review_marker(
+        bound_snapshots[AWAITING_REVIEW_MARKER].payload,
+        capability_sha256=capability_sha256,
+        receipt=receipt,
+        records=artifact_records,
+        tables=tables,
+        artifact_payloads={
+            path_name: snapshot.payload
+            for path_name, snapshot in snapshots.items()
+        },
+        result_path=relative.as_posix(),
+        waymax_evidence_binding_sha256=_json_text(
+            awaiting.get("waymax_evidence_binding_sha256"),
+            "review-rejected Waymax evidence binding",
+        ),
+        waymax_numpy_eligibility_ledger_sha256=_json_text(
+            awaiting.get("waymax_numpy_eligibility_ledger_sha256"),
+            "review-rejected NumPy eligibility binding",
+        ),
+    )
+    provenance = _normalize_typed_provenance(
+        tables[TYPED_PROVENANCE].to_pylist(),
+        receipt,
+    )[0]
+    reviews = _normalize_review_decisions(
+        tables[REVIEW_DECISIONS].to_pylist(),
+        receipt,
+        expected_evidence_catalog_sha256=evidence_catalog_sha256,
+        expected_approved_git_commit=provenance["approved_git_commit"],
+        expected_mechanical_verification_sha256=(
+            verification.verification_sha256
+        ),
+    )
+    execution = _normalize_execution_summary(
+        tables[EXECUTION_SUMMARY].to_pylist(),
+        receipt,
+    )[0]
+    determinism = M6DeterminismReceipt.from_dict(
+        _decode_canonical_mapping(
+            snapshots[DETERMINISM_RECEIPT_PATH].payload,
+            "review-rejected determinism receipt",
+        )
+    )
+    expected_execution = _derive_execution_summary(
+        receipt=receipt,
+        tables={
+            dataset: table.to_pylist() for dataset, table in tables.items()
+        },
+        determinism=determinism,
+        fresh_worker_peak_rss_bytes=execution[
+            "fresh_worker_peak_rss_bytes"
+        ],
+    )
+    if (
+        execution != expected_execution
+        or execution["release_gate_status"] != "rejected"
+        or all(
+            row["decision"] == "accept"
+            and row["p1_count"] == 0
+            and row["p2_count"] == 0
+            for row in reviews
+        )
+    ):
+        raise M6ResultStoreIntegrityError(
+            "review-rejected decision/execution semantics are inconsistent"
+        )
+    _assert_guarded_snapshot_current(
+        run_path / TERMINAL_FAILURE_MARKER,
+        run_path,
+        failure_snapshot,
+    )
+    _assert_guarded_snapshot_current(
+        run_path / PENDING_MARKER,
+        run_path,
+        pending_snapshot,
+    )
+    for path_name, snapshot in snapshots.items():
+        _assert_guarded_snapshot_current(
+            run_path / path_name,
+            run_path,
+            snapshot,
+        )
+    _validate_run_tree(
+        run_path,
+        allowed_files={
+            PENDING_MARKER,
+            AWAITING_REVIEW_MARKER,
+            TERMINAL_FAILURE_MARKER,
+            *artifact_by_path,
+        },
+    )
+    return VerifiedM6RejectedReviewStore(
+        run_path=run_path,
+        receipt=receipt,
+        verification=verification,
+        review_decisions=tuple(
+            MappingProxyType(dict(row)) for row in reviews
+        ),
+        execution_summary=MappingProxyType(dict(execution)),
+        artifacts=artifact_records,
+    )
+
+
+def _verify_m6_committed_provenance(
+    verified: VerifiedM6ResultStore,
+    evidence: M6VerifiedProvenance,
+) -> str:
+    if not isinstance(verified, VerifiedM6ResultStore):
+        raise TypeError("verified must be a VerifiedM6ResultStore")
+    if (
+        type(evidence) is not M6VerifiedProvenance
+        or evidence._factory_sentinel is not _VERIFIED_PROVENANCE_SENTINEL
+    ):
+        raise M6ResultStoreStateError(
+            "terminal verification requires freshly verified provenance"
+        )
+    evidence.revalidate()
+    if evidence.mode != verified.profile.mode:
+        raise M6ResultStoreIntegrityError(
+            "verified provenance mode differs from the committed store"
+        )
+    stored = _normalize_typed_provenance(
+        verified.read_dataset(TYPED_PROVENANCE).to_pylist(),
+        verified.receipt,
+    )[0]
+    expected = _normalize_typed_provenance(
+        (evidence.to_store_row(),),
+        verified.receipt,
+    )[0]
+    if stored != expected:
+        raise M6ResultStoreIntegrityError(
+            "committed typed provenance differs from final verified facts"
+        )
+    return stored["verification_context_sha256"]
+
+
+def _expected_m6_observed_preflight(
+    *,
+    mode: str,
+    result_path: str,
+    manifest_sha256: str,
+    committed_sha256: str,
+    evidence_catalog_sha256: str,
+    provenance_context_sha256: str,
+) -> M6ObservedPreflightResult:
+    return M6ObservedPreflightResult(
+        mode=mode,
+        result_path=result_path,
+        manifest_sha256=manifest_sha256,
+        committed_sha256=committed_sha256,
+        evidence_catalog_sha256=evidence_catalog_sha256,
+        provenance_context_sha256=provenance_context_sha256,
+        checks={name: True for name in M6_PREFLIGHT_CHECK_DOMAIN},
+        _factory_sentinel=_OBSERVED_PREFLIGHT_SENTINEL,
+    )
+
+
+def _assert_m6_terminal_mode_gate(
+    profile: M6ResultProfile,
+    receipt: M6EligibilityReceipt,
+    waymax_selection_receipt: M6WaymaxSelectionReceipt,
+    tables: Mapping[str, pa.Table],
+) -> None:
+    if profile.mode == COMPUTE_PILOT_MODE:
+        qualification = _normalize_waymax_qualification(
+            tables[WAYMAX_QUALIFICATION].to_pylist(),
+            receipt,
+        )
+        selected_indices_sha256 = _m6_compute_pilot_selected_indices_sha256(
+            qualification,
+            waymax_selection_receipt,
+        )
+        pilot = _normalize_compute_pilot(
+            tables[COMPUTE_PILOT_SUMMARY].to_pylist(),
+            receipt,
+            selected_cohort_indices_sha256=selected_indices_sha256,
+            waymax_scene_n=(
+                8 if waymax_selection_receipt.selection_supported else 0
+            ),
+        )[0]
+        if pilot["passed"] is not True:
+            raise M6ResultStoreIntegrityError(
+                "a failed compute pilot cannot become terminal success"
+            )
+
+
+def _verified_committed_terminal_binding(
+    store: M6ResultStore,
+) -> tuple[VerifiedM6ResultStore, str, str, str, str]:
+    verified = verify_committed_m6_result_store(
+        store.project_root,
+        store.run_name,
+        allow_data_free=store.profile.data_free,
+        expected_mode=store.profile.mode,
+    )
+    if verified.run_path != store.run_path or verified.profile != store.profile:
+        raise M6ResultStoreIntegrityError(
+            "committed verification resolved a different store"
+        )
+    _assert_m6_terminal_mode_gate(
+        verified.profile,
+        verified.receipt,
+        verified.waymax_selection_receipt,
+        verified.tables,
+    )
+    manifest_bytes = _read_guarded_bytes(
+        store.run_path / MANIFEST_PATH, store.run_path
+    )
+    if manifest_bytes != _canonical_json_bytes(dict(verified.manifest)):
+        raise M6ResultStoreIntegrityError(
+            "manifest changed after committed verification"
+        )
+    committed_bytes = _read_guarded_bytes(
+        store.run_path / COMMITTED_MARKER, store.run_path
+    )
+    manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
+    expected_committed = _canonical_json_bytes(
+        {
+            "expected_rows": dict(verified.receipt.expected_rows),
+            "manifest_sha256": manifest_sha256,
+            "manifest_size_bytes": len(manifest_bytes),
+            "mode": verified.profile.mode,
+            "row_domain_sha256": _row_domain_sha256(verified.receipt),
+            "schema_fingerprints": _schema_fingerprints_for_receipt(
+                verified.receipt
+            ),
+            "schema_version": M6_RESULT_STORE_SCHEMA_VERSION,
+            "state": "COMMITTED",
+        }
+    )
+    if committed_bytes != expected_committed:
+        raise M6ResultStoreIntegrityError(
+            "COMMITTED changed after committed verification"
+        )
+    _validate_marker_exclusivity(store.run_path)
+    if (
+        _path_kind(store.run_path / TERMINAL_FAILURE_MARKER) != "missing"
+        or _path_kind(store.run_path / TERMINAL_SUCCESS_MARKER) != "missing"
+    ):
+        raise M6ResultStoreStateError(
+            "terminal marker appeared during committed verification"
+        )
+    return (
+        verified,
+        manifest_sha256,
+        hashlib.sha256(committed_bytes).hexdigest(),
+        _terminal_evidence_catalog_sha256(
+            verified.receipt, verified.artifacts
+        ),
+        _normalize_typed_provenance(
+            verified.read_dataset(TYPED_PROVENANCE).to_pylist(),
+            verified.receipt,
+        )[0]["verification_context_sha256"],
+    )
+
+
+def _validate_committed_awaiting_review_marker(
+    payload: bytes,
+    *,
+    capability_sha256: str,
+    receipt: M6EligibilityReceipt,
+    records: Sequence[M6ArtifactRecord],
+    tables: Mapping[str, pa.Table],
+    artifact_payloads: Mapping[str, bytes],
+    result_path: str,
+    waymax_evidence_binding_sha256: str,
+    waymax_numpy_eligibility_ledger_sha256: str,
+) -> None:
+    """Authenticate the sealed precursor marker retained by official results."""
+
+    awaiting = _decode_canonical_mapping(
+        payload,
+        "AWAITING_REVIEW marker",
+    )
+    expected_fields = {
+        "approved_git_commit",
+        "artifacts",
+        "capability_preimage",
+        "capability_sha256",
+        "evidence_catalog_sha256",
+        "fresh_worker_peak_rss_bytes",
+        "mechanical_verification_sha256",
+        "mode",
+        "result_path",
+        "schema_version",
+        "state",
+        "waymax_evidence_binding_sha256",
+        "waymax_numpy_eligibility_ledger_sha256",
+    }
+    if set(awaiting) != expected_fields or receipt.mode != OFFICIAL_MODE:
+        raise M6ResultStoreIntegrityError(
+            "committed AWAITING_REVIEW fields/mode are not exact"
+        )
+    capability_preimage = _json_text(
+        awaiting["capability_preimage"],
+        "AWAITING_REVIEW capability preimage",
+    )
+    try:
+        capability_bytes = bytes.fromhex(capability_preimage)
+    except ValueError as exc:
+        raise M6ResultStoreIntegrityError(
+            "committed AWAITING_REVIEW capability preimage is invalid"
+        ) from exc
+    if (
+        len(capability_bytes) != 32
+        or capability_bytes.hex() != capability_preimage
+        or hashlib.sha256(capability_bytes).hexdigest()
+        != capability_sha256
+    ):
+        raise M6ResultStoreIntegrityError(
+            "committed AWAITING_REVIEW does not open PENDING capability"
+        )
+
+    precursor_records = tuple(
+        record
+        for record in records
+        if record.path
+        not in {
+            _DATASET_PATHS[REVIEW_DECISIONS],
+            _DATASET_PATHS[EXECUTION_SUMMARY],
+        }
+    )
+    expected_catalog = _review_precursor_sha256(receipt, records)
+    verification = M6MechanicalVerificationReceipt.from_dict(
+        _decode_canonical_mapping(
+            artifact_payloads[REVIEW_REQUEST_PATH],
+            "committed mechanical verification",
+        )
+    )
+    assert verification.verification_sha256 is not None
+    provenance = _normalize_typed_provenance(
+        tables[TYPED_PROVENANCE].to_pylist(),
+        receipt,
+    )[0]
+    approved_git_commit = provenance["approved_git_commit"]
+    reviews = _normalize_review_decisions(
+        tables[REVIEW_DECISIONS].to_pylist(),
+        receipt,
+        expected_evidence_catalog_sha256=expected_catalog,
+        expected_approved_git_commit=approved_git_commit,
+        expected_mechanical_verification_sha256=(
+            verification.verification_sha256
+        ),
+    )
+    execution = _normalize_execution_summary(
+        tables[EXECUTION_SUMMARY].to_pylist(),
+        receipt,
+    )[0]
+    if (
+        verification.mode != OFFICIAL_MODE
+        or verification.result_path != result_path
+        or verification.approved_git_commit != approved_git_commit
+        or verification.evidence_catalog_sha256 != expected_catalog
+        or any(
+            row["evidence_catalog_sha256"] != expected_catalog
+            or row["approved_git_commit"] != approved_git_commit
+            or row["mechanical_verification_sha256"]
+            != verification.verification_sha256
+            for row in reviews
+        )
+    ):
+        raise M6ResultStoreIntegrityError(
+            "committed AWAITING_REVIEW verification/review binding drifted"
+        )
+    expected = {
+        "approved_git_commit": approved_git_commit,
+        "artifacts": [record.to_dict() for record in precursor_records],
+        "capability_preimage": capability_preimage,
+        "capability_sha256": capability_sha256,
+        "evidence_catalog_sha256": expected_catalog,
+        "fresh_worker_peak_rss_bytes": execution[
+            "fresh_worker_peak_rss_bytes"
+        ],
+        "mechanical_verification_sha256": (
+            verification.verification_sha256
+        ),
+        "mode": OFFICIAL_MODE,
+        "result_path": result_path,
+        "schema_version": M6_RESULT_STORE_SCHEMA_VERSION,
+        "state": "AWAITING_REVIEW",
+        "waymax_evidence_binding_sha256": (
+            waymax_evidence_binding_sha256
+        ),
+        "waymax_numpy_eligibility_ledger_sha256": (
+            waymax_numpy_eligibility_ledger_sha256
+        ),
+    }
+    if awaiting != expected:
+        raise M6ResultStoreIntegrityError(
+            "committed AWAITING_REVIEW marker differs from sealed precursor"
+        )
+
+
 def _verify_m6_result_store(
     project_root: str | Path,
     run_name: str,
@@ -6431,23 +10161,26 @@ def _verify_m6_result_store(
             "committed verifier requires a pre-terminal checkpoint"
         )
 
-    pending_bytes = _read_guarded_bytes(
-        run_path / PENDING_MARKER,
-        run_path,
-    )
-    manifest_bytes = _read_guarded_bytes(
-        run_path / MANIFEST_PATH,
-        run_path,
-    )
-    committed_bytes = _read_guarded_bytes(
-        run_path / COMMITTED_MARKER,
-        run_path,
-    )
-    success_bytes = (
-        _read_guarded_bytes(
-            run_path / TERMINAL_SUCCESS_MARKER,
-            run_path,
+    marker_snapshots = {
+        PENDING_MARKER: _read_guarded_snapshot(
+            run_path / PENDING_MARKER, run_path
+        ),
+        MANIFEST_PATH: _read_guarded_snapshot(
+            run_path / MANIFEST_PATH, run_path
+        ),
+        COMMITTED_MARKER: _read_guarded_snapshot(
+            run_path / COMMITTED_MARKER, run_path
+        ),
+    }
+    if require_success:
+        marker_snapshots[TERMINAL_SUCCESS_MARKER] = _read_guarded_snapshot(
+            run_path / TERMINAL_SUCCESS_MARKER, run_path
         )
+    pending_bytes = marker_snapshots[PENDING_MARKER].payload
+    manifest_bytes = marker_snapshots[MANIFEST_PATH].payload
+    committed_bytes = marker_snapshots[COMMITTED_MARKER].payload
+    success_bytes = (
+        marker_snapshots[TERMINAL_SUCCESS_MARKER].payload
         if require_success
         else None
     )
@@ -6491,6 +10224,15 @@ def _verify_m6_result_store(
         raise M6ResultStoreIntegrityError("PENDING marker fields are not exact")
     mode = _json_text(pending["mode"], "mode")
     profile = _profile(mode)
+    awaiting_review_bytes: bytes | None = None
+    if mode == OFFICIAL_MODE:
+        marker_snapshots[AWAITING_REVIEW_MARKER] = _read_guarded_snapshot(
+            run_path / AWAITING_REVIEW_MARKER,
+            run_path,
+        )
+        awaiting_review_bytes = marker_snapshots[
+            AWAITING_REVIEW_MARKER
+        ].payload
     if expected_mode is not None and mode != expected_mode:
         raise M6ResultStoreIntegrityError("run mode differs from expected mode")
     if profile.data_free and allow_data_free is not True:
@@ -6523,6 +10265,8 @@ def _verify_m6_result_store(
         "row_domain_sha256",
         "schema_fingerprints",
         "schema_version",
+        "waymax_evidence_binding_sha256",
+        "waymax_numpy_eligibility_ledger_sha256",
     }
     if set(manifest) != expected_manifest_fields:
         raise M6ResultStoreIntegrityError("manifest fields are not exact")
@@ -6579,6 +10323,14 @@ def _verify_m6_result_store(
         manifest["row_domain_sha256"],
         "manifest row_domain_sha256",
     )
+    manifest_waymax_evidence_binding = _json_optional_text(
+        manifest["waymax_evidence_binding_sha256"],
+        "manifest waymax_evidence_binding_sha256",
+    )
+    manifest_waymax_numpy_eligibility = _json_optional_text(
+        manifest["waymax_numpy_eligibility_ledger_sha256"],
+        "manifest waymax_numpy_eligibility_ledger_sha256",
+    )
     if (
         _SHA256.fullmatch(manifest_capability) is None
         or _SHA256.fullmatch(manifest_row_domain) is None
@@ -6590,6 +10342,34 @@ def _verify_m6_result_store(
         or manifest_complete is not True
         or hash_algorithm != "sha256"
         or manifest_self_hash is not False
+        or (
+            profile.mode == OFFICIAL_MODE
+            and (
+                manifest_waymax_evidence_binding is None
+                or _SHA256.fullmatch(
+                    manifest_waymax_evidence_binding
+                ) is None
+                or manifest_waymax_numpy_eligibility is None
+                or _SHA256.fullmatch(
+                    manifest_waymax_numpy_eligibility
+                ) is None
+            )
+        )
+        or (
+            profile.data_free
+            and (
+                manifest_waymax_evidence_binding is not None
+                or manifest_waymax_numpy_eligibility
+                != M6_DATA_FREE_WAYMAX_NUMPY_ELIGIBILITY_LEDGER_SHA256
+            )
+        )
+        or (
+            not profile.complete_results
+            and (
+                manifest_waymax_evidence_binding is not None
+                or manifest_waymax_numpy_eligibility is not None
+            )
+        )
     ):
         raise M6ResultStoreIntegrityError(
             "manifest mode/identity boundary is invalid"
@@ -6608,19 +10388,8 @@ def _verify_m6_result_store(
         raise M6ResultStoreIntegrityError(
             "manifest artifact ordering/domain is noncanonical"
         )
-    # Authenticate every listed artifact byte-for-byte before invoking any
-    # artifact JSON or Parquet parser.  This prevents a rewritten artifact and
-    # rewritten manifest from reaching parser code unless the already-sealed
-    # COMMITTED marker authenticates that new manifest.
-    for record in records:
-        digest, size = _guarded_sha256(
-            run_path / record.path,
-            run_path,
-        )
-        if digest != record.sha256 or size != record.size_bytes:
-            raise M6ResultStoreIntegrityError(
-                f"{record.path} failed size/SHA-256 verification"
-            )
+    # Authenticate exact snapshots before any JSON or Parquet parser receives bytes.
+    artifact_snapshots = _authenticated_artifact_snapshots(run_path, records)
     receipt_record = next(
         (
             record
@@ -6633,10 +10402,7 @@ def _verify_m6_result_store(
         raise M6ResultStoreIntegrityError(
             "manifest is missing eligibility receipt"
         )
-    receipt_bytes = _read_guarded_bytes(
-        run_path / ELIGIBILITY_RECEIPT_PATH,
-        run_path,
-    )
+    receipt_bytes = artifact_snapshots[ELIGIBILITY_RECEIPT_PATH].payload
     receipt = M6EligibilityReceipt.from_dict(
         _decode_canonical_mapping(receipt_bytes, "eligibility receipt")
     )
@@ -6669,6 +10435,8 @@ def _verify_m6_result_store(
         COMMITTED_MARKER,
         *expected_artifact_paths,
     }
+    if mode == OFFICIAL_MODE:
+        allowed_files.add(AWAITING_REVIEW_MARKER)
     if require_success:
         allowed_files.add(TERMINAL_SUCCESS_MARKER)
     _validate_run_tree(run_path, allowed_files=allowed_files)
@@ -6683,7 +10451,10 @@ def _verify_m6_result_store(
                 raise M6ResultStoreIntegrityError(
                     "manifest dataset identity/rows drifted"
                 )
-            table = _read_guarded_parquet(path, run_path, dataset)
+            table = _parse_guarded_parquet_payload(
+                artifact_snapshots[record.path].payload,
+                dataset,
+            )
             if table.num_rows != record.rows:
                 raise M6ResultStoreIntegrityError(
                     f"{dataset} row count drifted"
@@ -6703,6 +10474,9 @@ def _verify_m6_result_store(
                 CLAIM_LIMITATIONS_PATH: (
                     M6_CLAIM_LIMITATIONS_SCHEMA_VERSION
                 ),
+                REVIEW_REQUEST_PATH: (
+                    M6_MECHANICAL_VERIFICATION_SCHEMA_VERSION
+                ),
             }.get(record.path)
             if (
                 expected_identity is None
@@ -6716,7 +10490,7 @@ def _verify_m6_result_store(
                 waymax_selection_receipt = (
                     M6WaymaxSelectionReceipt.from_dict(
                         _decode_canonical_mapping(
-                            _read_guarded_bytes(path, run_path),
+                            artifact_snapshots[record.path].payload,
                             "Waymax selection receipt",
                         )
                     )
@@ -6731,11 +10505,12 @@ def _verify_m6_result_store(
         )
 
     _verify_semantic_artifacts(
-        run_path,
         profile,
         receipt,
         tables,
         waymax_selection_receipt,
+        run_name=run_path.name,
+        result_path=(Path("outputs") / "m6" / run_path.name).as_posix(),
         manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
         live_waymax_selection=None,
         review_precursor_sha256=(
@@ -6743,7 +10518,39 @@ def _verify_m6_result_store(
             if profile.complete_results
             else None
         ),
+        waymax_evidence_binding_sha256=(
+            manifest_waymax_evidence_binding
+        ),
+        waymax_numpy_eligibility_ledger_sha256=(
+            manifest_waymax_numpy_eligibility
+        ),
+        artifact_payloads={
+            path: snapshot.payload
+            for path, snapshot in artifact_snapshots.items()
+        },
     )
+    if mode == OFFICIAL_MODE:
+        assert awaiting_review_bytes is not None
+        assert manifest_waymax_evidence_binding is not None
+        assert manifest_waymax_numpy_eligibility is not None
+        _validate_committed_awaiting_review_marker(
+            awaiting_review_bytes,
+            capability_sha256=capability_sha,
+            receipt=receipt,
+            records=records,
+            tables=tables,
+            artifact_payloads={
+                path: snapshot.payload
+                for path, snapshot in artifact_snapshots.items()
+            },
+            result_path=relative.as_posix(),
+            waymax_evidence_binding_sha256=(
+                manifest_waymax_evidence_binding
+            ),
+            waymax_numpy_eligibility_ledger_sha256=(
+                manifest_waymax_numpy_eligibility
+            ),
+        )
     for dataset, expected_rows in receipt.expected_rows.items():
         if (
             tables[dataset].num_rows != expected_rows
@@ -6824,8 +10631,14 @@ def _verify_m6_result_store(
             "observed_preflight_sha256": success.get(
                 "observed_preflight_sha256"
             ),
+            "provenance_context_sha256": success.get(
+                "provenance_context_sha256"
+            ),
             "schema_version": M6_RESULT_STORE_SCHEMA_VERSION,
             "state": "TERMINAL_SUCCESS",
+            "writer_capability_preimage": success.get(
+                "writer_capability_preimage"
+            ),
         }
         evidence_catalog_sha256 = _json_text(
             success.get("evidence_catalog_sha256"),
@@ -6835,16 +10648,58 @@ def _verify_m6_result_store(
             success.get("observed_preflight_sha256"),
             "TERMINAL_SUCCESS observed_preflight_sha256",
         )
+        provenance_context_sha256 = _json_text(
+            success.get("provenance_context_sha256"),
+            "TERMINAL_SUCCESS provenance_context_sha256",
+        )
+        stored_provenance_context_sha256 = _normalize_typed_provenance(
+            tables[TYPED_PROVENANCE].to_pylist(),
+            receipt,
+        )[0]["verification_context_sha256"]
+        writer_capability_preimage = _json_text(
+            success.get("writer_capability_preimage"),
+            "TERMINAL_SUCCESS writer_capability_preimage",
+        )
+        try:
+            writer_capability_bytes = bytes.fromhex(
+                writer_capability_preimage
+            )
+        except ValueError as exc:
+            raise M6ResultStoreIntegrityError(
+                "TERMINAL_SUCCESS writer capability preimage is invalid"
+            ) from exc
+        if (
+            len(writer_capability_preimage) != 64
+            or writer_capability_preimage.lower()
+            != writer_capability_preimage
+            or len(writer_capability_bytes) != 32
+            or hashlib.sha256(writer_capability_bytes).hexdigest()
+            != capability_sha
+        ):
+            raise M6ResultStoreIntegrityError(
+                "TERMINAL_SUCCESS writer capability preimage does not "
+                "open the PENDING commitment"
+            )
         if (
             set(success) != set(expected_success_fields)
             or _SHA256.fullmatch(evidence_catalog_sha256) is None
             or _SHA256.fullmatch(observed_preflight_sha256) is None
+            or _SHA256.fullmatch(provenance_context_sha256) is None
+            or provenance_context_sha256
+            != stored_provenance_context_sha256
             or success != expected_success_fields
         ):
             raise M6ResultStoreIntegrityError(
                 "TERMINAL_SUCCESS binding is invalid"
             )
-        if profile.complete_results:
+        expected_evidence_catalog_sha256 = (
+            _terminal_evidence_catalog_sha256(receipt, records)
+        )
+        if evidence_catalog_sha256 != expected_evidence_catalog_sha256:
+            raise M6ResultStoreIntegrityError(
+                "TERMINAL_SUCCESS evidence catalog is not mechanically derived"
+            )
+        if profile.mode == OFFICIAL_MODE:
             reviews = tables[REVIEW_DECISIONS].to_pylist()
             review_digests = {
                 row["evidence_catalog_sha256"] for row in reviews
@@ -6853,21 +10708,45 @@ def _verify_m6_result_store(
                 raise M6ResultStoreIntegrityError(
                     "TERMINAL_SUCCESS evidence catalog differs from reviews"
                 )
+        elif profile.data_free and tables[REVIEW_DECISIONS].num_rows != 0:
+            raise M6ResultStoreIntegrityError(
+                "data-free terminal evidence contains review decisions"
+            )
         if profile.data_free:
-            expected_self = hashlib.sha256(
-                b"evalsim-m6-data-free-self-verification-v1\x00"
-                + bytes.fromhex(
-                    hashlib.sha256(manifest_bytes).hexdigest()
-                )
-                + bytes.fromhex(
-                    hashlib.sha256(committed_bytes).hexdigest()
-                )
+            expected_preflight = hashlib.sha256(
+                b"evalsim-m6-data-free-self-verification-v2\x00"
+                + bytes.fromhex(manifest_sha256)
+                + bytes.fromhex(committed_sha256)
                 + bytes.fromhex(evidence_catalog_sha256)
+                + bytes.fromhex(provenance_context_sha256)
             ).hexdigest()
-            if observed_preflight_sha256 != expected_self:
-                raise M6ResultStoreIntegrityError(
-                    "data_free terminal self-verification binding drifted"
-                )
+        else:
+            expected_preflight = _expected_m6_observed_preflight(
+                mode=mode,
+                result_path=relative.as_posix(),
+                manifest_sha256=manifest_sha256,
+                committed_sha256=committed_sha256,
+                evidence_catalog_sha256=evidence_catalog_sha256,
+                provenance_context_sha256=provenance_context_sha256,
+            ).canonical_sha256
+        if observed_preflight_sha256 != expected_preflight:
+            raise M6ResultStoreIntegrityError(
+                "TERMINAL_SUCCESS observed-preflight binding drifted"
+            )
+        _assert_m6_terminal_mode_gate(
+            profile,
+            receipt,
+            waymax_selection_receipt,
+            tables,
+        )
+    _validate_run_tree(run_path, allowed_files=allowed_files)
+    for path_name, snapshot in {
+        **marker_snapshots,
+        **artifact_snapshots,
+    }.items():
+        _assert_guarded_snapshot_current(
+            run_path / path_name, run_path, snapshot
+        )
     return VerifiedM6ResultStore(
         run_path=run_path,
         profile=profile,
@@ -6886,6 +10765,9 @@ def _verify_uncommitted_artifacts(
     records: Sequence[M6ArtifactRecord],
     *,
     waymax_selection: M6WaymaxSelection | None,
+    waymax_evidence_binding_sha256: str | None,
+    waymax_numpy_eligibility_ledger_sha256: str | None,
+    reopened_anchor_sha256: str | None = None,
 ) -> None:
     expected_paths = _expected_artifact_paths(receipt)
     if {record.path for record in records} != expected_paths:
@@ -6893,20 +10775,22 @@ def _verify_uncommitted_artifacts(
             "uncommitted mode artifact domain is incomplete"
         )
     allowed = {PENDING_MARKER, *expected_paths}
+    if reopened_anchor_sha256 is not None:
+        if _SHA256.fullmatch(reopened_anchor_sha256) is None:
+            raise M6ResultStoreIntegrityError(
+                "reopened review anchor must be SHA-256"
+            )
+        allowed.add(AWAITING_REVIEW_MARKER)
     _validate_run_tree(run_path, allowed_files=allowed)
+    artifact_snapshots = _authenticated_artifact_snapshots(run_path, records)
     tables: dict[str, pa.Table] = {}
     disk_receipt: M6EligibilityReceipt | None = None
     waymax_selection_receipt: M6WaymaxSelectionReceipt | None = None
     for record in records:
-        path = run_path / record.path
-        digest, size = _guarded_sha256(path, run_path)
-        if digest != record.sha256 or size != record.size_bytes:
-            raise M6ResultStoreIntegrityError(
-                "uncommitted artifact digest/size drifted"
-            )
+        payload = artifact_snapshots[record.path].payload
         dataset = _dataset_for_path(record.path)
         if dataset is not None:
-            table = _read_guarded_parquet(path, run_path, dataset)
+            table = _parse_guarded_parquet_payload(payload, dataset)
             if record.rows != table.num_rows:
                 raise M6ResultStoreIntegrityError(
                     "uncommitted artifact rows drifted"
@@ -6914,18 +10798,14 @@ def _verify_uncommitted_artifacts(
             tables[dataset] = table
         elif record.path == ELIGIBILITY_RECEIPT_PATH:
             if (
-                record.schema_identity
-                != M6_ELIGIBILITY_RECEIPT_SCHEMA_VERSION
+                record.schema_identity != M6_ELIGIBILITY_RECEIPT_SCHEMA_VERSION
                 or record.rows is not None
             ):
                 raise M6ResultStoreIntegrityError(
                     "uncommitted eligibility receipt identity drifted"
                 )
             disk_receipt = M6EligibilityReceipt.from_dict(
-                _decode_canonical_mapping(
-                    _read_guarded_bytes(path, run_path),
-                    "eligibility receipt",
-                )
+                _decode_canonical_mapping(payload, "eligibility receipt")
             )
         elif record.path == WAYMAX_SELECTION_RECEIPT_PATH:
             if (
@@ -6937,10 +10817,7 @@ def _verify_uncommitted_artifacts(
                     "uncommitted Waymax selection receipt identity drifted"
                 )
             waymax_selection_receipt = M6WaymaxSelectionReceipt.from_dict(
-                _decode_canonical_mapping(
-                    _read_guarded_bytes(path, run_path),
-                    "Waymax selection receipt",
-                )
+                _decode_canonical_mapping(payload, "Waymax selection receipt")
             )
         elif record.path == DETERMINISM_RECEIPT_PATH:
             if (
@@ -6953,21 +10830,26 @@ def _verify_uncommitted_artifacts(
                 )
         elif record.path == CLAIM_LIMITATIONS_PATH:
             if (
-                record.schema_identity
-                != M6_CLAIM_LIMITATIONS_SCHEMA_VERSION
+                record.schema_identity != M6_CLAIM_LIMITATIONS_SCHEMA_VERSION
                 or record.rows is not None
             ):
                 raise M6ResultStoreIntegrityError(
                     "uncommitted claim/limitations identity drifted"
                 )
+        elif record.path == REVIEW_REQUEST_PATH:
+            if (
+                record.schema_identity
+                != M6_MECHANICAL_VERIFICATION_SCHEMA_VERSION
+                or record.rows is not None
+            ):
+                raise M6ResultStoreIntegrityError(
+                    "uncommitted review-request identity drifted"
+                )
         else:
             raise M6ResultStoreIntegrityError(
                 "uncommitted JSON artifact domain drifted"
             )
-    if (
-        disk_receipt is None
-        or disk_receipt.to_dict() != receipt.to_dict()
-    ):
+    if disk_receipt is None or disk_receipt.to_dict() != receipt.to_dict():
         raise M6ResultStoreIntegrityError(
             "uncommitted eligibility receipt bytes drifted"
         )
@@ -6979,31 +10861,51 @@ def _verify_uncommitted_artifacts(
             "uncommitted Waymax selection receipt is missing/mismatched"
         )
     _verify_semantic_artifacts(
-        run_path,
         profile,
         receipt,
         tables,
         waymax_selection_receipt,
-        manifest_sha256=None,
+        run_name=run_path.name,
+        result_path=(Path("outputs") / "m6" / run_path.name).as_posix(),
+        manifest_sha256=reopened_anchor_sha256,
         live_waymax_selection=waymax_selection,
         review_precursor_sha256=(
             _review_precursor_sha256(receipt, records)
             if profile.complete_results
             else None
         ),
+        waymax_evidence_binding_sha256=(
+            waymax_evidence_binding_sha256
+        ),
+        waymax_numpy_eligibility_ledger_sha256=(
+            waymax_numpy_eligibility_ledger_sha256
+        ),
+        artifact_payloads={
+            path: snapshot.payload
+            for path, snapshot in artifact_snapshots.items()
+        },
     )
+    _validate_run_tree(run_path, allowed_files=allowed)
+    for path_name, snapshot in artifact_snapshots.items():
+        _assert_guarded_snapshot_current(
+            run_path / path_name, run_path, snapshot
+        )
 
 
 def _verify_semantic_artifacts(
-    run_path: Path,
     profile: M6ResultProfile,
     receipt: M6EligibilityReceipt,
     tables: Mapping[str, pa.Table],
     waymax_selection_receipt: M6WaymaxSelectionReceipt,
     *,
+    run_name: str,
+    result_path: str,
     manifest_sha256: str | None,
     live_waymax_selection: M6WaymaxSelection | None,
     review_precursor_sha256: str | None,
+    waymax_evidence_binding_sha256: str | None,
+    waymax_numpy_eligibility_ledger_sha256: str | None,
+    artifact_payloads: Mapping[str, bytes],
 ) -> None:
     eligibility = _normalize_eligibility(
         tables[ELIGIBILITY_LEDGER].to_pylist(),
@@ -7072,10 +10974,15 @@ def _verify_semantic_artifacts(
                 receipt,
             )
         )
+    typed_provenance = _normalize_typed_provenance(
+        tables[TYPED_PROVENANCE].to_pylist(),
+        receipt,
+    )[0]
     if profile.mode == ELIGIBILITY_ONLY_MODE:
         if set(tables) != {
             ELIGIBILITY_LEDGER,
             WAYMAX_QUALIFICATION,
+            TYPED_PROVENANCE,
         }:
             raise M6ResultStoreIntegrityError(
                 "eligibility_only contains outcome artifacts"
@@ -7086,6 +10993,7 @@ def _verify_semantic_artifacts(
             ELIGIBILITY_LEDGER,
             WAYMAX_QUALIFICATION,
             COMPUTE_PILOT_SUMMARY,
+            TYPED_PROVENANCE,
         }:
             raise M6ResultStoreIntegrityError(
                 "compute_pilot table domain drifted"
@@ -7093,6 +11001,23 @@ def _verify_semantic_artifacts(
         _normalize_compute_pilot(
             tables[COMPUTE_PILOT_SUMMARY].to_pylist(),
             receipt,
+            run_name=run_name,
+            result_path=result_path,
+            provenance_context_sha256=typed_provenance[
+                "verification_context_sha256"
+            ],
+            selection_binding_sha256=(
+                waymax_selection_receipt.selection_binding_sha256
+            ),
+            selected_cohort_indices_sha256=(
+                _m6_compute_pilot_selected_indices_sha256(
+                    qualification,
+                    waymax_selection_receipt,
+                )
+            ),
+            waymax_scene_n=(
+                8 if waymax_selection_receipt.selection_supported else 0
+            ),
         )
         return
 
@@ -7233,6 +11158,37 @@ def _verify_semantic_artifacts(
         receipt,
         qualification,
     )
+    if (
+        profile.data_free
+        and comparison_rows
+        != m6_data_free_waymax_field_comparison_rows()
+    ):
+        raise M6ResultStoreIntegrityError(
+            "data_free Waymax field placeholders are not exact"
+        )
+    numpy_comparison_rows = (
+        _normalize_waymax_numpy_comparisons_from_qualification(
+            tables[WAYMAX_NUMPY_COMPARISONS].to_pylist(),
+            receipt,
+            tables[ELIGIBILITY_LEDGER].to_pylist(),
+            qualification,
+            waymax_selection_receipt,
+            expected_numpy_eligibility_sha256=(
+                waymax_numpy_eligibility_ledger_sha256
+                if waymax_numpy_eligibility_ledger_sha256 is not None
+                else M6_DATA_FREE_WAYMAX_NUMPY_ELIGIBILITY_LEDGER_SHA256
+            ),
+        )
+    )
+    if profile.mode == OFFICIAL_MODE and (
+        waymax_evidence_binding_sha256 is None
+        or _SHA256.fullmatch(waymax_evidence_binding_sha256) is None
+        or waymax_numpy_eligibility_ledger_sha256 is None
+    ):
+        raise M6ResultStoreIntegrityError(
+            "official Waymax authority bindings are absent"
+        )
+    del numpy_comparison_rows
     determinism_rows = _normalize_waymax_determinism_from_qualification(
         tables[WAYMAX_DETERMINISM].to_pylist(),
         receipt,
@@ -7245,13 +11201,22 @@ def _verify_semantic_artifacts(
     stored_cells = tuple(
         row for row in waymax if row["record_type"] == "secondary_cell"
     )
+    rederived_cells = _independently_rederive_waymax_cell_rows(
+        parsed_scalar_table,
+        receipt,
+    )
+    if stored_cells != rederived_cells:
+        raise M6ResultStoreIntegrityError(
+            "every stored Waymax cell field must equal independent "
+            "scalar-based rederivation"
+        )
     if stored_reconstruction is not None and any(
         row["pair_n"] != stored_reconstruction.pair_n
         or row["status"] != stored_reconstruction.status
-        for row in stored_cells
+        for row in rederived_cells
     ):
         raise M6ResultStoreIntegrityError(
-            "Waymax stored cell accounting differs from non-promotable "
+            "independent Waymax cells differ from the sealed selection "
             "reconstruction"
         )
     if waymax != _derive_waymax_accounting(
@@ -7261,9 +11226,7 @@ def _verify_semantic_artifacts(
         receipt,
         waymax_selection_receipt,
         matrix=None,
-        stored_cell_rows=(
-            None if profile.data_free else stored_cells
-        ),
+        stored_cell_rows=rederived_cells,
     ):
         raise M6ResultStoreIntegrityError(
             "Waymax accounting differs from sealed qualification/scalar/"
@@ -7273,7 +11236,34 @@ def _verify_semantic_artifacts(
         tables[TYPED_PROVENANCE].to_pylist(),
         receipt,
     )
-    del provenance
+    approved_git_commit = provenance[0]["approved_git_commit"]
+    mechanical_verification_sha256: str | None = None
+    if profile.mode == OFFICIAL_MODE:
+        if review_precursor_sha256 is None:
+            raise M6ResultStoreIntegrityError(
+                "official review precursor binding is absent"
+            )
+        mechanical = M6MechanicalVerificationReceipt.from_dict(
+            _decode_canonical_mapping(
+                artifact_payloads[REVIEW_REQUEST_PATH],
+                "mechanical verification receipt",
+            )
+        )
+        if (
+            mechanical.mode != profile.mode
+            or mechanical.result_path != result_path
+            or mechanical.approved_git_commit != approved_git_commit
+            or mechanical.evidence_catalog_sha256
+            != review_precursor_sha256
+        ):
+            raise M6ResultStoreIntegrityError(
+                "mechanical verification differs from sealed precursor facts"
+            )
+        mechanical_verification_sha256 = mechanical.verification_sha256
+    elif REVIEW_REQUEST_PATH in artifact_payloads:
+        raise M6ResultStoreIntegrityError(
+            "data-free evidence contains an independent review request"
+        )
     execution = _normalize_execution_summary(
         tables[EXECUTION_SUMMARY].to_pylist(),
         receipt,
@@ -7286,6 +11276,10 @@ def _verify_semantic_artifacts(
         tables[REVIEW_DECISIONS].to_pylist(),
         receipt,
         expected_evidence_catalog_sha256=review_precursor_sha256,
+        expected_approved_git_commit=approved_git_commit,
+        expected_mechanical_verification_sha256=(
+            mechanical_verification_sha256
+        ),
     )
     if any(row["status"] == "failed" for row in gates):
         raise M6ResultStoreIntegrityError(
@@ -7293,10 +11287,7 @@ def _verify_semantic_artifacts(
         )
     determinism = M6DeterminismReceipt.from_dict(
         _decode_canonical_mapping(
-            _read_guarded_bytes(
-                run_path / DETERMINISM_RECEIPT_PATH,
-                run_path,
-            ),
+            artifact_payloads[DETERMINISM_RECEIPT_PATH],
             "determinism receipt",
         )
     )
@@ -7358,17 +11349,47 @@ def _verify_semantic_artifacts(
         raise M6ResultStoreIntegrityError(
             "execution summary differs from mechanically derived evidence"
         )
+    if profile.mode == OFFICIAL_MODE and (
+        execution["release_gate_status"] != "accepted"
+        or any(
+            row["decision"] != "accept"
+            or row["p1_count"] != 0
+            or row["p2_count"] != 0
+            for row in review_rows
+        )
+    ):
+        raise M6ResultStoreIntegrityError(
+            "unaccepted independent reviews cannot reach COMMITTED"
+        )
+    if profile.data_free and (
+        review_rows
+        or execution["release_gate_status"] != "nonpromotable"
+    ):
+        raise M6ResultStoreIntegrityError(
+            "data-free evidence must remain unreviewed and nonpromotable"
+        )
     del stage_rows, review_rows
+    derived_claim_status = _derive_real_reactivity_claim_status(
+        receipt=receipt,
+        primary_matrix=primary_matrix,
+        qualification=qualification,
+        accounting=waymax,
+        determinism=determinism,
+    )
+    if execution["real_reactivity_claim_status"] != derived_claim_status:
+        raise M6ResultStoreIntegrityError(
+            "execution and claim artifact status derivations differ"
+        )
     claim = _decode_canonical_mapping(
-        _read_guarded_bytes(
-            run_path / CLAIM_LIMITATIONS_PATH,
-            run_path,
-        ),
+        artifact_payloads[CLAIM_LIMITATIONS_PATH],
         "claim/limitations",
     )
-    if claim != _claim_limitations_payload(profile.mode):
+    if claim != _claim_limitations_payload(
+        profile.mode,
+        derived_claim_status,
+    ):
         raise M6ResultStoreIntegrityError(
-            "claim/limitations artifact is not exact"
+            "claim/limitations artifact is not mechanically derived"
         )
 
 
@@ -7419,6 +11440,55 @@ def reconstruct_sanitized_m6_aggregate(
         verified.read_dataset(EXECUTION_SUMMARY).to_pylist(),
         receipt,
     )[0]
+    qualification = _normalize_waymax_qualification(
+        verified.read_dataset(WAYMAX_QUALIFICATION).to_pylist(),
+        receipt,
+    )
+    determinism = M6DeterminismReceipt.from_dict(
+        _decode_canonical_mapping(
+            _read_guarded_bytes(
+                verified.run_path / DETERMINISM_RECEIPT_PATH,
+                verified.run_path,
+            ),
+            "promoted determinism receipt",
+        )
+    )
+    derived_waymax_status, derived_claim_status = (
+        _derive_waymax_and_real_reactivity_statuses(
+            receipt=receipt,
+            primary_matrix=matrix,
+            qualification=qualification,
+            accounting=waymax_rows,
+            determinism=determinism,
+        )
+    )
+    stored_claim = _decode_canonical_mapping(
+        _read_guarded_bytes(
+            verified.run_path / CLAIM_LIMITATIONS_PATH,
+            verified.run_path,
+        ),
+        "promoted claim/limitations",
+    )
+    expected_stored_claim = _claim_limitations_payload(
+        OFFICIAL_MODE,
+        derived_claim_status,
+    )
+    promoted_claim = _promoted_claim_and_limitations(
+        derived_claim_status
+    )
+    stored_claim_projection = {
+        name: stored_claim[name]
+        for name in ("bounded_claim", "claim_status", "limitations")
+    }
+    if (
+        stored_claim != expected_stored_claim
+        or stored_claim_projection != promoted_claim
+        or execution["waymax_gate_status"] != derived_waymax_status
+        or execution["real_reactivity_claim_status"] != derived_claim_status
+    ):
+        raise M6ResultStoreIntegrityError(
+            "public claim, execution, and sealed evidence statuses differ"
+        )
     stages = _normalize_stage_timings(
         verified.read_dataset(STAGE_TIMINGS).to_pylist(),
         receipt,
@@ -7428,10 +11498,7 @@ def reconstruct_sanitized_m6_aggregate(
         receipt,
     )
     aggregate = {
-        "claim_and_limitations": {
-            "bounded_claim": M6_ACCEPTED_BOUNDED_CLAIM,
-            "limitations": list(M6_FIXED_LIMITATIONS),
-        },
+        "claim_and_limitations": promoted_claim,
         "eligibility": {
             "primary_eligible_count": receipt.eligible_count,
             "rejection_reason_counts": dict(
@@ -7460,6 +11527,7 @@ def reconstruct_sanitized_m6_aggregate(
                 key: value
                 for key, value in execution.items()
                 if key.endswith("_rows")
+                and key != "waymax_numpy_comparison_rows"
             },
             "review_decisions": [
                 {
@@ -7668,6 +11736,7 @@ def _expected_artifact_paths(
     paths = {
         _DATASET_PATHS[ELIGIBILITY_LEDGER],
         _DATASET_PATHS[WAYMAX_QUALIFICATION],
+        _DATASET_PATHS[TYPED_PROVENANCE],
         ELIGIBILITY_RECEIPT_PATH,
         WAYMAX_SELECTION_RECEIPT_PATH,
     }
@@ -7689,8 +11758,8 @@ def _expected_artifact_paths(
                     WAYMAX_ACCOUNTING,
                     WAYMAX_SCENE_SCALARS,
                     WAYMAX_FIELD_COMPARISONS,
+                    WAYMAX_NUMPY_COMPARISONS,
                     WAYMAX_DETERMINISM,
-                    TYPED_PROVENANCE,
                     EXECUTION_SUMMARY,
                     STAGE_TIMINGS,
                     REVIEW_DECISIONS,
@@ -7703,6 +11772,8 @@ def _expected_artifact_paths(
                 CLAIM_LIMITATIONS_PATH,
             }
         )
+        if receipt.mode == OFFICIAL_MODE:
+            paths.add(REVIEW_REQUEST_PATH)
     return paths
 
 
@@ -7715,9 +11786,15 @@ def _review_precursor_sha256(
     excluded = {
         _DATASET_PATHS[REVIEW_DECISIONS],
         _DATASET_PATHS[EXECUTION_SUMMARY],
+        REVIEW_REQUEST_PATH,
     }
     expected_paths = _expected_artifact_paths(receipt) - excluded
     all_expected_paths = _expected_artifact_paths(receipt)
+    allowed_input_paths = {frozenset(expected_paths), frozenset(all_expected_paths)}
+    if receipt.mode == OFFICIAL_MODE:
+        allowed_input_paths.add(
+            frozenset({*expected_paths, REVIEW_REQUEST_PATH})
+        )
     by_path: dict[str, M6ArtifactRecord] = {}
     input_paths: set[str] = set()
     for record in records:
@@ -7732,10 +11809,7 @@ def _review_precursor_sha256(
         input_paths.add(record.path)
         if record.path not in excluded:
             by_path[record.path] = record
-    if (
-        input_paths != expected_paths
-        and input_paths != all_expected_paths
-    ):
+    if frozenset(input_paths) not in allowed_input_paths:
         raise M6ResultStoreStateError(
             "all noncircular review prerequisite artifacts must be sealed first"
         )
@@ -7752,21 +11826,88 @@ def _review_precursor_sha256(
     ).hexdigest()
 
 
-def _claim_limitations_payload(mode: str) -> dict[str, Any]:
+def _terminal_evidence_catalog_sha256(
+    receipt: M6EligibilityReceipt,
+    records: Sequence[M6ArtifactRecord],
+) -> str:
+    """Derive the exact mode-bound catalog committed by terminal success."""
+
+    if receipt.mode in {OFFICIAL_MODE, DATA_FREE_MODE}:
+        return _review_precursor_sha256(receipt, records)
+    expected_paths = _expected_artifact_paths(receipt)
+    by_path: dict[str, M6ArtifactRecord] = {}
+    for record in records:
+        if type(record) is not M6ArtifactRecord or record.path in by_path:
+            raise M6ResultStoreIntegrityError(
+                "terminal evidence catalog contains invalid/duplicate records"
+            )
+        by_path[record.path] = record
+    if set(by_path) != expected_paths:
+        raise M6ResultStoreIntegrityError(
+            "terminal evidence catalog artifact domain is incomplete"
+        )
+    payload = {
+        "artifacts": [
+            by_path[path].to_dict() for path in sorted(by_path)
+        ],
+        "mode": receipt.mode,
+        "schema_version": M6_RESULT_STORE_SCHEMA_VERSION,
+    }
+    return hashlib.sha256(
+        b"evalsim-m6-terminal-evidence-catalog-v1\x00"
+        + _canonical_json_bytes(payload)
+    ).hexdigest()
+
+
+def _promoted_claim_and_limitations(
+    claim_status: str,
+) -> dict[str, Any]:
+    if type(claim_status) is not str or claim_status not in {
+        "blocked",
+        "supported",
+    }:
+        raise M6ResultStoreIntegrityError(
+            "promoted real-reactivity claim status is invalid"
+        )
+    return {
+        "bounded_claim": (
+            M6_ACCEPTED_BOUNDED_CLAIM
+            if claim_status == "supported"
+            else M6_BLOCKED_BOUNDED_CLAIM
+        ),
+        "claim_status": claim_status,
+        "limitations": list(M6_FIXED_LIMITATIONS),
+    }
+
+
+def _claim_limitations_payload(
+    mode: str,
+    derived_claim_status: str,
+) -> dict[str, Any]:
     if mode not in {OFFICIAL_MODE, DATA_FREE_MODE}:
         raise M6ResultStoreIntegrityError(
             "claim/limitations are complete-result-only"
         )
+    if derived_claim_status not in {"blocked", "supported"}:
+        raise M6ResultStoreIntegrityError(
+            "claim/limitations status is invalid"
+        )
     data_free = mode == DATA_FREE_MODE
+    if data_free and derived_claim_status != "blocked":
+        raise M6ResultStoreIntegrityError(
+            "data-free claim evidence is explicitly nonpromotable"
+        )
+    if data_free:
+        return {
+            "bounded_claim": _M6_DATA_FREE_BOUNDED_CLAIM,
+            "claim_status": "nonpromotable",
+            "limitations": list(_M6_DATA_FREE_LIMITATIONS),
+            "mode": mode,
+            "schema_version": M6_CLAIM_LIMITATIONS_SCHEMA_VERSION,
+        }
+    promoted = _promoted_claim_and_limitations(derived_claim_status)
     return {
-        "bounded_claim": (
-            _M6_DATA_FREE_BOUNDED_CLAIM
-            if data_free
-            else M6_ACCEPTED_BOUNDED_CLAIM
-        ),
-        "limitations": list(
-            _M6_DATA_FREE_LIMITATIONS if data_free else M6_FIXED_LIMITATIONS
-        ),
+        **promoted,
         "mode": mode,
         "schema_version": M6_CLAIM_LIMITATIONS_SCHEMA_VERSION,
     }
@@ -8032,8 +12173,13 @@ def _json_integer(
     name: str,
     *,
     minimum: int,
+    maximum: int | None = None,
 ) -> int:
-    if type(value) is not int or value < minimum:
+    if (
+        type(value) is not int
+        or value < minimum
+        or (maximum is not None and value > maximum)
+    ):
         raise M6ResultStoreIntegrityError(
             f"{name} must be exact JSON integer"
         )
@@ -8219,15 +12365,19 @@ def _validate_sanitized_aggregate_payload(
 
     claim = exact_mapping(
         payload["claim_and_limitations"],
-        {"bounded_claim", "limitations"},
+        {"bounded_claim", "claim_status", "limitations"},
         "claim_and_limitations",
     )
+    bounded_claim = _json_text(
+        claim["bounded_claim"],
+        "claim_and_limitations.bounded_claim",
+    )
+    claim_status = _json_text(
+        claim["claim_status"],
+        "claim_and_limitations.claim_status",
+    )
     if (
-        _json_text(
-            claim["bounded_claim"],
-            "claim_and_limitations.bounded_claim",
-        )
-        != M6_ACCEPTED_BOUNDED_CLAIM
+        claim_status not in {"blocked", "supported"}
         or _json_array(
             claim["limitations"],
             "claim_and_limitations.limitations",
@@ -8235,7 +12385,7 @@ def _validate_sanitized_aggregate_payload(
         != list(M6_FIXED_LIMITATIONS)
     ):
         raise M6ResultStoreIntegrityError(
-            "promoted claim/limitations domain drifted"
+            "promoted claim status/limitations domain drifted"
         )
 
     eligibility = exact_mapping(
@@ -8946,8 +13096,18 @@ def _validate_sanitized_aggregate_payload(
         "execution.gate_status",
     )
     expected_claim_status = (
-        "supported" if idm_timing_responder_n >= 10 else "blocked"
+        "supported"
+        if executed_waymax and idm_timing_responder_n >= 10
+        else "blocked"
     )
+    expected_claim = _promoted_claim_and_limitations(expected_claim_status)
+    if (
+        claim_status != expected_claim_status
+        or bounded_claim != expected_claim["bounded_claim"]
+    ):
+        raise M6ResultStoreIntegrityError(
+            "promoted claim text/status is not mechanically derived"
+        )
     if (
         _json_text(
             gate_status["release"],
@@ -9034,16 +13194,19 @@ def _validate_sanitized_aggregate_payload(
             row["p1_count"],
             f"execution.review_decisions[{index}].p1_count",
             minimum=0,
+            maximum=M6_REVIEW_COUNT_MAX,
         )
         p2_count = _json_integer(
             row["p2_count"],
             f"execution.review_decisions[{index}].p2_count",
             minimum=0,
+            maximum=M6_REVIEW_COUNT_MAX,
         )
         _json_integer(
             row["p3_count"],
             f"execution.review_decisions[{index}].p3_count",
             minimum=0,
+            maximum=M6_REVIEW_COUNT_MAX,
         )
         if decision != (
             "accept" if p1_count == 0 and p2_count == 0 else "reject"
@@ -9372,6 +13535,8 @@ def _write_terminal_success_final(
     path: Path,
     payload: bytes,
     run_path: Path,
+    *,
+    revalidate: Callable[[], None],
 ) -> None:
     """Create the final marker and establish directory durability.
 
@@ -9382,7 +13547,12 @@ def _write_terminal_success_final(
 
     if type(payload) is not bytes:
         raise TypeError("terminal payload must be exact bytes")
+    if not callable(revalidate):
+        raise TypeError("terminal catalog revalidator must be callable")
     _guard_artifact_parent(path, run_path)
+    # This complete authenticated re-open is intentionally inside the marker
+    # writer and immediately precedes O_EXCL creation.
+    revalidate()
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
@@ -9411,7 +13581,10 @@ def _write_terminal_success_final(
         raise
 
 
-def _read_guarded_bytes(path: Path, run_path: Path) -> bytes:
+def _read_guarded_snapshot(
+    path: Path,
+    run_path: Path,
+) -> _M6GuardedSnapshot:
     descriptor, before = _guard_file(path, run_path)
     try:
         payload = bytearray()
@@ -9422,42 +13595,76 @@ def _read_guarded_bytes(path: Path, run_path: Path) -> bytes:
             raise M6ResultStoreIntegrityError(
                 "file changed during guarded read"
             )
-        return bytes(payload)
+        return _M6GuardedSnapshot(
+            payload=bytes(payload),
+            identity=_file_identity(after),
+        )
     finally:
         os.close(descriptor)
 
 
-def _read_guarded_parquet(
-    path: Path,
-    run_path: Path,
-    dataset: str,
-) -> pa.Table:
-    descriptor, before = _guard_file(path, run_path)
+def _read_guarded_bytes(path: Path, run_path: Path) -> bytes:
+    return _read_guarded_snapshot(path, run_path).payload
+
+
+def _parse_guarded_parquet_payload(payload: bytes, dataset: str) -> pa.Table:
+    if type(payload) is not bytes:
+        raise TypeError("guarded Parquet payload must be exact bytes")
     try:
-        with os.fdopen(descriptor, "rb", closefd=False) as handle:
-            table = pq.read_table(handle)
-        after = os.fstat(descriptor)
-        if _file_identity(before) != _file_identity(after):
-            raise M6ResultStoreIntegrityError(
-                "Parquet artifact changed during guarded read"
-            )
-    except M6ResultStoreIntegrityError:
-        raise
+        table = pq.read_table(pa.BufferReader(payload))
     except (OSError, pa.ArrowException) as exc:
         raise M6ResultStoreIntegrityError(
             f"{dataset} could not be read"
         ) from exc
-    finally:
-        os.close(descriptor)
     if not table.schema.equals(
-        M6_RESULT_SCHEMAS[dataset],
-        check_metadata=True,
+        M6_RESULT_SCHEMAS[dataset], check_metadata=True
     ):
         raise M6ResultStoreIntegrityError(
             f"{dataset} does not use its fixed schema"
         )
     table.validate(full=True)
     return table
+
+
+def _read_guarded_parquet(
+    path: Path, run_path: Path, dataset: str
+) -> pa.Table:
+    snapshot = _read_guarded_snapshot(path, run_path)
+    return _parse_guarded_parquet_payload(snapshot.payload, dataset)
+
+
+def _assert_guarded_snapshot_current(
+    path: Path,
+    run_path: Path,
+    expected: _M6GuardedSnapshot,
+) -> None:
+    current = _read_guarded_snapshot(path, run_path)
+    if current.identity != expected.identity or current.payload != expected.payload:
+        raise M6ResultStoreIntegrityError(
+            f"{path.name} changed during complete verification"
+        )
+
+
+def _authenticated_artifact_snapshots(
+    run_path: Path,
+    records: Sequence[M6ArtifactRecord],
+) -> dict[str, _M6GuardedSnapshot]:
+    snapshots: dict[str, _M6GuardedSnapshot] = {}
+    for record in records:
+        if record.path in snapshots:
+            raise M6ResultStoreIntegrityError(
+                "artifact snapshot catalog contains duplicate paths"
+            )
+        snapshot = _read_guarded_snapshot(run_path / record.path, run_path)
+        if (
+            hashlib.sha256(snapshot.payload).hexdigest() != record.sha256
+            or len(snapshot.payload) != record.size_bytes
+        ):
+            raise M6ResultStoreIntegrityError(
+                f"{record.path} failed size/SHA-256 verification"
+            )
+        snapshots[record.path] = snapshot
+    return snapshots
 
 
 def _guarded_sha256(path: Path, run_path: Path) -> tuple[str, int]:
@@ -9664,6 +13871,21 @@ def _validated_project_root(value: str | Path) -> Path:
     return absolute
 
 
+def _validate_m6_result_path_text(value: Any) -> str:
+    if type(value) is not str:
+        raise ValueError("M6 result path must be exact text")
+    path = Path(value)
+    if (
+        path.is_absolute()
+        or len(path.parts) != 3
+        or path.parts[:2] != ("outputs", "m6")
+        or value != f"outputs/m6/{path.parts[2]}"
+    ):
+        raise ValueError("M6 result path is invalid")
+    _validated_run_name(path.parts[2])
+    return value
+
+
 def _validated_run_name(value: Any) -> str:
     if (
         type(value) is not str
@@ -9768,6 +13990,7 @@ def _path_kind(path: Path) -> str:
 
 
 __all__ = [
+    "AWAITING_REVIEW_MARKER",
     "CLAIM_LIMITATIONS_PATH",
     "COMMITTED_MARKER",
     "COMPUTE_PILOT_M6_PROFILE",
@@ -9787,6 +14010,8 @@ __all__ = [
     "M6ArtifactRecord",
     "M6DeterminismReceipt",
     "M6EligibilityReceipt",
+    "M6MechanicalVerificationReceipt",
+    "M6ReviewDecisionReceipt",
     "M6WaymaxSelectionReceipt",
     "M6ResultProfile",
     "M6ResultStore",
@@ -9796,9 +14021,15 @@ __all__ = [
     "M6SanitizedAggregate",
     "M6ObservedPreflightResult",
     "M6TerminalCapability",
+    "M6VerifiedProvenance",
     "M6_ACCEPTED_BOUNDED_CLAIM",
+    "M6_BLOCKED_BOUNDED_CLAIM",
     "M6_CLAIM_LIMITATIONS_SCHEMA_VERSION",
+    "M6_MECHANICAL_VERIFICATION_SCHEMA_VERSION",
+    "M6_REVIEW_DECISION_SCHEMA_VERSION",
+    "M6_COMPUTE_PILOT_REPORT_SCHEMA_VERSION",
     "M6_CONFIG_VERSION",
+    "M6_DATA_FREE_WAYMAX_NUMPY_ELIGIBILITY_LEDGER_SHA256",
     "M6_DATA_FREE_WAYMAX_PRIMARY_DOMAIN_SHA256",
     "M6_DATA_FREE_WAYMAX_SELECTION_BINDING_SHA256",
     "M6_DETERMINISM_RECEIPT_SCHEMA_VERSION",
@@ -9820,12 +14051,15 @@ __all__ = [
     "M6_PROMOTED_TOP_LEVEL_DOMAINS",
     "M6_RESULT_SCHEMAS",
     "M6_RESULT_STORE_SCHEMA_VERSION",
+    "M6_REVIEW_COUNT_MAX",
     "M6_REVIEW_ROLE_DOMAIN",
     "M6_RUN_MODES",
     "M6_STAGE_DOMAIN",
     "M6_TYPED_PROVENANCE_SCHEMA_VERSION",
     "M6_WAYMAX_BUNDLES",
     "M6_WAYMAX_IDENTITY_CONFIGURATION_FINGERPRINT",
+    "M6_WAYMAX_NUMPY_COMPARISON_POLICIES",
+    "M6_WAYMAX_NUMPY_COMPARISON_ROW_COUNT",
     "M6_WAYMAX_PRIMARY_B2_CONFIGURATION_FINGERPRINT",
     "M6_WAYMAX_COMPARISON_FIELDS",
     "M6_WAYMAX_CONDITIONS",
@@ -9851,6 +14085,7 @@ __all__ = [
     "PRIMARY_SCENE_SCALARS",
     "PRIMARY_SCENE_SCALARS_SCHEMA",
     "REVIEW_DECISIONS",
+    "REVIEW_REQUEST_PATH",
     "REVIEW_DECISIONS_SCHEMA",
     "SECONDARY_MATRIX",
     "SECONDARY_MATRIX_SCHEMA",
@@ -9863,25 +14098,33 @@ __all__ = [
     "TYPED_PROVENANCE",
     "TYPED_PROVENANCE_SCHEMA",
     "VerifiedM6ResultStore",
+    "VerifiedM6RejectedReviewStore",
     "WAYMAX_ACCOUNTING",
     "WAYMAX_ACCOUNTING_SCHEMA",
     "WAYMAX_DETERMINISM",
     "WAYMAX_DETERMINISM_SCHEMA",
     "WAYMAX_FIELD_COMPARISONS",
     "WAYMAX_FIELD_COMPARISONS_SCHEMA",
+    "WAYMAX_NUMPY_COMPARISONS",
+    "WAYMAX_NUMPY_COMPARISONS_SCHEMA",
     "WAYMAX_QUALIFICATION",
     "WAYMAX_QUALIFICATION_SCHEMA",
     "WAYMAX_SCENE_SCALARS",
     "WAYMAX_SCENE_SCALARS_SCHEMA",
     "WAYMAX_SELECTION_RECEIPT_PATH",
     "m6_canonical_dataset_sha256",
+    "m6_compute_pilot_report_binding_sha256",
     "m6_data_free_waymax_placeholder_rows",
     "m6_data_free_waymax_determinism_rows",
     "m6_data_free_waymax_field_comparison_rows",
+    "m6_data_free_waymax_numpy_comparison_rows",
     "m6_data_free_waymax_qualification_rows",
     "m6_data_free_waymax_scene_scalar_rows",
     "m6_waymax_unsupported_rows",
+    "issue_m6_mechanical_verification_receipt",
+    "issue_m6_review_decision",
     "reconstruct_sanitized_m6_aggregate",
     "verify_committed_m6_result_store",
     "verify_m6_result_store",
+    "verify_rejected_m6_review_store",
 ]

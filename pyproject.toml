@@ -31,6 +31,7 @@ waymo = [
 [project.scripts]
 evalsim-m5-official = "evalsim.cli.m5_official:main"
 evalsim-m5-synthetic = "evalsim.cli.m5_synthetic:main"
+evalsim-m6-synthetic = "evalsim.cli.m6_synthetic:main"
 evalsim-waymax-m4 = "evalsim.sources.waymax_m4_cli:main"
 evalsim-waymax-smoke = "evalsim.sources.waymax_cli:main"
 

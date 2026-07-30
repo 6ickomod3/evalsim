@@ -71,16 +71,21 @@ history-only/privileged policy boundary, paired 40-transition NumPy evaluation, 
 bounded 20-transition Waymax reference view. The
 [portable data-free implementation checkpoint](docs/plans/2026-07-29-m6-data-free-implementation-checkpoint.md)
 records the implemented foundations, accepted synthetic/Waymax reviews, and exact
-resume sequence. The official verifier/CLI, eligibility scan, compute pilot, WOMD
+resume sequence. The pre-data official verifier and two-step `AWAITING_REVIEW` /
+`finalize-review` lifecycle are implemented and have completed fresh independent
+adversarial security review with no P0--P2 blockers. That is implementation acceptance,
+not scientific result acceptance: the required order remains eligibility-only scan,
+outcome-suppressed compute pilot, official execution that stops at `AWAITING_REVIEW`,
+and a separate three-role `finalize-review`. The eligibility scan, compute pilot, WOMD
 outcomes, live determinism evidence, result claims, and presentation closure remain
-deferred. Four broader intervention families are explicitly deferred. No M6 WOMD
+pending. Four broader intervention families are explicitly deferred. No M6 WOMD
 eligibility count or policy outcome has been opened, and no M6 result claim is
 available yet.
 
 **Tests:** latest confirmed before final M6 result-store hardening: 1,173 passed + 1
-expected local-data skip; the final full-suite rerun after the last fail-closed store
-changes is explicitly deferred to the next session · **Last updated:** 2026-07-29
-(M6 data-free implementation checkpoint; official/WOMD execution remains unopened)
+expected local-data skip; this remains historical evidence until the current full-suite
+rerun is recorded · **Last updated:** 2026-07-30 (M6 implementation/security
+accepted; official WOMD execution and scientific result remain pending)
 
 ## Completed work
 
@@ -273,10 +278,12 @@ result are accepted:
   is no defensible overall winner, total ordering, causal conclusion, or
   simulator-superiority claim.
 
-The current full repository suite reports **876 passed and 1 expected local-data
-skip**. A fresh clean core-only environment without JAX, jaxlib, TensorFlow, Flax, or
-Waymax reports **790 passed and 28 expected optional/local skips**. The official
-analysis is conditional on one deterministic complete-case cohort, uses a shared
+At the accepted M5 source snapshot, milestone-scoped verification recorded **876
+passed and 1 expected local-data skip** in the full repository environment and **790
+passed and 28 expected optional/local skips** in a clean core-only environment without
+JAX, jaxlib, TensorFlow, Flax, or Waymax. Those are historical M5 acceptance counts,
+not current-suite evidence. The official analysis is conditional on one deterministic
+complete-case cohort, uses a shared
 Waymax decoder, keeps ego logged/exogenous, and treats privileged log replay as a
 construction oracle—not independent ground truth. Its deterministic
 scenario-resampling bands are finite-cohort reweighting sensitivity summaries, not
@@ -287,20 +294,24 @@ in the [sanitized acceptance report](docs/results/m5-official-acceptance.md).
 
 ## Setup
 
+The tracked .python-version pins the project environment to exact CPython 3.11.5;
+uv sync selects that interpreter even when the system Python differs.
+
 Uses [`uv`](https://docs.astral.sh/uv/) for an isolated environment (independent of the
 system Python):
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"   # uv lives here
-uv sync --extra dev                    # create .venv and install deps
+uv sync --frozen --extra dev --python 3.11.5
+.venv/bin/python --version             # must report Python 3.11.5
 uv run pytest                          # run the test suite
 ```
 
-A fresh clean core-only environment without JAX, jaxlib, TensorFlow, Flax, or Waymax
-reports **790 passed, 28 expected optional/local skips**. With the licensed Waymo
-runtime configured, the latest full repository verification reports **876 passed and
-1 expected local-data skip**. Historical milestone-scoped acceptance counts remain
-recorded in their milestone sections.
+For historical context only, the accepted M5 milestone snapshot recorded **790 passed
+and 28 expected optional/local skips** in its clean core-only environment and **876
+passed and 1 expected local-data skip** in its licensed Waymo runtime. These
+milestone-scoped counts are not a fresh verification of the current M6 worktree; use
+the final M6 release audit for the current count.
 
 ## Generate synthetic scenarios
 
@@ -418,7 +429,7 @@ local.
 After shard `00000` is in the local directory documented above:
 
 ```bash
-uv sync --extra dev --extra waymo
+uv sync --frozen --extra dev --extra waymo --python 3.11.5
 EVALSIM_RUN_WAYMO_LOCAL=1 uv run --extra waymo pytest -m waymo_local
 EVALSIM_RUN_WAYMO_LOCAL=1 uv run --extra waymo evalsim-waymax-smoke --shard 00000
 ```
@@ -490,6 +501,31 @@ All generated artifacts remain local and ignored. The accepted aggregate-only ev
 is summarized in
 [`docs/results/m5-official-acceptance.md`](docs/results/m5-official-acceptance.md);
 reproduction must independently pass the same result verification and claim review.
+
+## M6 official lifecycle (pending)
+
+M6 has implementation/security acceptance but no accepted scientific result. Before
+any M6 data access, audit and release the exact reviewed source snapshot, push `main`,
+and obtain independent approval of that exact pushed commit. Represent that independent
+approval with a **lightweight (not annotated)** `m6-approved-v1` tag exactly at pushed
+`main`, push the tag, and verify that remote `main` and the remote tag resolve to the
+same commit. Creating or moving a tag does not itself constitute approval and must not
+be used to self-approve an unreviewed commit.
+
+Only after that release prerequisite passes, recreate the immutable official runtime
+without the `dev` extra and let the capture-first bootstrap recheck the complete
+environment catalog before data access:
+
+```bash
+uv sync --frozen --extra waymo --python 3.11.5
+```
+
+Run M6 only from the repository root through
+`.venv/bin/python -I -S -B evalsim/cli/m6_bootstrap.py ...`; the M6 project console
+entry is intentionally disabled. The earlier M3 and M5 wheel entry points do not apply
+to M6. The exact eligibility → compute-pilot → official `AWAITING_REVIEW` →
+`finalize-review` command sequence is recorded in the
+[M6 checkpoint](docs/plans/2026-07-29-m6-data-free-implementation-checkpoint.md).
 
 ## Layout
 

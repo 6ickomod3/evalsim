@@ -1,7 +1,7 @@
 # EvalSim — Waymo-aligned roadmap
 
-**Date:** 2026-07-28
-**Last evidence update:** 2026-07-29
+**Date:** 2026-07-30
+**Last evidence update:** 2026-07-30
 **Status:** Canonical plan for M3 onward
 **Supersedes:** The unfinished portion of
 [`2026-07-27-evalsim-implementation-plan.md`](2026-07-27-evalsim-implementation-plan.md)
@@ -45,19 +45,20 @@ work.
   reviews. M6 now has a
   [portable data-free implementation checkpoint](2026-07-29-m6-data-free-implementation-checkpoint.md):
   its contract, access-control, typed-plan, synthetic-oracle, bounded Waymax, and
-  guarded-store foundations are implemented, and the synthetic and Waymax boundaries
-  have completed adversarial review. The latest full-suite result before final
-  result-store hardening was 1,173 passing tests and one expected local-data skip. The
-  final full-suite rerun after the last fail-closed store changes is explicitly
-  deferred to the next session.
+  guarded-store foundations are implemented. Its capture-first official verifier/CLI,
+  runtime/source authority, and two-step result-review lifecycle have also completed a
+  fresh independent adversarial security review with no P0--P2 blockers. This accepts
+  the implementation boundary only; it does not accept a scientific M6 result. The
+  latest recorded full-suite result before final result-store hardening remains 1,173
+  passing tests and one expected local-data skip pending the current full-suite record.
 - **Available locally:** WOMD v1.3.1 TFExample validation shards `00000`–`00009`.
   Additional files in the directory do not expand the frozen M4 population.
-- **Not yet accepted:** the M6 official verifier/CLI, eligibility scan, compute pilot,
-  WOMD/Waymax outcome execution, live determinism evidence, sealed result, and result
-  claim; evaluator stress tests; learned evaluators; multimodal/video/VLM evaluation;
-  and a scalable resumable pipeline. M5 supports fixed-cohort metric comparisons, but
-  not an overall policy winner, simulator superiority, WOMD-population inference, or
-  production-readiness claim.
+- **Not yet accepted:** the M6 eligibility scan, compute pilot, WOMD/Waymax outcome
+  execution, live determinism evidence, sealed result, three-role result review, and
+  result claim; evaluator stress tests; learned evaluators; multimodal/video/VLM
+  evaluation; and a scalable resumable pipeline. M5 supports fixed-cohort metric
+  comparisons, but not an overall policy winner, simulator superiority,
+  WOMD-population inference, or production-readiness claim.
 
 Plans and downloaded files do not count as implemented evidence. M5's accepted
 aggregate result applies only to its frozen complete-case conditional cohort and
@@ -324,9 +325,13 @@ now in progress under its accepted outcome-blind pre-registration.
 **Accepted pre-registration:** [exact M6 v1 scope](2026-07-29-m6-counterfactual-reactivity.md).
 **Implementation checkpoint:** [portable data-free state and exact resume
 sequence](2026-07-29-m6-data-free-implementation-checkpoint.md).
-No M6 WOMD eligibility count or policy outcome has been opened. Non-data-free
-terminalization and live determinism remain fail-closed pending the official
-verifier/CLI.
+The official verifier/CLI and its capture-first authority boundary have completed
+independent adversarial security review with no P0--P2 blockers. M6 nevertheless
+remains in progress: no WOMD eligibility count or policy outcome has been opened, no
+live determinism receipt or sealed result exists, and no scientific result is accepted.
+The reviewed lifecycle is eligibility-only → outcome-suppressed compute pilot →
+official execution ending at `AWAITING_REVIEW` → separate three-role
+`finalize-review`.
 
 **Question:** What happens when ego leaves the logged future, and can the evaluation
 separate nonreactivity from a deliberately costly simulated response?
