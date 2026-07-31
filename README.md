@@ -45,7 +45,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M4 | Deterministic WOMD cohort + Waymax parity | ✅ | 🖥️ |
 | M5 | Metric system + statistical scorecards; real-WOMD acceptance | ✅ | 🖥️ |
 | M6 | Counterfactual closed-loop reactivity | 🚧 | 🖥️ |
-| M7 | Evaluator red-team + metric governance | ⬜ | 🖥️ |
+| M7 | Evaluator red-team + metric governance | 🚧 | 🖥️ |
 | M8 | JAX/Flax learned realism discriminator | ⬜ | 🖥️/☁️ |
 | M9 | Semantic-video and real camera/VLM bridge | ⬜ | 🖥️/☁️ |
 | M10 | Scalable, resumable evaluation pipeline | ⬜ | 🖥️/☁️ |
@@ -526,6 +526,28 @@ entry is intentionally disabled. The earlier M3 and M5 wheel entry points do not
 to M6. The exact eligibility → compute-pilot → official `AWAITING_REVIEW` →
 `finalize-review` command sequence is recorded in the
 [M6 checkpoint](docs/plans/2026-07-29-m6-data-free-implementation-checkpoint.md).
+
+## M7 evaluator red-team (in progress)
+
+M7 stress-tests the M5 evaluators themselves: inject known, severity-controlled defects
+and measure whether each metric detects them, what it misses, and what it falsely flags.
+The **data-free foundation** is implemented in `evalsim/stress/` and verified by 26
+analytic-oracle tests (adversarially subagent-reviewed, no P0/P1):
+
+- a typed, seeded defect framework with strict severity-0 identity and sanitized
+  manifests (0-based cohort ranks only — no native id/coordinate/payload);
+- three severity-controlled families with monotone oracles — `frozen_agent`,
+  `teleportation`, `overlap` — each detected by a *different* M5 metric;
+- a detection matrix (defect × metric × severity) and per-metric governance cards;
+- the required negative result: the kinematic-infeasibility rate is **blind to frozen
+  (nonreactive) agents** — a held agent's zero, constant velocity reads as feasible —
+  while position error catches them. A plausible metric shown to be misleading, tying
+  directly to the M6 nonreactivity theme.
+
+Deferred to an accepted M7 result: the invariance-probe harness, a calibration/held-out
+split, a broader defect taxonomy, and the WOMD detection matrix on the accepted M4 cohort
+(a separate accepted run, not opened here). Pre-registration + status:
+[M7 evaluator red-team](docs/plans/2026-07-31-m7-evaluator-red-team.md).
 
 ## Layout
 

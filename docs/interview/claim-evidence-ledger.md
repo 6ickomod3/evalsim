@@ -1,6 +1,6 @@
 # Claim-to-evidence ledger
 
-**Updated:** 2026-07-29
+**Updated:** 2026-07-31
 **Rule:** A plan, README sentence, downloaded file, or dependency import is not
 implementation evidence.
 
@@ -33,7 +33,7 @@ Statuses:
 | Paired finite-cohort stability analysis | Verified | Deterministic scenario-level pairing, missingness accounting, independent resampling substreams, suppression thresholds, and all 312 scorecards were re-derived on the unchanged 128-case cohort. All 12 primary cells have paired `n = 128`; 10 adjusted bands exclude zero and two do not | Call bands deterministic scene-reweighting sensitivity summaries, not confidence intervals, hypothesis tests, or population uncertainty; retain contradictory and null results |
 | Counterfactual ego perturbation | Not yet | Ego-control seam is planned but absent | Typed interventions, causal controls, eligibility, and paired WOMD results in M6 |
 | Detects nonreactivity and overreaction | Not yet | Log replay and IDM have the intended conceptual contrast only | Validated independent measures and paired counterfactual evidence in M6 |
-| Metric stress testing | Not yet | Adversarial software tests are not metric-validation results | M7 severity curves, held-out defects, false positives/misses, and detection matrix |
+| Metric stress testing | Partial | A data-free M7 defect-generator framework (`evalsim/stress/`) with three severity-controlled families (frozen-agent, teleportation, overlap) under severity-0-identity, determinism, and nested/monotone analytic oracles; a detection matrix over (defect × metric × severity); and metric governance cards. 26 oracle tests, adversarially subagent-reviewed (no P0/P1). The required negative result exists: the kinematic-infeasibility rate is blind to frozen/nonreactive agents while position error detects them | Invariance-probe harness over the metrics; calibration on defects then held-out defect-family evaluation; a WOMD detection matrix on the accepted M4 cohort with false positives/negatives and finite-cohort stability bands; broader defect taxonomy. Keep the claim to the data-free foundation until the WOMD detection run is accepted |
 | Hand-designed realism evaluators | Partial | Thirteen hand-designed metrics now have analytic oracles, a fixed-cohort WOMD application, complete paired scorecards, and bounded native cross-checks where semantics overlap. Their disagreement is retained rather than collapsed into one score | M7 severity, sensitivity, specificity, false-positive, invariance, and held-out-defect evidence before calling the metrics validated realism evaluators |
 | Learned realism evaluator | Not yet | No learned model | M8 baseline + Flax model, leakage audit, calibration, OOD/generator holdout, and disagreement analysis |
 | Scalable JAX pipeline | Not yet | M4 adds a real batch-two CPU `jit`/`vmap` exact-log microbenchmark, but no streaming, scalable executor, device-memory evidence, or measured scaling curve | M10 streaming/batching/resume/fault recovery and measured cost/performance |

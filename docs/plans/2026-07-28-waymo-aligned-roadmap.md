@@ -373,7 +373,16 @@ cohort, with audited history-only policies and explicitly privileged log-replay,
 ego-plan, and Waymax references. This will not imply real-traffic causality, safety,
 simulator superiority, or evaluator validity beyond the registered measures.
 
-### M7 — Evaluator red-team and metric governance
+### M7 — Evaluator red-team and metric governance 🚧 (data-free foundation implemented)
+
+The data-free M7 foundation is implemented and verified in `evalsim/stress/` (defect
+framework + frozen-agent/teleportation/overlap families with analytic oracles, a detection
+matrix, metric governance cards, and the required blind-spot negative result: the
+kinematic-infeasibility rate misses frozen/nonreactive agents). 26 oracle tests,
+adversarially subagent-reviewed. The invariance harness, calibration/held-out split,
+broader taxonomy, and the WOMD detection matrix remain pending. Pre-registration + status:
+[M7 evaluator red-team](2026-07-31-m7-evaluator-red-team.md).
+
 
 **Question:** Do the evaluators detect known defects for the right reason, and what do
 they miss or falsely flag?
