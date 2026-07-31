@@ -951,6 +951,305 @@ def test_finalize_review_seals_explicit_decisions_without_outcome_execution(
     assert not any(item == "outcome" for item in events)
 
 
+def _finalize_reviews(
+    *, reject_architecture: bool = False, p1_architecture: bool = False
+) -> tuple[object, ...]:
+    return tuple(
+        cli.M6ReviewInput(
+            role=role,
+            decision=(
+                "reject"
+                if reject_architecture and role == "architecture"
+                else "accept"
+            ),
+            p1_count=(1 if p1_architecture and role == "architecture" else 0),
+            p2_count=0,
+            p3_count=0,
+        )
+        for role in ("architecture", "methods_statistics", "privacy_claim")
+    )
+
+
+def test_finalize_review_env_recheck_rejects_runtime_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A non-None pre-import environment that differs from the post-import runtime
+    catalog must fail closed at the review-import gate before any decision is sealed."""
+
+    project = tmp_path / "project"
+    project.mkdir()
+    finalization = cli.M6ReviewFinalizationRequest(
+        command=_request(project, mode="official"),
+        reviews=_finalize_reviews(),
+    )
+
+    class Store:
+        project_relative_path = Path("outputs/m6/m6-test")
+
+    module = SimpleNamespace(
+        M6ResultStore=SimpleNamespace(
+            adopt_awaiting_review=lambda root, run_name: Store()
+        )
+    )
+    local = SimpleNamespace(
+        runtime=SimpleNamespace(
+            _environment_catalog="post-import-catalog",
+            _environment_infrastructure="post-import-infrastructure",
+        )
+    )
+    monkeypatch.setattr(
+        cli, "preflight_repository", lambda request, **kwargs: _minimal_repository(project)
+    )
+    monkeypatch.setattr(
+        cli,
+        "_load_authenticated_review_results",
+        lambda *a, **k: (module, ("pre-import-catalog", "pre-import-infrastructure")),
+    )
+    monkeypatch.setattr(cli, "preflight_local_inputs", lambda *a, **k: local)
+    # If the env gate failed to fire (or its logic inverted), execution would fall
+    # through to precursor re-verification; make that explode so a missing gate cannot
+    # silently pass.
+    monkeypatch.setattr(
+        cli,
+        "_reverify_awaiting_review_precursor",
+        lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("environment gate did not fire before precursor")
+        ),
+    )
+    with pytest.raises(cli.M6OfficialCommandError) as err:
+        cli.finalize_m6_review(finalization, cli._RunHolder())
+    assert err.value.code == "runtime_mismatch"
+
+
+def test_finalize_review_env_recheck_passes_when_environment_matches(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A matching pre-import environment must NOT spuriously trip the gate; execution
+    proceeds to the precursor re-verification."""
+
+    project = tmp_path / "project"
+    project.mkdir()
+    finalization = cli.M6ReviewFinalizationRequest(
+        command=_request(project, mode="official"),
+        reviews=_finalize_reviews(),
+    )
+    reached: list[str] = []
+
+    class Store:
+        project_relative_path = Path("outputs/m6/m6-test")
+
+    module = SimpleNamespace(
+        M6ResultStore=SimpleNamespace(
+            adopt_awaiting_review=lambda root, run_name: Store()
+        )
+    )
+    local = SimpleNamespace(
+        runtime=SimpleNamespace(
+            _environment_catalog="catalog",
+            _environment_infrastructure="infrastructure",
+        )
+    )
+    monkeypatch.setattr(
+        cli, "preflight_repository", lambda request, **kwargs: _minimal_repository(project)
+    )
+    monkeypatch.setattr(
+        cli,
+        "_load_authenticated_review_results",
+        lambda *a, **k: (module, ("catalog", "infrastructure")),
+    )
+    monkeypatch.setattr(cli, "preflight_local_inputs", lambda *a, **k: local)
+
+    def stop_at_precursor(*a, **k):
+        reached.append("precursor")
+        raise cli.M6OfficialCommandError("verification_failed", "stop after env gate")
+
+    monkeypatch.setattr(cli, "_reverify_awaiting_review_precursor", stop_at_precursor)
+    with pytest.raises(cli.M6OfficialCommandError) as err:
+        cli.finalize_m6_review(finalization, cli._RunHolder())
+    assert err.value.code == "verification_failed"
+    assert reached == ["precursor"]
+
+
+def _run_finalize_with_gate_status(
+    monkeypatch: pytest.MonkeyPatch,
+    project: Path,
+    *,
+    reviews: tuple[object, ...],
+    gate_status: str,
+    events: list[str],
+) -> object:
+    verification = object()
+
+    class Store:
+        awaiting_review_fresh_worker_peak_rss_bytes = 8192
+        project_relative_path = Path("outputs/m6/m6-test")
+
+        def write_review_decisions(self, actual_verification, decisions):
+            assert actual_verification is verification
+            events.append("reviews")
+
+        def write_execution_summary(self, *, fresh_worker_peak_rss_bytes):
+            assert fresh_worker_peak_rss_bytes == 8192
+            events.append("summary")
+
+        def _read_dataset_rows(self, name):
+            assert name == "execution"
+            return ({"release_gate_status": gate_status},)
+
+        def commit(self):
+            events.append("commit")
+
+    module = SimpleNamespace(
+        M6ResultStore=SimpleNamespace(
+            adopt_awaiting_review=lambda root, run_name: Store()
+        ),
+        EXECUTION_SUMMARY="execution",
+        issue_m6_review_decision=lambda actual, **values: SimpleNamespace(**values),
+    )
+    monkeypatch.setattr(
+        cli, "preflight_repository", lambda request, **kwargs: _minimal_repository(project)
+    )
+    monkeypatch.setattr(
+        cli, "_load_authenticated_review_results", lambda *a, **k: (module, None)
+    )
+    monkeypatch.setattr(
+        cli, "preflight_local_inputs", lambda *a, **k: SimpleNamespace()
+    )
+    monkeypatch.setattr(
+        cli, "_reverify_awaiting_review_precursor", lambda *a, **k: verification
+    )
+    finalization = cli.M6ReviewFinalizationRequest(
+        command=_request(project, mode="official"),
+        reviews=reviews,
+    )
+    return cli.finalize_m6_review(finalization, cli._RunHolder())
+
+
+def test_finalize_review_defense_in_depth_accept_requires_accepted_gate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """All roles accept, yet the store-derived release gate is not 'accepted':
+    the defense-in-depth cross-check must fail closed and never commit."""
+
+    project = tmp_path / "project"
+    project.mkdir()
+    events: list[str] = []
+    with pytest.raises(cli.M6OfficialCommandError) as err:
+        _run_finalize_with_gate_status(
+            monkeypatch,
+            project,
+            reviews=_finalize_reviews(),
+            gate_status="pending",
+            events=events,
+        )
+    assert err.value.code == "verification_failed"
+    assert "commit" not in events
+
+
+def test_finalize_review_defense_in_depth_reject_requires_rejected_gate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A role rejects, yet the store-derived release gate says 'accepted':
+    the defense-in-depth cross-check must fail closed and never commit."""
+
+    project = tmp_path / "project"
+    project.mkdir()
+    events: list[str] = []
+    with pytest.raises(cli.M6OfficialCommandError) as err:
+        _run_finalize_with_gate_status(
+            monkeypatch,
+            project,
+            reviews=_finalize_reviews(reject_architecture=True),
+            gate_status="accepted",
+            events=events,
+        )
+    assert err.value.code == "verification_failed"
+    assert "commit" not in events
+
+
+def test_reverify_precursor_detects_provenance_drift(tmp_path: Path) -> None:
+    """The precursor re-verification must reject an AWAITING_REVIEW store whose stored
+    typed provenance no longer matches the fresh verified facts."""
+
+    request = _request(tmp_path, mode="official")
+
+    class Store:
+        eligibility_receipt = SimpleNamespace(mode="official")
+
+        def _assert_awaiting_review_capability(self):
+            return None
+
+        def _read_dataset_rows(self, name):
+            return ("STORED-PROVENANCE",)
+
+    local = SimpleNamespace(
+        verified_provenance=SimpleNamespace(to_store_row=lambda: "FRESH-PROVENANCE")
+    )
+    module = SimpleNamespace(
+        TYPED_PROVENANCE="typed_provenance",
+        _normalize_typed_provenance=lambda rows, receipt: [rows[0]],
+    )
+    with pytest.raises(cli.M6OfficialCommandError) as err:
+        cli._reverify_awaiting_review_precursor(request, local, Store(), module)
+    assert err.value.code == "verification_failed"
+    assert "provenance" in str(err.value)
+
+
+def test_reverify_precursor_detects_eligibility_ledger_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The precursor re-verification must reject an AWAITING_REVIEW store whose
+    eligibility ledger has drifted from its verified predecessors."""
+
+    request = _request(tmp_path, mode="official")
+
+    class Store:
+        eligibility_receipt = SimpleNamespace(mode="official")
+
+        def _assert_awaiting_review_capability(self):
+            return None
+
+        def _read_dataset_rows(self, name):
+            if name == "eligibility_ledger":
+                return ({"cohort_index": 0, "disposition": "store"},)
+            return ("PROVENANCE",)
+
+        def _require_waymax_selection_receipt(self):
+            return SimpleNamespace(to_dict=lambda: {"mode": "official", "sel": 1})
+
+    class Predecessor:
+        def read_dataset(self, name):
+            return SimpleNamespace(
+                to_pylist=lambda: [
+                    {"cohort_index": 0, "disposition": "PREDECESSOR-DIFFERS"}
+                ]
+            )
+
+    local = SimpleNamespace(
+        verified_provenance=SimpleNamespace(to_store_row=lambda: "FRESH")
+    )
+    module = SimpleNamespace(
+        TYPED_PROVENANCE="typed_provenance",
+        ELIGIBILITY_LEDGER="eligibility_ledger",
+        _normalize_typed_provenance=lambda rows, receipt: ["SAME"],
+        verify_m6_result_store=lambda root, run_name, expected_mode: Predecessor(),
+    )
+    monkeypatch.setattr(
+        cli,
+        "_build_m6_predecessor_gate",
+        lambda request, local, results_module: (lambda: None),
+    )
+    with pytest.raises(cli.M6OfficialCommandError) as err:
+        cli._reverify_awaiting_review_precursor(request, local, Store(), module)
+    assert err.value.code == "verification_failed"
+    assert "eligibility" in str(err.value)
+
+
 def test_main_captures_before_parse_and_never_discloses_native_output(
     monkeypatch: pytest.MonkeyPatch,
     capfd: pytest.CaptureFixture[str],

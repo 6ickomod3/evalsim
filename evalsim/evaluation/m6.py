@@ -559,7 +559,7 @@ class M6EvaluationResult:
             )
         if any(
             not isinstance(result, M6PairedSceneResult)
-            or result.intervention_magnitude_mps2
+            or float(result.pair.intervention_plan.spec.dose)
             != PRIMARY_BRAKE_MAGNITUDE_MPS2
             for result in primary
         ):
@@ -641,7 +641,7 @@ class M6EvaluationResult:
                     "secondary scene results are not the complete frozen subset"
                 )
             if any(
-                result.intervention_magnitude_mps2
+                float(result.pair.intervention_plan.spec.dose)
                 != SECONDARY_BRAKE_MAGNITUDE_MPS2
                 for result in secondary
             ):
@@ -2160,11 +2160,11 @@ def _recompute_metric_results(
     pair: CounterfactualPair,
     metrics: Sequence[object],
 ) -> tuple[PairedMetricResult, ...]:
-    pair.revalidate()
-    return tuple(
-        evaluate_paired_metric(metric, pair)  # type: ignore[arg-type]
-        for metric in metrics
-    )
+    with pair.trusted_revalidation():
+        return tuple(
+            evaluate_paired_metric(metric, pair)  # type: ignore[arg-type]
+            for metric in metrics
+        )
 
 
 def _validate_numpy_rollout_metadata(

@@ -591,12 +591,13 @@ def is_exactly_nonreactive(pair: CounterfactualPair) -> bool:
     cannot classify world response.
     """
 
-    if not world_trajectory_tensor_equal(pair):
-        return False
-    impulse = AdditionalTargetBrakingImpulseMetric().compute(pair).value
-    timeliness = ResponseTimelinessMetric().compute(pair).value
-    progress = TargetProgressLossMetric().compute(pair).value
-    return impulse == 0.0 and timeliness == 0.0 and progress == 0.0
+    with pair.trusted_revalidation():
+        if not world_trajectory_tensor_equal(pair):
+            return False
+        impulse = AdditionalTargetBrakingImpulseMetric().compute(pair).value
+        timeliness = ResponseTimelinessMetric().compute(pair).value
+        progress = TargetProgressLossMetric().compute(pair).value
+        return impulse == 0.0 and timeliness == 0.0 and progress == 0.0
 
 
 __all__ = [

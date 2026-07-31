@@ -13,6 +13,7 @@ import math
 import re
 import struct
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Protocol, runtime_checkable
@@ -1601,6 +1602,9 @@ class CounterfactualPair:
     eligibility: InterventionEligibility
     intervention_identity: str
     _integrity_fingerprint: str = field(init=False, repr=False, compare=False)
+    _revalidation_trusted: bool = field(
+        init=False, default=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         scenario = (
@@ -1895,6 +1899,8 @@ class CounterfactualPair:
     def revalidate(self) -> None:
         """Revalidate every immutable input immediately before a metric pass."""
 
+        if self._revalidation_trusted:
+            return
         self.scenario.revalidate()
         self.baseline.revalidate()
         self.intervention.revalidate()
@@ -1903,6 +1909,24 @@ class CounterfactualPair:
         self._validate_semantics()
         if self._compute_integrity_fingerprint() != self._integrity_fingerprint:
             raise ValueError("counterfactual pair was mutated")
+
+    @contextmanager
+    def trusted_revalidation(self):
+        """Revalidate once, then elide redundant re-hashing within one synchronous pass.
+
+        External entry points still revalidate on scope entry, so tamper detection is
+        unchanged; only provably-safe nested/sequential re-checks of the *same immutable*
+        pair inside a single validation pass are skipped. The prior trust state is restored
+        on exit so nested scopes stay correct.
+        """
+
+        self.revalidate()
+        previous = self._revalidation_trusted
+        object.__setattr__(self, "_revalidation_trusted", True)
+        try:
+            yield
+        finally:
+            object.__setattr__(self, "_revalidation_trusted", previous)
 
 
 @dataclass(frozen=True, slots=True)

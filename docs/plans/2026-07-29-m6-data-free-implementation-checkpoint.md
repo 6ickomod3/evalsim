@@ -189,21 +189,35 @@ not the final verification of the commit containing this note.
 After the final fail-closed store changes, the focused result-store suite passed
 **53/53**. Compilation and whitespace checks also passed.
 
-**Current verification (2026-07-30):** a single green `uv run pytest` is still not
-recorded. The full suite is impractically slow (hours) because M6 scene validation
-re-runs the deliberate snapshot tamper-detection re-hash on every metric recompute
-(~48 `CounterfactualPair.revalidate()` calls per scene, measured), and roughly fifteen
-tests each rebuild a complete official-evidence bundle. Every M6 test still passes
-individually. On the exact worktree of this note a representative subset was rerun green:
-the non-M6 and M5 suite (695 passed, 24 skipped), the fast M6 core suite (264 passed, 2
-skipped: contracts, policy access, rollout, trace, interventions, metrics, statistics,
-evaluation, synthetic acceptance, and both Waymax-metric boundaries), and an end-to-end
-official-runner flow smoke (5 passed, sharing one module-scoped `run_m6_official_numpy`
-build). Two follow-ups remain before source release or any WOMD access: (1) reduce the
-redundant in-scope revalidation without weakening the per-entry tamper check, then record
-one full-suite green run; and (2) add explicit `finalize-review` precursor-drift and
-review-import environment-recheck coverage (the production gates run, but the sole
-finalize test currently stubs them out).
+**Current verification (2026-07-30):** the earlier ~48-per-scene revalidation blowup
+was root-caused to `CounterfactualPair.revalidate()` re-hashing the whole
+scenario/baseline/intervention snapshot (the deliberate `object.__setattr__`
+tamper-detection check) on every metric recompute inside one synchronous scene
+validation. This is now bounded by a `CounterfactualPair.trusted_revalidation()` scope
+that revalidates once on entry and elides only the provably-redundant nested/sequential
+re-hashes of the *same immutable pair* within that pass; every external entry
+(standalone `metric.compute`, `world_trajectory_tensor_equal`, aggregate re-validation)
+still revalidates, so all `snapshot was mutated` / `counterfactual pair was mutated`
+tamper tests stay green. Applied in `_recompute_metric_results`, `is_exactly_nonreactive`,
+and the aggregate `M6EvaluationResult.__post_init__` dose checks. Effect: the NumPy path
+is now fast (the whole official-runner suite runs in ~35 s, was minutes/timeout).
+
+Verified green on this worktree with the fix (~400 M6 tests, 0 failures): tamper suites
+(`test_m6_metrics`, `test_m6_counterfactual_contracts`, `test_m6_execution_trace`), the
+fast M6 core (224), the Waymax suite (`test_m6_waymax`/`_metrics`/`_official`, 67p/2s),
+`test_m6_official_cli` (102p/3s, including six new `finalize-review` coverage tests),
+`test_m6_pilot` + `test_m6_synthetic_cli` (31p/3s), and 74 of `test_m6_results`. The
+newly added tests close the P2 `finalize-review` gap: env-recheck `runtime_mismatch`,
+the accept/reject `release_gate_status` defense-in-depth cross-checks, and direct
+`_reverify_awaiting_review_precursor` provenance- and eligibility-ledger-drift detection.
+
+Remaining follow-up before source release / WOMD access: a single full `uv run pytest`
+is still not recorded green in one command, because the roughly a dozen tests that build
+a full official *Waymax* evidence bundle remain slow — the cost is now the mock Waymax
+`numpy_pairwise_overlaps` SAT oracle (O(agents^2), shared with the real native-parity
+path), deliberately left untouched to avoid perturbing that exactness gate. Optimizing
+that (or caching the test-side evidence build) and recording one full green run is the
+last testing follow-up.
 
 ## Exact incomplete boundary
 
