@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07110f">
-  <meta name="description" content="EvalSim is a contract-first platform for evaluating traffic simulators. Explore accepted M0–M5 evidence, an official ten-shard WOMD evaluation on a fixed 128-scenario cohort, three baseline policies, and the next M6 counterfactual question.">
+  <meta name="description" content="EvalSim is a contract-first platform for evaluating traffic simulators. Explore accepted M0–M5 evidence, an official ten-shard WOMD evaluation on a fixed 128-scenario cohort, three baseline policies, and the in-progress M6 counterfactual reactivity build (implementation landed, no result yet).">
   <link rel="canonical" href="https://evalsim-policy-lab.jdai2013.chatgpt.site/">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/">
   <meta property="og:title" content="EvalSim — Closed-loop simulator evaluation">
-  <meta property="og:description" content="M0–M5 accepted · official ten-shard WOMD evaluation · 128 paired scenarios · 876 tests pass · M6 not started">
+  <meta property="og:description" content="M0–M5 accepted · official ten-shard WOMD evaluation · 128 paired scenarios · M6 in progress (implementation landed, no result yet)">
   <meta property="og:image" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/og.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="EvalSim — Closed-loop simulator evaluation">
-  <meta name="twitter:description" content="M0–M5 accepted · official ten-shard WOMD evaluation · 128 paired scenarios · 876 tests pass · M6 not started">
+  <meta name="twitter:description" content="M0–M5 accepted · official ten-shard WOMD evaluation · 128 paired scenarios · M6 in progress (implementation landed, no result yet)">
   <meta name="twitter:image" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/og.png">
   <title>EvalSim — Closed-loop simulator evaluation</title>
   <style>
@@ -1236,7 +1236,7 @@
   <main id="main">
     <section class="shell hero" id="top" aria-labelledby="hero-title">
       <div>
-        <p class="kicker">M0 → M5 accepted · official ten-shard WOMD evaluation</p>
+        <p class="kicker">M0 → M5 accepted · official ten-shard WOMD evaluation · M6 in progress</p>
         <h1 id="hero-title">A simulator can match the log—and still <em>fail the test.</em></h1>
         <p class="hero-copy">EvalSim is a contract-first platform for discovering how traffic simulators differ: what they replay, what they react to, where their motion breaks, and whether their outputs are useful for closed-loop evaluation.</p>
         <div class="hero-actions">
@@ -1270,7 +1270,7 @@
 
     <div class="shell evidence-ribbon" aria-label="Current project evidence">
       <div class="stat"><strong>6</strong><span>milestones complete</span></div>
-      <div class="stat"><strong>876</strong><span>full repository tests pass</span></div>
+      <div class="stat"><strong>876</strong><span>full-suite tests · M5 acceptance</span></div>
       <div class="stat"><strong>5</strong><span>synthetic families</span></div>
       <div class="stat"><strong>128</strong><span>conditional WOMD cohort</span></div>
       <div class="stat"><strong>CPU</strong><span>Apple Silicon acceptance</span></div>
@@ -1447,7 +1447,7 @@
       <div class="contract-callout">
         <article class="callout">
           <h3>One contract, two kinds of actor control</h3>
-          <p>In M2, the ego remains exogenous and follows its logged trajectory. Policies simulate world agents from the current state. M6 can replace ego motion through a typed perturbation without changing the world-policy seam.</p>
+          <p>In M2, the ego remains exogenous and follows its logged trajectory. Policies simulate world agents from the current state. M6 replaces ego motion through a typed perturbation without changing the world-policy seam; that seam is now implemented and security-reviewed, though no counterfactual result has run.</p>
           <div class="actor-legend" aria-label="Trajectory legend">
             <span><i class="legend-line logged" aria-hidden="true"></i> logged reference</span>
             <span><i class="legend-line ego" aria-hidden="true"></i> exogenous ego</span>
@@ -1674,7 +1674,7 @@
       </div>
 
       <div class="review-strip" aria-label="Current validation evidence">
-        <div><strong>876 passed</strong><span>current full repository suite, with 1 expected local-data skip; clean core-only: 790 passed with 28 expected optional/local skips</span></div>
+        <div><strong>876 passed</strong><span>full suite at the M5 acceptance snapshot (1 expected local-data skip; clean core-only 790 passed, 28 skips). The current M6 worktree adds the official-runner suite; a full-suite green run is a tracked follow-up.</span></div>
         <div><strong>6,656 + 1,024</strong><span>metric rows plus slice memberships; 312 complete scorecards and 144 parity summaries verified</span></div>
         <div><strong>2,916 → 128</strong><span>raw ten-shard records to selected complete-case cohort; all primary cells paired, conditional and nonrepresentative by design</span></div>
       </div>
@@ -1692,9 +1692,9 @@
           <li><strong>M5 is finite-cohort diagnostic evidence, not a winner.</strong> The accepted result is conditional on one deterministic 128-scenario complete-case cohort, shared Waymax decode, seed-zero policies, logged/exogenous ego motion, and a privileged recorded-future replay baseline. Every contrast has diagnostics in both directions; there is no overall realism, superiority, causal, production, or population-level claim.</li>
           <li><strong>The uncertainty language is intentionally narrow.</strong> The pointwise and adjusted ranges are deterministic scene-reweighting sensitivity bands, not confidence intervals, hypothesis tests, or population uncertainty. The overlap rate is a target-frame proxy, and the kinematic rate is a fixed-0.1-second Waymax diagnostic rather than a physical-time-normalized safety metric. Native offroad, route, and signal metrics remain outside the current contract.</li>
           <li><strong>The benchmark is deliberately narrow.</strong> It measures a batch-2 exact-log JAX kernel on Apple CPU after host-to-device transfer—not ingestion, the full cohort, accelerator speedup, scaling efficiency, or production throughput. RSS is process high-water memory, not JAX device memory.</li>
-          <li><strong>No M6 counterfactual result.</strong> M2 keeps ego on its logged trajectory; ego perturbation and reactivity metrics remain planned.</li>
+          <li><strong>No M6 counterfactual result yet.</strong> The typed ego-perturbation seam, paired reactivity metrics, and the outcome-blind official runner/CLI are implemented and have passed independent security review, but no WOMD evaluation has run and no reactivity result is claimed.</li>
         </ul>
-        <p class="next-question"><span>Next falsifiable question / M6 not started</span>When ego motion is changed through a typed intervention, do causal world policies respond differently from privileged log replay—and can paired reactivity metrics distinguish response from trajectory imitation without leaking recorded futures?</p>
+        <p class="next-question"><span>Next falsifiable question / M6 in progress — no result yet</span>When ego motion is changed through a typed intervention, do causal world policies respond differently from privileged log replay—and can paired reactivity metrics distinguish response from trajectory imitation without leaking recorded futures?</p>
       </div>
     </section>
 
@@ -1714,6 +1714,7 @@
         <article class="arch-node done"><span class="arch-status">Implemented · M3</span><h3>Waymo substrate</h3><p>Exact local WOMD decode, pinned Waymax/JAX adapter, mapping, and one-record contract acceptance.</p></article>
         <article class="arch-node done"><span class="arch-status">Implemented · M4</span><h3>Evaluation substrate</h3><p>Deterministic conditional cohort, exact-log gates, Waymax reference execution, and batched CPU JAX evidence.</p></article>
         <article class="arch-node done"><span class="arch-status">Implemented + accepted · M5</span><h3>Metrics + statistics</h3><p>Official ten-shard WOMD evaluation, 13 metrics, 8 source-only slices, complete paired scorecards, deterministic scene-reweighting bands, native parity, immutable local results, and a fail-closed runner.</p></article>
+        <article class="arch-node next"><span class="arch-status">Implemented (pre-data) · M6</span><h3>Counterfactual reactivity</h3><p>Typed ego-perturbation seam, paired reactivity metrics, outcome-blind official runner/CLI, and a fail-closed review lifecycle — implementation and independent security review accepted; no WOMD result yet.</p></article>
       </div>
       <div class="producer-note" aria-label="Source implementation status">
         <span class="implemented">Synthetic producer · implemented locally</span>
@@ -1779,9 +1780,9 @@
           </dl>
         </article>
         <article class="roadmap-column next">
-          <h3>Next <span>not started</span></h3>
+          <h3>In progress <span>implementation landed</span></h3>
           <dl class="roadmap-list">
-            <div class="roadmap-item"><dt>M6</dt><dd><strong>Counterfactual reactivity</strong><span>Typed ego interventions, causal response checks, and paired reactivity evidence</span></dd></div>
+            <div class="roadmap-item"><dt>M6</dt><dd><strong>Counterfactual reactivity</strong><span>Typed ego interventions, paired reactivity metrics, and the outcome-blind official runner implemented and security-reviewed; WOMD result pending the release gate</span></dd></div>
           </dl>
         </article>
         <article class="roadmap-column future">
@@ -1809,7 +1810,7 @@
           <pre id="commands"><code>uv sync --extra dev
 uv run pytest
 
-# Current clean core-only environment:
+# M5 acceptance snapshot (clean core-only environment):
 # 790 passed, 28 expected optional/local skips
 
 # Fixed M5 synthetic acceptance; choose a new run name:
@@ -1820,7 +1821,7 @@ uv run evalsim-m5-synthetic \
 # Optional Waymo dependencies:
 uv sync --extra dev --extra waymo
 uv run --extra waymo pytest
-# Current full repository suite: 876 passed, 1 expected local-data skip
+# M5 acceptance snapshot (full repository suite): 876 passed, 1 expected local-data skip
 # Locked 12-file M4 matrix: 421 passed, 1 skipped
 
 # Optional licensed M3 path:
@@ -1839,7 +1840,15 @@ EVALSIM_RUN_WAYMO_LOCAL=1 uv run --extra waymo evalsim-m5-official \
   --project-root . \
   --data-dir data/raw/womd/v1.3.1/tf_example/validation \
   --m4-run-dir outputs/m4/2026-07-28-a7a20e5 \
-  --run-name official-acceptance-01</code></pre>
+  --run-name official-acceptance-01
+
+# Data-free M6 counterfactual synthetic acceptance (no WOMD; choose a new run name):
+uv run evalsim-m6-synthetic \
+  --project-root . \
+  --run-name m6-data-free-01
+
+# The official M6 WOMD lifecycle is gated (independent approval + m6-approved-v1 tag,
+# runtime rebuilt without the dev extra) and runs only via evalsim/cli/m6_bootstrap.py.</code></pre>
         </div>
       </div>
     </section>
@@ -1847,7 +1856,7 @@ EVALSIM_RUN_WAYMO_LOCAL=1 uv run --extra waymo evalsim-m5-official \
 
   <footer>
     <div class="shell footer-row">
-      <span>EvalSim · M0–M5 accepted · official ten-shard WOMD evaluation complete · M6 not started · updated 2026-07-29</span>
+      <span>EvalSim · M0–M5 accepted · official ten-shard WOMD evaluation complete · M6 in progress (implementation landed, no result yet) · updated 2026-07-30</span>
       <div class="footer-links">
         <a href="https://github.com/6ickomod3/evalsim" rel="noreferrer">Source</a>
         <a href="https://github.com/6ickomod3/evalsim/blob/main/README.md" rel="noreferrer">README</a>
