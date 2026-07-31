@@ -531,7 +531,7 @@ to M6. The exact eligibility → compute-pilot → official `AWAITING_REVIEW` �
 
 M7 stress-tests the M5 evaluators themselves: inject known, severity-controlled defects
 and measure whether each metric detects them, what it misses, and what it falsely flags.
-The **data-free foundation** is implemented in `evalsim/stress/` and verified by 26
+The **data-free foundation** is implemented in `evalsim/stress/` and verified by 27
 analytic-oracle tests (adversarially subagent-reviewed, no P0/P1):
 
 - a typed, seeded defect framework with strict severity-0 identity and sanitized
@@ -539,14 +539,16 @@ analytic-oracle tests (adversarially subagent-reviewed, no P0/P1):
 - three severity-controlled families with monotone oracles — `frozen_agent`,
   `teleportation`, `overlap` — each detected by a *different* M5 metric;
 - a detection matrix (defect × metric × severity) and per-metric governance cards;
+- an invariance-probe harness (agent-order permutation + rigid translation leave the M5
+  metrics unchanged; a semantics-breaking control is correctly flagged);
 - the required negative result: the kinematic-infeasibility rate is **blind to frozen
   (nonreactive) agents** — a held agent's zero, constant velocity reads as feasible —
   while position error catches them. A plausible metric shown to be misleading, tying
   directly to the M6 nonreactivity theme.
 
-Deferred to an accepted M7 result: the invariance-probe harness, a calibration/held-out
-split, a broader defect taxonomy, and the WOMD detection matrix on the accepted M4 cohort
-(a separate accepted run, not opened here). Pre-registration + status:
+Deferred to an accepted M7 result: a calibration/held-out split, a broader defect
+taxonomy, and the WOMD detection matrix on the accepted M4 cohort (a separate accepted
+run, not opened here). Pre-registration + status:
 [M7 evaluator red-team](docs/plans/2026-07-31-m7-evaluator-red-team.md).
 
 ## Layout

@@ -22,6 +22,15 @@ from .detection import (
     cell,
     detection_matrix,
 )
+from .invariance import (
+    AgentPermutationProbe,
+    InvarianceProbe,
+    InvarianceResult,
+    RolloutOnlyTranslationProbe,
+    TranslationProbe,
+    check_invariance,
+    invariance_matrix,
+)
 from .metric_cards import MetricCard, build_metric_card, build_metric_cards
 
 __all__ = [
@@ -42,4 +51,11 @@ __all__ = [
     "MetricCard",
     "build_metric_card",
     "build_metric_cards",
+    "AgentPermutationProbe",
+    "InvarianceProbe",
+    "InvarianceResult",
+    "RolloutOnlyTranslationProbe",
+    "TranslationProbe",
+    "check_invariance",
+    "invariance_matrix",
 ]

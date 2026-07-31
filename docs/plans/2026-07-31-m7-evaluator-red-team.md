@@ -6,11 +6,11 @@ harness, and calibration/held-out split still pending (see Implementation status
 
 ## Implementation status (2026-07-31)
 
-The **data-free** M7 foundation is implemented in `evalsim/stress/` and verified by 26
+The **data-free** M7 foundation is implemented in `evalsim/stress/` and verified by 27
 analytic-oracle tests (`tests/test_m7_defects.py`, `test_m7_detection.py`,
-`test_m7_metric_cards.py`), each independently reviewed by an adversarial subagent (no
-P0/P1; two P2s fixed — cohort ordinals are now 0-based cohort ranks, and the manifest test
-was tightened). Landed:
+`test_m7_metric_cards.py`, `test_m7_invariance.py`), each independently reviewed by an
+adversarial subagent (no P0/P1; two P2s fixed — cohort ordinals are now 0-based cohort
+ranks, and the manifest test was tightened). Landed:
 
 - a typed, seeded defect framework (`DefectSpec`, `DefectManifest`, `Defect`,
   `DefectRegistry`) with strict severity-0 identity, no in-place mutation, and sanitized
@@ -22,17 +22,21 @@ was tightened). Landed:
   baseline, severity curve, `detected`, and `monotone`;
 - metric governance cards (`metric_cards.py`) that record each evaluator's detected
   families and blind spots;
+- an invariance-probe harness (`invariance.py`): agent-order permutation and rigid
+  global translation leave the M5 error/overlap metrics unchanged, and a
+  semantics-breaking control (translating only the rollout) is correctly flagged
+  non-invariant, so the harness is proven to detect real violations;
 - **the required negative result**: the `waymax_kinematic_infeasibility_rate` evaluator is
   **blind to frozen (nonreactive) world agents** (a held agent has zero, constant velocity
   = feasible), while `position_error_m` catches them — a plausible metric shown to be
   misleading, tying directly to the M6 nonreactivity theme. Overlap-rate is likewise blind
   to freezing.
 
-Still pending before an accepted M7 result: the invariance-probe harness over the M5
-metrics; a calibration/held-out split; the broader defect taxonomy; and the WOMD detection
-matrix on the accepted M4 cohort (deferred to a separate accepted run, like M5/M6 — needs
-pre-registration acceptance and a data-access decision). No WOMD data was opened for this
-foundation.
+Still pending before an accepted M7 result: a calibration/held-out defect split; the
+broader defect taxonomy (kinematic spikes, off-road/route, dispersion, identity/mask bugs);
+and the WOMD detection matrix on the accepted M4 cohort (deferred to a separate accepted
+run, like M5/M6 — needs pre-registration acceptance and a data-access decision). No WOMD
+data was opened for this foundation.
 **Governing roadmap:** [Waymo-aligned roadmap](2026-07-28-waymo-aligned-roadmap.md) (M7 section)
 **Depends on:** M5 metric system (accepted). Does **not** depend on the M6 scientific
 result, so M7 can proceed in parallel with the gated M6 run.
