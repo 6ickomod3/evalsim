@@ -531,20 +531,25 @@ to M6. The exact eligibility → compute-pilot → official `AWAITING_REVIEW` �
 
 M7 stress-tests the M5 evaluators themselves: inject known, severity-controlled defects
 and measure whether each metric detects them, what it misses, and what it falsely flags.
-The **data-free foundation** is implemented in `evalsim/stress/` and verified by 27
-analytic-oracle tests (adversarially subagent-reviewed, no P0/P1):
+The **data-free foundation** is implemented in `evalsim/stress/` and verified by 36
+analytic-oracle tests (adversarially subagent-reviewed — one **P1 caught and fixed**: the
+teleportation family had co-injected a velocity spike, "teaching to the test"; it's now a
+pure position defect, with velocity corruption split into a separate honest family):
 
-- a typed, seeded defect framework with strict severity-0 identity and sanitized
+- a typed defect framework with strict whole-contract severity-0 identity and sanitized
   manifests (0-based cohort ranks only — no native id/coordinate/payload);
-- three severity-controlled families with monotone oracles — `frozen_agent`,
-  `teleportation`, `overlap` — each detected by a *different* M5 metric;
+- four severity-controlled families with monotone, nested oracles — `frozen_agent`
+  (nonreactivity), `teleportation` (position-only), `kinematic_spike` (velocity-only),
+  `overlap`;
 - a detection matrix (defect × metric × severity) and per-metric governance cards;
 - an invariance-probe harness (agent-order permutation + rigid translation leave the M5
   metrics unchanged; a semantics-breaking control is correctly flagged);
-- the required negative result: the kinematic-infeasibility rate is **blind to frozen
-  (nonreactive) agents** — a held agent's zero, constant velocity reads as feasible —
-  while position error catches them. A plausible metric shown to be misleading, tying
-  directly to the M6 nonreactivity theme.
+- the required negative results — **complementary evaluator blind spots**: the
+  velocity-based kinematic-infeasibility rate is **blind to position-domain defects**
+  (frozen/nonreactive agents *and* position-only teleportation) but catches a velocity
+  spike; log-deviation position error is the mirror image (catches those, blind to a
+  velocity-only spike). Each metric shown misleading in the other's domain — the frozen
+  case tying directly to the M6 nonreactivity theme.
 
 Deferred to an accepted M7 result: a calibration/held-out split, a broader defect
 taxonomy, and the WOMD detection matrix on the accepted M4 cohort (a separate accepted

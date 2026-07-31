@@ -75,7 +75,7 @@ def _matrix():
 
 def test_matrix_has_a_cell_per_family_metric_pair() -> None:
     matrix = _matrix()
-    assert len(matrix) == 3 * 3
+    assert len(matrix) == 4 * 3  # frozen_agent, kinematic_spike, overlap, teleportation
     assert all(isinstance(c, DetectionCell) for c in matrix)
 
 
@@ -93,9 +93,20 @@ def test_infeasibility_is_blind_to_frozen_agents() -> None:
     assert c.detected is False
 
 
-def test_infeasibility_detects_teleportation() -> None:
-    c = cell(_matrix(), "teleportation", "waymax_kinematic_infeasibility_rate")
-    assert c.detected is True
+def test_teleportation_is_blind_to_infeasibility_but_seen_by_position_error() -> None:
+    # Complementary blind spots: the position-only teleport is caught by position error
+    # but missed by the velocity-based infeasibility metric (honest negative result).
+    matrix = _matrix()
+    assert cell(matrix, "teleportation", "waymax_kinematic_infeasibility_rate").detected is False
+    assert cell(matrix, "teleportation", "position_error_m").detected is True
+
+
+def test_infeasibility_detects_kinematic_spike_but_position_error_is_blind() -> None:
+    # The velocity impulse is caught by infeasibility but missed by position error,
+    # which reads only logged-position deviation.
+    matrix = _matrix()
+    assert cell(matrix, "kinematic_spike", "waymax_kinematic_infeasibility_rate").detected is True
+    assert cell(matrix, "kinematic_spike", "position_error_m").detected is False
 
 
 def test_overlap_rate_detects_overlap_defect() -> None:

@@ -6,37 +6,45 @@ harness, and calibration/held-out split still pending (see Implementation status
 
 ## Implementation status (2026-07-31)
 
-The **data-free** M7 foundation is implemented in `evalsim/stress/` and verified by 27
+The **data-free** M7 foundation is implemented in `evalsim/stress/` and verified by 36
 analytic-oracle tests (`tests/test_m7_defects.py`, `test_m7_detection.py`,
-`test_m7_metric_cards.py`, `test_m7_invariance.py`), each independently reviewed by an
-adversarial subagent (no P0/P1; two P2s fixed — cohort ordinals are now 0-based cohort
-ranks, and the manifest test was tightened). Landed:
+`test_m7_metric_cards.py`, `test_m7_invariance.py`), reviewed by adversarial subagents.
+No P0. The review caught a **P1 and it was fixed**: the original `teleportation` family
+co-injected a velocity spike, so "infeasibility detects teleportation" was *teaching to
+the test* and masked a real blind spot; it is now split into a **position-only**
+`teleportation` and a **velocity-only** `kinematic_spike`, each with its docstring and
+oracle matching the pre-registered taxonomy. Several P2s were also addressed (0-based
+cohort ranks, `current_index < num_steps`, byte-identity now checks timestamps/provenance,
+nested-count oracles for every family, "seed recorded but selection deterministic"
+wording). Landed:
 
-- a typed, seeded defect framework (`DefectSpec`, `DefectManifest`, `Defect`,
-  `DefectRegistry`) with strict severity-0 identity, no in-place mutation, and sanitized
+- a typed defect framework (`DefectSpec`, `DefectManifest`, `Defect`, `DefectRegistry`)
+  with strict whole-contract severity-0 identity, no in-place mutation, and sanitized
   manifests (0-based cohort ranks only — no native id/coordinate/payload);
-- three severity-controlled families with monotone analytic oracles: `frozen_agent`
-  (nonreactivity), `teleportation` (position jump + implied velocity spike),
-  `overlap` (forced interpenetration);
+- four severity-controlled families with monotone, nested analytic oracles: `frozen_agent`
+  (nonreactivity), `teleportation` (position-only discontinuity), `kinematic_spike`
+  (velocity-only impulse), and `overlap` (forced interpenetration);
 - a detection matrix (`detection.py`) computing per (defect × metric × severity) clean
   baseline, severity curve, `detected`, and `monotone`;
-- metric governance cards (`metric_cards.py`) that record each evaluator's detected
-  families and blind spots;
-- an invariance-probe harness (`invariance.py`): agent-order permutation and rigid
-  global translation leave the M5 error/overlap metrics unchanged, and a
-  semantics-breaking control (translating only the rollout) is correctly flagged
-  non-invariant, so the harness is proven to detect real violations;
-- **the required negative result**: the `waymax_kinematic_infeasibility_rate` evaluator is
-  **blind to frozen (nonreactive) world agents** (a held agent has zero, constant velocity
-  = feasible), while `position_error_m` catches them — a plausible metric shown to be
-  misleading, tying directly to the M6 nonreactivity theme. Overlap-rate is likewise blind
-  to freezing.
+- metric governance cards (`metric_cards.py`) recording each evaluator's detected families
+  and blind spots;
+- an invariance-probe harness (`invariance.py`): agent-order permutation and rigid global
+  translation leave the M5 error/overlap metrics unchanged, and a semantics-breaking
+  control (translating only the rollout) is correctly flagged, proving the harness detects
+  real violations;
+- **the required negative results — complementary evaluator blind spots**: the
+  velocity-based `waymax_kinematic_infeasibility_rate` is **blind to position-domain
+  defects** (frozen/nonreactive agents *and* position-only teleportation both read as
+  feasible) but catches `kinematic_spike`; the log-deviation `position_error_m` is the
+  mirror image — it catches frozen/teleportation but is **blind to a velocity-only spike**
+  (positions still match the log). Two plausible metrics each shown misleading in the
+  other's domain, tying the frozen case directly to the M6 nonreactivity theme.
 
-Still pending before an accepted M7 result: a calibration/held-out defect split; the
-broader defect taxonomy (kinematic spikes, off-road/route, dispersion, identity/mask bugs);
-and the WOMD detection matrix on the accepted M4 cohort (deferred to a separate accepted
-run, like M5/M6 — needs pre-registration acceptance and a data-access decision). No WOMD
-data was opened for this foundation.
+Still pending before an accepted M7 result: a calibration/held-out defect split; a broader
+defect taxonomy (off-road/route, dispersion, identity/mask/coordinate bugs); and the WOMD
+detection matrix on the accepted M4 cohort (deferred to a separate accepted run, like
+M5/M6 — needs pre-registration acceptance and a data-access decision). No WOMD data was
+opened for this foundation.
 **Governing roadmap:** [Waymo-aligned roadmap](2026-07-28-waymo-aligned-roadmap.md) (M7 section)
 **Depends on:** M5 metric system (accepted). Does **not** depend on the M6 scientific
 result, so M7 can proceed in parallel with the gated M6 run.

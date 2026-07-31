@@ -376,12 +376,14 @@ simulator superiority, or evaluator validity beyond the registered measures.
 ### M7 — Evaluator red-team and metric governance 🚧 (data-free foundation implemented)
 
 The data-free M7 foundation is implemented and verified in `evalsim/stress/` (defect
-framework + frozen-agent/teleportation/overlap families with analytic oracles, a detection
-matrix, metric governance cards, an invariance-probe harness, and the required blind-spot
-negative result: the kinematic-infeasibility rate misses frozen/nonreactive agents). 27
-oracle tests, adversarially subagent-reviewed. The calibration/held-out split, broader
-taxonomy, and the WOMD detection matrix remain pending. Pre-registration + status:
-[M7 evaluator red-team](2026-07-31-m7-evaluator-red-team.md).
+framework + four families — frozen-agent, position-only teleportation, velocity-only
+kinematic_spike, overlap — with analytic oracles, a detection matrix, metric governance
+cards, an invariance-probe harness, and complementary blind-spot negative results: the
+velocity-based infeasibility rate misses position-domain defects while position error
+misses velocity spikes). 36 oracle tests, adversarially subagent-reviewed (a P1 —
+teleportation teaching to the test — was caught and fixed). The calibration/held-out
+split, broader taxonomy, and the WOMD detection matrix remain pending. Pre-registration +
+status: [M7 evaluator red-team](2026-07-31-m7-evaluator-red-team.md).
 
 
 **Question:** Do the evaluators detect known defects for the right reason, and what do

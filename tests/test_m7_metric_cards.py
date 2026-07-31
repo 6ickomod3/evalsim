@@ -25,11 +25,15 @@ def test_card_partitions_detection_matrix_into_sensitivity_and_blind_spots() -> 
     name = "waymax_kinematic_infeasibility_rate"
     matrix = (
         DetectionCell(
-            defect_family="teleportation", metric_name=name, clean_value=0.0,
+            defect_family="kinematic_spike", metric_name=name, clean_value=0.0,
             severity_values=(), detected=True, monotone=True,
         ),
         DetectionCell(
             defect_family="frozen_agent", metric_name=name, clean_value=0.0,
+            severity_values=(), detected=False, monotone=True,
+        ),
+        DetectionCell(
+            defect_family="teleportation", metric_name=name, clean_value=0.0,
             severity_values=(), detected=False, monotone=True,
         ),
         DetectionCell(
@@ -41,8 +45,8 @@ def test_card_partitions_detection_matrix_into_sensitivity_and_blind_spots() -> 
     from evalsim.metrics.m5 import WaymaxKinematicInfeasibilityRateMetric
 
     card = build_metric_card(WaymaxKinematicInfeasibilityRateMetric(), matrix)
-    assert card.detected_families == ("teleportation",)
-    assert card.blind_spot_families == ("frozen_agent",)
+    assert card.detected_families == ("kinematic_spike",)
+    assert card.blind_spot_families == ("frozen_agent", "teleportation")
     # a cell for a different metric must not leak into this card
     assert "overlap" not in card.detected_families
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 import numpy as np
@@ -103,6 +103,8 @@ def _current_index(scenario: Scenario) -> int:
     value = scenario.metadata.get("current_index", 0)
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError("scenario current_index must be a non-negative integer")
+    if value >= scenario.num_steps:
+        raise ValueError("scenario current_index must be < num_steps")
     return value
 
 
@@ -197,18 +199,26 @@ class FrozenAgentDefect:
         return _rebuild(rollout, agents), manifest
 
 
-class TeleportationDefect:
-    """Displace a nested fraction of world agents by a large step at a future frame.
+def _mid_future_frame(current: int, num_steps: int) -> int:
+    """A future frame strictly after ``current`` (clamped to the last frame)."""
+    return min(current + max(1, (num_steps - 1 - current) // 2), num_steps - 1)
 
-    A physical teleport is a position discontinuity, which implies an infeasible
-    one-step velocity. severity in [0, 1] is the fraction of world agents that receive
-    a persistent +50 m x-displacement from a mid-future frame plus the +100 m/s one-step
-    vx spike that discontinuity implies -- so the corruption is detected by the
-    velocity-based kinematic-infeasibility evaluator (and, incidentally, position error).
+
+class TeleportationDefect:
+    """Displace a nested fraction of world agents by a large *position-only* step.
+
+    This is a pure position discontinuity (taxonomy #2): the affected agents receive a
+    persistent +50 m x-displacement from a mid-future frame, with velocities left
+    untouched. It is detected by ``position_error_m`` (deviation from the logged future)
+    and is deliberately a BLIND SPOT for ``waymax_kinematic_infeasibility_rate``, which
+    reads stored velocities/headings and never finite-diffs position -- an honest negative
+    result. For a velocity-domain corruption the metric *does* catch, see
+    :class:`KinematicSpikeDefect`. severity in [0, 1] is the fraction of world agents,
+    selected as a nested prefix by cohort rank; the seed is recorded for provenance but
+    the selection is deterministic.
     """
 
     _JUMP_METRES = 50.0
-    _VELOCITY_SPIKE_MPS = 100.0
 
     spec = DefectSpec(
         family="teleportation",
@@ -217,7 +227,7 @@ class TeleportationDefect:
         severity_max=1.0,
         severity_unit="fraction_of_world_agents",
         target="rollout",
-        description="displace a nested fraction of world agents with an implied velocity spike",
+        description="position-only discontinuity: displace a nested fraction of world agents",
     )
 
     def apply(
@@ -236,20 +246,77 @@ class TeleportationDefect:
         n_world = len(positions)
         count = math.ceil(severity * n_world)
         num_steps = len(rollout.timestamps)
-        jump = min(current + max(1, (num_steps - 1 - current) // 2), num_steps - 1)
+        jump = _mid_future_frame(current, num_steps)
+        applied = count if jump > current else 0  # no future frame -> honest no-op
         agents = [_copy_agent(agent) for agent in rollout.agents]
-        for position in positions[:count]:
-            if jump > current:
-                agent = agents[position]
-                agent.x[jump:] = agent.x[jump:] + self._JUMP_METRES
-                agent.vx[jump] = agent.vx[jump] + self._VELOCITY_SPIKE_MPS
+        for position in positions[:applied]:
+            agents[position].x[jump:] = agents[position].x[jump:] + self._JUMP_METRES
         manifest = DefectManifest(
             family=self.spec.family,
             version=self.spec.version,
             severity=severity,
             seed=seed,
             total_world_agent_count=n_world,
-            affected_agent_ordinals=tuple(range(count)),
+            affected_agent_ordinals=tuple(range(applied)),
+        )
+        return _rebuild(rollout, agents), manifest
+
+
+class KinematicSpikeDefect:
+    """Inject a velocity impulse into a nested fraction of world agents (taxonomy #3).
+
+    A pure velocity-domain corruption: the affected agents get a one-step +100 m/s vx
+    spike at a mid-future frame, with positions left untouched. It is detected by
+    ``waymax_kinematic_infeasibility_rate`` (the implied acceleration is infeasible) and
+    is a BLIND SPOT for ``position_error_m`` (positions still match the log). Together
+    with :class:`TeleportationDefect` this exposes the complementary blind spots of the
+    position- and velocity-based evaluators. severity in [0, 1] is the fraction of world
+    agents, a nested prefix by cohort rank; the seed is recorded but selection is
+    deterministic.
+    """
+
+    _VELOCITY_SPIKE_MPS = 100.0
+
+    spec = DefectSpec(
+        family="kinematic_spike",
+        version="v1",
+        severity_min=0.0,
+        severity_max=1.0,
+        severity_unit="fraction_of_world_agents",
+        target="rollout",
+        description="velocity-only impulse: spike vx for a nested fraction of world agents",
+    )
+
+    def apply(
+        self,
+        scenario: Scenario,
+        rollout: Rollout,
+        severity: float,
+        *,
+        seed: int,
+    ) -> tuple[Rollout, DefectManifest]:
+        if not isinstance(seed, int) or isinstance(seed, bool):
+            raise ValueError("seed must be an int")
+        severity = self.spec.clamp(severity)
+        current = _current_index(scenario)
+        positions = _world_positions(scenario, rollout)
+        n_world = len(positions)
+        count = math.ceil(severity * n_world)
+        num_steps = len(rollout.timestamps)
+        jump = _mid_future_frame(current, num_steps)
+        applied = count if jump > current else 0  # no future frame -> honest no-op
+        agents = [_copy_agent(agent) for agent in rollout.agents]
+        for position in positions[:applied]:
+            agents[position].vx[jump] = (
+                agents[position].vx[jump] + self._VELOCITY_SPIKE_MPS
+            )
+        manifest = DefectManifest(
+            family=self.spec.family,
+            version=self.spec.version,
+            severity=severity,
+            seed=seed,
+            total_world_agent_count=n_world,
+            affected_agent_ordinals=tuple(range(applied)),
         )
         return _rebuild(rollout, agents), manifest
 
@@ -287,9 +354,10 @@ class OverlapDefect:
         current = _current_index(scenario)
         positions = _world_positions(scenario, rollout)
         n_world = len(positions)
+        num_steps = len(rollout.timestamps)
         agents = [_copy_agent(agent) for agent in rollout.agents]
         affected_ranks: tuple[int, ...] = ()
-        if n_world >= 2:
+        if n_world >= 2 and current + 1 < num_steps:  # needs >=2 agents and a future frame
             reference = agents[positions[0]]  # world rank 0 is the reference
             candidates = positions[1:]
             count = math.ceil(severity * len(candidates))
@@ -348,9 +416,15 @@ class DefectRegistry:
 
 
 def default_defect_registry() -> DefectRegistry:
-    """The registered M7 defect families (sorted: frozen_agent, overlap, teleportation)."""
+    """The registered M7 defect families (sorted: frozen_agent, kinematic_spike,
+    overlap, teleportation)."""
     return DefectRegistry(
-        [FrozenAgentDefect(), OverlapDefect(), TeleportationDefect()]
+        [
+            FrozenAgentDefect(),
+            KinematicSpikeDefect(),
+            OverlapDefect(),
+            TeleportationDefect(),
+        ]
     )
 
 
@@ -361,6 +435,7 @@ __all__ = [
     "DefectRegistryError",
     "DefectSpec",
     "FrozenAgentDefect",
+    "KinematicSpikeDefect",
     "OverlapDefect",
     "TeleportationDefect",
     "default_defect_registry",

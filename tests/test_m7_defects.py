@@ -81,10 +81,20 @@ def _position_error(scenario, rollout) -> float:
 
 
 def _rollouts_equal(a: Rollout, b: Rollout) -> bool:
-    if len(a.agents) != len(b.agents):
+    # A true severity-0 identity preserves the whole contract, not just agent series.
+    if (
+        a.scenario_id != b.scenario_id
+        or a.sim_name != b.sim_name
+        or a.sim_version != b.sim_version
+        or a.seed != b.seed
+        or a.perturbation != b.perturbation
+        or dict(a.metadata) != dict(b.metadata)
+        or not np.array_equal(a.timestamps, b.timestamps)
+        or len(a.agents) != len(b.agents)
+    ):
         return False
     for x, y in zip(a.agents, b.agents, strict=True):
-        if x.id != y.id or x.type != y.type:
+        if x.id != y.id or x.type != y.type or x.length != y.length or x.width != y.width:
             return False
         for field in ("valid", "x", "y", "heading", "vx", "vy"):
             if not np.array_equal(getattr(x, field), getattr(y, field)):
@@ -201,6 +211,7 @@ from evalsim.metrics.m5 import (  # noqa: E402
     WaymaxKinematicInfeasibilityRateMetric,
 )
 from evalsim.stress.defects import (  # noqa: E402
+    KinematicSpikeDefect,
     OverlapDefect,
     TeleportationDefect,
     default_defect_registry,
@@ -247,17 +258,83 @@ def test_teleportation_severity_zero_is_identity_and_deterministic() -> None:
     assert _rollouts_equal(b, c)
 
 
-def test_teleportation_detected_by_infeasibility_monotone() -> None:
+def test_teleportation_is_position_only_and_nested() -> None:
+    # A pure position teleport must not touch velocities, and selection is nested.
+    scenario, rollout = _separated_pair(n_world=4)
+    corrupted, low = TeleportationDefect().apply(scenario, rollout, severity=0.25, seed=2)
+    _, high = TeleportationDefect().apply(scenario, rollout, severity=0.75, seed=2)
+    assert 0 < low.affected_agent_count < high.affected_agent_count
+    assert low.affected_agent_ordinals == (0,)
+    assert high.affected_agent_ordinals == (0, 1, 2)
+    # velocities and heading are untouched (position-only corruption)
+    for a, b in zip(corrupted.agents, rollout.agents, strict=True):
+        assert np.array_equal(a.vx, b.vx)
+        assert np.array_equal(a.vy, b.vy)
+        assert np.array_equal(a.heading, b.heading)
+
+
+def test_teleportation_detected_by_position_error_monotone() -> None:
+    scenario, rollout = _separated_pair(n_world=4)
+    clean = _position_error(scenario, rollout)
+    assert clean == pytest.approx(0.0, abs=1e-9)
+    curve = []
+    for sev in (0.25, 0.5, 0.75, 1.0):
+        corrupted, _ = TeleportationDefect().apply(scenario, rollout, severity=sev, seed=2)
+        curve.append(_position_error(scenario, corrupted))
+    assert clean < curve[0]
+    for lo, hi in zip(curve, curve[1:], strict=False):
+        assert lo <= hi + 1e-9
+
+
+def test_teleportation_is_a_blind_spot_for_infeasibility() -> None:
+    # Honest negative result: the velocity-based metric never finite-diffs position,
+    # so a position-only teleport (velocities untouched) reads as perfectly feasible.
+    scenario, rollout = _separated_pair(n_world=4)
+    clean = _infeasibility(scenario, rollout)
+    corrupted, _ = TeleportationDefect().apply(scenario, rollout, severity=1.0, seed=2)
+    assert clean == pytest.approx(0.0, abs=1e-9)
+    assert _infeasibility(scenario, corrupted) == pytest.approx(clean, abs=1e-9)
+
+
+def test_kinematic_spike_is_velocity_only_and_nested() -> None:
+    scenario, rollout = _separated_pair(n_world=4)
+    corrupted, low = KinematicSpikeDefect().apply(scenario, rollout, severity=0.25, seed=3)
+    _, high = KinematicSpikeDefect().apply(scenario, rollout, severity=0.75, seed=3)
+    assert low.affected_agent_ordinals == (0,)
+    assert high.affected_agent_ordinals == (0, 1, 2)
+    # positions, heading, and vy are untouched (vx-only corruption)
+    for a, b in zip(corrupted.agents, rollout.agents, strict=True):
+        assert np.array_equal(a.x, b.x)
+        assert np.array_equal(a.y, b.y)
+        assert np.array_equal(a.heading, b.heading)
+        assert np.array_equal(a.vy, b.vy)
+
+
+def test_kinematic_spike_severity_zero_is_identity() -> None:
+    scenario, rollout = _separated_pair()
+    corrupted, manifest = KinematicSpikeDefect().apply(scenario, rollout, severity=0.0, seed=1)
+    assert _rollouts_equal(corrupted, rollout)
+    assert manifest.affected_agent_count == 0
+
+
+def test_kinematic_spike_detected_by_infeasibility_monotone() -> None:
     scenario, rollout = _separated_pair(n_world=4)
     clean = _infeasibility(scenario, rollout)
     assert clean == pytest.approx(0.0, abs=1e-9)  # constant velocity is feasible
     curve = []
     for sev in (0.25, 0.5, 0.75, 1.0):
-        corrupted, _ = TeleportationDefect().apply(scenario, rollout, severity=sev, seed=2)
+        corrupted, _ = KinematicSpikeDefect().apply(scenario, rollout, severity=sev, seed=3)
         curve.append(_infeasibility(scenario, corrupted))
     assert clean < curve[0]
     for lo, hi in zip(curve, curve[1:], strict=False):
         assert lo <= hi + 1e-9
+
+
+def test_kinematic_spike_is_a_blind_spot_for_position_error() -> None:
+    # Velocity-only impulse leaves positions matching the log -> position error blind.
+    scenario, rollout = _separated_pair(n_world=4)
+    corrupted, _ = KinematicSpikeDefect().apply(scenario, rollout, severity=1.0, seed=3)
+    assert _position_error(scenario, corrupted) == pytest.approx(0.0, abs=1e-9)
 
 
 def test_overlap_severity_zero_is_identity() -> None:
@@ -279,6 +356,38 @@ def test_overlap_detected_by_overlap_rate_monotone() -> None:
     assert curve[0] <= curve[1] + 1e-9
 
 
+def test_overlap_selection_is_nested_in_severity() -> None:
+    scenario, rollout = _separated_pair(n_world=4)
+    _, low = OverlapDefect().apply(scenario, rollout, severity=0.34, seed=0)
+    _, high = OverlapDefect().apply(scenario, rollout, severity=1.0, seed=0)
+    assert 0 < low.affected_agent_count < high.affected_agent_count
+    assert set(low.affected_agent_ordinals) <= set(high.affected_agent_ordinals)
+
+
 def test_default_registry_exposes_all_families() -> None:
     registry = default_defect_registry()
-    assert registry.families == ("frozen_agent", "overlap", "teleportation")
+    assert registry.families == (
+        "frozen_agent",
+        "kinematic_spike",
+        "overlap",
+        "teleportation",
+    )
+
+
+def test_future_frame_defects_are_honest_noop_at_terminal_current_index() -> None:
+    # current_index at the last frame => no future to corrupt => 0 affected reported,
+    # and the rollout is returned unchanged (no manifest over-reporting).
+    t = np.arange(3, dtype=float) * 0.1
+    src = [_agent(0, t, x=-40.0), _agent(10, t, x=t, vx=1.0), _agent(11, t, x=t + 1, vx=1.0)]
+    scenario = Scenario(
+        scenario_id="term", timestamps=t, agents=src, ego_index=0,
+        metadata={"current_index": 2},
+    )
+    rollout = Rollout(
+        scenario_id="term", sim_name="c", sim_version="1.0.0", seed=0,
+        timestamps=t, agents=copy.deepcopy(src),
+    )
+    for defect in (TeleportationDefect(), KinematicSpikeDefect(), OverlapDefect()):
+        corrupted, manifest = defect.apply(scenario, rollout, severity=1.0, seed=0)
+        assert manifest.affected_agent_count == 0, defect.spec.family
+        assert _rollouts_equal(corrupted, rollout), defect.spec.family
