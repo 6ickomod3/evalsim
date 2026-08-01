@@ -1,0 +1,1303 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A dependency-free, interview-focused learning guide to EvalSim's metrics-first autonomous-vehicle simulation evaluation project.">
+  <title>EvalSim Interview Lab — Learn it, explain it, defend it.</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17243b;
+      --muted: #58677c;
+      --paper: #f5f2ea;
+      --surface: #fffdf8;
+      --surface-strong: #ffffff;
+      --line: #d9d7cd;
+      --navy: #12233f;
+      --teal: #087f79;
+      --teal-dark: #075f5b;
+      --teal-soft: #dff3ef;
+      --coral: #c9553d;
+      --coral-soft: #fbe8e1;
+      --gold: #9d6b08;
+      --gold-soft: #fff0c9;
+      --blue-soft: #e5eefb;
+      --good: #146c43;
+      --bad: #a33a2a;
+      --shadow: 0 12px 32px rgba(18, 35, 63, .09);
+      --radius: 18px;
+      --content: 1180px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 4%, rgba(8, 127, 121, .09), transparent 24rem),
+        radial-gradient(circle at 92% 12%, rgba(201, 85, 61, .08), transparent 25rem),
+        var(--paper);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.62;
+    }
+
+    a { color: var(--teal-dark); text-underline-offset: .18em; }
+    a:hover { text-decoration-thickness: 2px; }
+
+    button, input { font: inherit; }
+
+    button {
+      border: 1px solid var(--navy);
+      border-radius: 999px;
+      padding: .62rem 1rem;
+      color: var(--navy);
+      background: var(--surface-strong);
+      cursor: pointer;
+      font-weight: 750;
+    }
+
+    button:hover { background: var(--blue-soft); }
+
+    :focus-visible {
+      outline: 3px solid #ef8d43;
+      outline-offset: 3px;
+    }
+
+    .skip-link {
+      position: fixed;
+      z-index: 1000;
+      left: 1rem;
+      top: 1rem;
+      transform: translateY(-180%);
+      padding: .75rem 1rem;
+      border-radius: .5rem;
+      color: #fff;
+      background: var(--navy);
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .topbar {
+      position: sticky;
+      z-index: 50;
+      top: 0;
+      border-bottom: 1px solid rgba(217, 215, 205, .9);
+      background: rgba(245, 242, 234, .94);
+      backdrop-filter: blur(14px);
+    }
+
+    .topbar-inner {
+      width: min(calc(100% - 2rem), var(--content));
+      min-height: 4rem;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .brand {
+      color: var(--navy);
+      text-decoration: none;
+      font-weight: 900;
+      letter-spacing: -.02em;
+    }
+
+    .top-actions { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; }
+    .mode-switch { display: inline-flex; padding: .22rem; border: 1px solid var(--line); border-radius: 999px; background: #fff; }
+    .mode-switch button { border: 0; padding: .42rem .78rem; background: transparent; }
+    .mode-switch button[aria-pressed="true"] { color: #fff; background: var(--navy); }
+
+    .page-shell {
+      width: min(calc(100% - 2rem), var(--content));
+      margin: 0 auto;
+    }
+
+    .hero {
+      padding: clamp(3.8rem, 8vw, 7.5rem) 0 2.4rem;
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(18rem, .8fr);
+      gap: clamp(1.5rem, 4vw, 4.5rem);
+      align-items: center;
+    }
+
+    .eyebrow {
+      margin: 0 0 .75rem;
+      color: var(--teal-dark);
+      font-size: .78rem;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3 { color: var(--navy); line-height: 1.12; letter-spacing: -.025em; }
+    h1 { max-width: 14ch; margin: 0; font-size: clamp(2.7rem, 7vw, 5.8rem); }
+    h2 { margin: 0 0 .65rem; font-size: clamp(2rem, 4vw, 3.25rem); }
+    h3 { margin: 0 0 .45rem; font-size: 1.24rem; }
+    h4 { margin: 0; color: var(--navy); font-size: 1rem; }
+
+    .hero-copy { max-width: 68ch; font-size: 1.12rem; }
+
+    .hero-answer {
+      margin: 1.3rem 0;
+      padding: 1.1rem 1.25rem;
+      border-left: 5px solid var(--teal);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-answer strong { color: var(--teal-dark); }
+
+    .status-line {
+      display: flex;
+      gap: .55rem;
+      flex-wrap: wrap;
+      margin-top: 1.2rem;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: .38rem;
+      padding: .28rem .7rem;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: .78rem;
+      font-weight: 850;
+      line-height: 1.3;
+    }
+
+    .pill.accepted { color: var(--good); background: #e8f4ed; }
+    .pill.bounded { color: var(--gold); background: var(--gold-soft); }
+    .pill.pending { color: var(--coral); background: var(--coral-soft); }
+    .pill.neutral { color: var(--navy); background: var(--blue-soft); }
+
+    .progress-card {
+      padding: 1.4rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-strong);
+      box-shadow: var(--shadow);
+    }
+
+    .progress-card h2 { font-size: 1.28rem; }
+    .progress-bar { height: .72rem; overflow: hidden; border-radius: 999px; background: #e4e6e8; }
+    .progress-fill { width: 0; height: 100%; background: linear-gradient(90deg, var(--teal), #13a494); transition: width .25s ease; }
+    .progress-meta { display: flex; justify-content: space-between; gap: 1rem; margin: .5rem 0 1rem; color: var(--muted); font-size: .88rem; }
+    .progress-card ol { margin: .8rem 0 1.1rem; padding-left: 1.25rem; }
+    .progress-card li { margin: .22rem 0; }
+
+    .section-nav {
+      margin: 1rem 0 4rem;
+      padding: .8rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 253, 248, .84);
+    }
+
+    .section-nav ul { display: flex; gap: .45rem; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; }
+    .section-nav a { display: block; padding: .44rem .72rem; border-radius: 999px; text-decoration: none; font-size: .84rem; font-weight: 750; }
+    .section-nav a:hover { background: var(--teal-soft); }
+
+    main > section {
+      scroll-margin-top: 5.6rem;
+      margin-bottom: clamp(4.8rem, 9vw, 8rem);
+    }
+
+    .section-lead { max-width: 78ch; color: var(--muted); font-size: 1.06rem; }
+
+    .section-kicker {
+      margin-bottom: .7rem;
+      color: var(--coral);
+      font-size: .78rem;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .completion {
+      display: inline-flex;
+      align-items: center;
+      gap: .55rem;
+      margin-top: 1.15rem;
+      padding: .5rem .75rem;
+      border: 1px solid var(--line);
+      border-radius: .7rem;
+      background: var(--surface);
+      font-size: .88rem;
+      font-weight: 750;
+    }
+
+    .completion input { width: 1.12rem; height: 1.12rem; accent-color: var(--teal); }
+
+    .grid-2, .grid-3, .grid-4 { display: grid; gap: 1rem; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+    .card {
+      padding: 1.25rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-strong);
+      box-shadow: 0 7px 20px rgba(18, 35, 63, .055);
+    }
+
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+    .muted { color: var(--muted); }
+    .small { font-size: .87rem; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .cn { color: var(--muted); font-size: .9em; }
+
+    .thesis-grid { margin-top: 1.5rem; }
+    .thesis-grid .card:nth-child(1) { border-top: 5px solid var(--teal); }
+    .thesis-grid .card:nth-child(2) { border-top: 5px solid var(--gold); }
+    .thesis-grid .card:nth-child(3) { border-top: 5px solid var(--coral); }
+
+    .callout {
+      margin: 1.2rem 0;
+      padding: 1rem 1.15rem;
+      border-radius: 14px;
+      background: var(--blue-soft);
+    }
+    .callout.warning { background: var(--gold-soft); }
+    .callout.limit { background: var(--coral-soft); }
+    .callout strong:first-child { color: var(--navy); }
+
+    .filter-row { display: flex; align-items: end; gap: .8rem; flex-wrap: wrap; margin: 1.2rem 0; }
+    .filter-row label { display: grid; gap: .3rem; color: var(--navy); font-weight: 800; }
+    .filter-row input { min-width: min(100%, 25rem); padding: .68rem .82rem; border: 1px solid #8e99a8; border-radius: .65rem; background: #fff; color: var(--ink); }
+
+    .glossary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
+    .glossary-item { padding: 1rem; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-strong); }
+    .glossary-item dt { color: var(--navy); font-weight: 900; }
+    .glossary-item dd { margin: .32rem 0 0; color: var(--muted); }
+    .glossary-item[hidden] { display: none; }
+
+    .flow {
+      display: flex;
+      align-items: stretch;
+      gap: .55rem;
+      margin: 1.7rem 0;
+      overflow-x: auto;
+      padding: .4rem .15rem 1rem;
+    }
+
+    .flow-step {
+      flex: 1 0 9.5rem;
+      min-height: 8.5rem;
+      padding: .9rem;
+      border: 1px solid var(--line);
+      border-top: 5px solid var(--teal);
+      border-radius: 14px;
+      background: #fff;
+    }
+
+    .flow-step span { display: block; margin-bottom: .4rem; color: var(--coral); font-size: .75rem; font-weight: 900; }
+    .flow-arrow { align-self: center; color: var(--teal-dark); font-size: 1.7rem; font-weight: 900; }
+
+    .component-list { counter-reset: components; }
+    .component-list .card { position: relative; padding-left: 4rem; }
+    .component-list .card::before {
+      counter-increment: components;
+      content: counter(components, decimal-leading-zero);
+      position: absolute;
+      left: 1.15rem;
+      top: 1.15rem;
+      color: var(--teal-dark);
+      font-weight: 950;
+    }
+
+    .baseline-card { position: relative; overflow: hidden; }
+    .baseline-card::after { content: "PROBE"; position: absolute; right: -.8rem; top: 1rem; transform: rotate(35deg); color: rgba(18,35,63,.08); font-size: 2rem; font-weight: 950; }
+    .baseline-role { color: var(--teal-dark); font-weight: 850; }
+    .known-limit { padding-top: .75rem; border-top: 1px solid var(--line); }
+
+    .metric-card { display: flex; flex-direction: column; gap: .75rem; }
+    .metric-card h3 { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.03rem; }
+    .contract-strip { display: flex; gap: .35rem; flex-wrap: wrap; }
+    .contract-strip span { padding: .18rem .48rem; border-radius: .35rem; color: var(--navy); background: var(--blue-soft); font-size: .73rem; font-weight: 850; }
+    .metric-question { min-height: 4.1rem; padding: .8rem; border-left: 4px solid var(--teal); background: var(--teal-soft); font-weight: 800; }
+    .metric-four { display: grid; gap: .6rem; }
+    .metric-four div { padding: .65rem; border: 1px solid var(--line); border-radius: .6rem; }
+    .metric-four b { display: block; color: var(--navy); font-size: .76rem; letter-spacing: .04em; text-transform: uppercase; }
+
+    .steps { counter-reset: step; display: grid; gap: .8rem; margin: 1.5rem 0; }
+    .step { position: relative; padding: 1rem 1rem 1rem 4.2rem; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+    .step::before { counter-increment: step; content: counter(step); position: absolute; left: 1rem; top: 1rem; width: 2.2rem; height: 2.2rem; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--navy); font-weight: 900; }
+    .step h3 { font-size: 1rem; }
+
+    .table-wrap { overflow-x: auto; margin: 1.25rem 0; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+    table { width: 100%; border-collapse: collapse; min-width: 42rem; }
+    th, td { padding: .78rem .85rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--navy); background: #eef2f5; font-size: .82rem; letter-spacing: .02em; }
+    tr:last-child td { border-bottom: 0; }
+    .yes { color: var(--good); font-weight: 900; }
+    .no { color: var(--bad); font-weight: 900; }
+    .unsupported { color: var(--gold); font-weight: 850; }
+
+    .result-order { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; font-weight: 900; }
+    .result-order .best { color: var(--good); }
+
+    .stat-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .8rem; margin: 1.2rem 0; }
+    .stat { padding: 1rem; border-radius: 14px; color: #fff; background: var(--navy); }
+    .stat strong { display: block; font-size: 2rem; line-height: 1.1; }
+    .stat span { font-size: .82rem; color: #dbe4ef; }
+
+    .evidence-layers .card { border-left: 5px solid var(--teal); }
+
+    details {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-strong);
+    }
+
+    details + details { margin-top: .65rem; }
+    summary { padding: .85rem 1rem; cursor: pointer; color: var(--navy); font-weight: 850; }
+    details[open] summary { border-bottom: 1px solid var(--line); background: #f5f8fa; }
+    .details-body { padding: .9rem 1rem 1rem; }
+
+    .tabs { margin-top: 1.25rem; }
+    [role="tablist"] { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .8rem; }
+    [role="tab"] { border-color: var(--line); }
+    [role="tab"][aria-selected="true"] { color: #fff; background: var(--navy); border-color: var(--navy); }
+    [role="tabpanel"] { padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; box-shadow: var(--shadow); }
+    .script { max-width: 78ch; font-size: 1.04rem; }
+    .script p { margin-top: 0; }
+    .copy-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+    .timer { color: var(--coral); font-weight: 900; }
+
+    .timeline { display: grid; gap: .65rem; }
+    .timeline-item { display: grid; grid-template-columns: 6.5rem 1fr; gap: .9rem; padding: .8rem; border-left: 4px solid var(--teal); background: var(--teal-soft); }
+    .timeline-item time { color: var(--teal-dark); font-weight: 900; }
+
+    .randomizer {
+      margin: 1.2rem 0;
+      padding: 1.2rem;
+      border: 2px dashed var(--teal);
+      border-radius: var(--radius);
+      background: var(--teal-soft);
+    }
+    .randomizer-controls { display: flex; gap: .55rem; flex-wrap: wrap; }
+    .random-prompt { margin: 1rem 0; font-size: 1.2rem; font-weight: 850; }
+    .random-answer { padding: .85rem; border-radius: .7rem; background: #fff; }
+
+    .qa-card summary { display: flex; justify-content: space-between; gap: 1rem; }
+    .qa-number { flex: 0 0 auto; color: var(--coral); font-size: .76rem; font-weight: 900; }
+    .answer-label { margin: 0 0 .35rem; color: var(--teal-dark); font-size: .76rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+    .coach-note { padding: .7rem; border-left: 4px solid var(--gold); background: var(--gold-soft); color: var(--ink); }
+
+    .flashcard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    .flashcard { margin: 0 !important; }
+    .flashcard summary { min-height: 6.3rem; }
+    .flashcard .details-body { min-height: 7rem; }
+
+    .claim-table td:first-child { color: var(--bad); }
+    .claim-table td:nth-child(2) { color: var(--good); }
+
+    .checklist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; padding: 0; list-style: none; }
+    .checklist label { display: flex; gap: .7rem; align-items: flex-start; min-height: 4rem; padding: .85rem; border: 1px solid var(--line); border-radius: .7rem; background: #fff; }
+    .checklist input { flex: 0 0 auto; width: 1.15rem; height: 1.15rem; margin-top: .22rem; accent-color: var(--teal); }
+
+    .notice {
+      padding: 1.3rem;
+      border: 2px solid var(--gold);
+      border-radius: var(--radius);
+      background: #fffaf0;
+    }
+    blockquote { margin: 1rem 0; padding: .8rem 1rem; border-left: 5px solid var(--gold); background: #fff; }
+    pre { max-width: 100%; overflow-x: auto; padding: 1rem; border-radius: .7rem; color: #e8eef8; background: #15243a; font-size: .78rem; line-height: 1.45; }
+
+    footer { padding: 2rem 0 4rem; border-top: 1px solid var(--line); color: var(--muted); }
+    footer .footer-row { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+
+    .drill-only { display: none; }
+    body[data-mode="drill"] .learn-only { display: none !important; }
+    body[data-mode="drill"] .drill-only { display: block; }
+    body[data-mode="drill"] .qa-card .details-body,
+    body[data-mode="drill"] .flashcard .details-body { background: #fffdf4; }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    [hidden] { display: none !important; }
+
+    @media (max-width: 900px) {
+      .hero { grid-template-columns: 1fr; }
+      .grid-4, .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .glossary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stat-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 640px) {
+      .topbar-inner { align-items: flex-start; padding: .65rem 0; }
+      .top-actions { justify-content: flex-end; }
+      .top-actions > a { display: none; }
+      .grid-2, .grid-3, .grid-4, .glossary-grid, .flashcard-grid, .checklist { grid-template-columns: 1fr; }
+      .stat-row { grid-template-columns: 1fr 1fr; }
+      .flow-arrow { display: none; }
+      .flow { display: grid; grid-template-columns: 1fr; overflow: visible; }
+      .timeline-item { grid-template-columns: 1fr; gap: .2rem; }
+      h1 { font-size: clamp(2.5rem, 15vw, 4.2rem); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+
+    @media print {
+      :root { --paper: #fff; --surface: #fff; --surface-strong: #fff; }
+      body { background: #fff; font-size: 10pt; }
+      .topbar, .section-nav, .progress-card, .completion, .copy-row button, .randomizer-controls, .filter-row, .mode-switch, .skip-link { display: none !important; }
+      .page-shell { width: 100%; }
+      .hero { display: block; padding: 1rem 0; }
+      h1 { font-size: 28pt; }
+      h2 { font-size: 20pt; break-after: avoid; }
+      main > section { margin-bottom: 2rem; break-inside: auto; }
+      .card, details, [role="tabpanel"], .notice { box-shadow: none; break-inside: avoid; }
+      [role="tabpanel"], [hidden] { display: block !important; }
+      details:not([open]) > :not(summary) { display: block !important; }
+      .learn-only, .drill-only { display: block !important; }
+      a { color: #000; text-decoration: none; }
+      a[href]::after { content: " (" attr(href) ")"; font-size: .72em; overflow-wrap: anywhere; }
+      table { min-width: 0; }
+      pre { color: #000; background: #fff; border: 1px solid #777; white-space: pre-wrap; }
+    }
+  </style>
+</head>
+<body data-mode="learn">
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#top" aria-label="EvalSim Interview Lab home">EvalSim · Interview Lab</a>
+      <div class="top-actions">
+        <a href="/">Project presentation</a>
+        <div class="mode-switch" aria-label="Study mode">
+          <button type="button" id="learn-mode" aria-pressed="true">Learn</button>
+          <button type="button" id="drill-mode" aria-pressed="false">Drill</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-shell" id="top">
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Simulation evaluation · interview preparation</p>
+        <h1 id="page-title">EvalSim Interview Lab — Learn it, explain it, defend it.</h1>
+        <p class="hero-copy">A concrete, bilingual study guide for the reasoning behind EvalSim—not a milestone tour and not a simulator leaderboard. <strong>No prior autonomous-driving domain knowledge required.</strong></p>
+        <div class="hero-answer">
+          <strong>Core question:</strong> When three deliberately simple probes run on the same scenes, do distinct metrics support one consistent ordering?<br>
+          <strong>Accepted answer:</strong> No. On the fixed cohort, the ordering changes with the evaluator, so conclusions must remain metric- and use-case-specific.
+        </div>
+        <p class="muted"><strong>Personal learning project and work in progress.</strong> 核心 M5 comparison is complete and accepted；M7 provides bounded construct evidence；M6 has no accepted WOMD result.</p>
+        <p class="small muted"><strong>Public, sanitized study guide.</strong> It contains no private interview notes, contact details, scheduling information, or dataset payloads.</p>
+        <div class="status-line" aria-label="Project status">
+          <span class="pill accepted">M5 · accepted result</span>
+          <span class="pill bounded">M7 · bounded audit</span>
+          <span class="pill pending">M6 · pre-data only</span>
+          <span class="pill neutral">Core path · CPU-first</span>
+        </div>
+      </div>
+
+      <aside class="progress-card" aria-labelledby="progress-heading">
+        <p class="eyebrow">Your route</p>
+        <h2 id="progress-heading">Interview readiness</h2>
+        <div class="progress-bar" role="progressbar" aria-label="Study progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="progress-fill"></div>
+        </div>
+        <div class="progress-meta"><span id="progress-count">0 of 14 complete</span><span id="progress-percent">0%</span></div>
+        <ol>
+          <li>Understand the constructs.</li>
+          <li>Read the mixed result correctly.</li>
+          <li>Practice bounded English answers.</li>
+          <li>Defend limitations without apology.</li>
+        </ol>
+        <button type="button" id="clear-progress">Clear saved progress</button>
+        <p class="small muted">Saved only in this browser as <span class="mono">evalsim-interview-progress-v1</span>.</p>
+      </aside>
+    </section>
+
+    <nav class="section-nav" aria-label="Study sections">
+      <ul>
+        <li><a href="#orientation">Thesis</a></li>
+        <li><a href="#glossary">Glossary</a></li>
+        <li><a href="#system">Components</a></li>
+        <li><a href="#baselines">Baselines</a></li>
+        <li><a href="#metrics">Metrics</a></li>
+        <li><a href="#experiment">Experiment</a></li>
+        <li><a href="#m5-result">M5 result</a></li>
+        <li><a href="#m7-audit">M7 audit</a></li>
+        <li><a href="#talk-tracks">Talk tracks</a></li>
+        <li><a href="#interview-drill">Q&amp;A</a></li>
+        <li><a href="#flashcards">Flashcards</a></li>
+        <li><a href="#pitfalls">Claims</a></li>
+        <li><a href="#last-day">Last day</a></li>
+      </ul>
+    </nav>
+
+    <main id="main">
+      <section id="orientation" aria-labelledby="orientation-title">
+        <p class="section-kicker">01 · Mental model</p>
+        <h2 id="orientation-title">The project is about the evaluator</h2>
+        <p class="section-lead">A simulator produces behavior. An evaluator decides which parts of that behavior matter. EvalSim makes that decision visible by using simple probes with known weaknesses and refusing to hide disagreement behind one score.</p>
+
+        <div class="grid-3 thesis-grid">
+          <article class="card">
+            <h3>Question</h3>
+            <p>Do trajectory fidelity, geometric interaction, and fixed-step feasibility produce the same ordering?</p>
+            <p class="cn">不同 evaluator 会不会对同一组 simulation 给出相同结论？</p>
+          </article>
+          <article class="card">
+            <h3>Method</h3>
+            <p>Run log replay, constant velocity, and EvalSim IDM on the same source scenes; preserve each metric separately.</p>
+            <p class="cn">同场景、同 horizon、paired comparison，不做 composite realism score。</p>
+          </article>
+          <article class="card">
+            <h3>Insight</h3>
+            <p>Metric choice encodes a value judgment. Fidelity, interaction proxy, and feasibility can disagree without any implementation bug.</p>
+            <p class="cn">冲突不是必须消掉的噪声；它可能正是 decision trade-off。</p>
+          </article>
+        </div>
+
+        <div class="callout warning learn-only"><strong>Interview framing:</strong> Lead with the question and the mixed evidence. Mention “personal learning project / work in progress” immediately after the contribution, not instead of it.</div>
+        <div class="callout drill-only"><strong>Say it aloud:</strong> “The contribution is the evaluation methodology, not a production simulator.” Then explain one reason why a single realism score would be misleading.</div>
+
+        <label class="completion"><input type="checkbox" data-progress-id="thesis"> I can state the question, method, and bounded conclusion without notes.</label>
+      </section>
+
+      <section id="glossary" aria-labelledby="glossary-title">
+        <p class="section-kicker">02 · Minimum domain knowledge</p>
+        <h2 id="glossary-title">Bilingual glossary</h2>
+        <p class="section-lead">You do not need broad AV expertise to explain this project. You do need exact meanings for the objects, comparison logic, and claim boundaries below.</p>
+
+        <div class="filter-row">
+          <label for="glossary-filter">Filter terms / 搜索术语
+            <input id="glossary-filter" type="search" placeholder="Try: ego, paired, 构念, JAX" autocomplete="off">
+          </label>
+          <span id="glossary-status" class="small muted" role="status" aria-live="polite">20 terms</span>
+        </div>
+
+        <dl class="glossary-grid" id="glossary-list">
+          <div class="glossary-item" data-term="av autonomous vehicle 自动驾驶"><dt>AV · Autonomous Vehicle</dt><dd>自动驾驶车辆；本项目关注 traffic-agent trajectory evaluation，而不是 sensor rendering。</dd></div>
+          <div class="glossary-item" data-term="ego focal controlled vehicle 自车"><dt>Ego · 自车 / 焦点车辆</dt><dd>The designated focal vehicle. In accepted M5, ego follows its logged trajectory exogenously while policies simulate world agents.</dd></div>
+          <div class="glossary-item" data-term="world agent actor traffic 交通参与者"><dt>World agent · 其他交通参与者</dt><dd>A non-ego vehicle, pedestrian, or cyclist whose future state may be simulated.</dd></div>
+          <div class="glossary-item" data-term="scenario 场景 contract history future map"><dt>Scenario · 场景合同</dt><dd>Substrate-neutral input containing history/current state, reference future, validity, identity, geometry, and metadata.</dd></div>
+          <div class="glossary-item" data-term="rollout 输出 轨迹 future"><dt>Rollout · 模拟输出</dt><dd>A policy’s future trajectories plus simulator identity, version, seed, perturbation, and provenance.</dd></div>
+          <div class="glossary-item" data-term="ego current index observed history boundary 当前帧"><dt>Current frame · 当前帧</dt><dd><span class="mono">current_index</span> is the last observed frame. Simulation starts with the next transition.</dd></div>
+          <div class="glossary-item" data-term="metric evaluator diagnostic 指标 评估器"><dt>Metric · 诊断指标</dt><dd>A versioned function with units, direction, eligibility, invalid reasons, and retained component values—not merely one floating-point score.</dd></div>
+          <div class="glossary-item" data-term="construct construct validity 构念 有效性"><dt>Construct · 构念</dt><dd>The concept a metric intends to observe. Construct validity asks whether it responds to that concept for the intended reason.</dd></div>
+          <div class="glossary-item" data-term="eligibility eligible missingness 缺失 有效"><dt>Eligibility &amp; missingness · 适用性与缺失</dt><dd>Which components/scenarios a metric can validly score, and why any value is unavailable. Missing is not automatically zero.</dd></div>
+          <div class="glossary-item" data-term="paired comparison 配对 同场景"><dt>Paired comparison · 配对比较</dt><dd>Compare two policies within the same scenario so scenario-mix differences do not drive the contrast.</dd></div>
+          <div class="glossary-item" data-term="sampling resampling unit scenario 统计单位"><dt>Resampling unit · 重采样单位</dt><dd>The scenario, not an agent or frame, because components within a scene are correlated.</dd></div>
+          <div class="glossary-item" data-term="source only slice 分片 分组"><dt>Source-only slice · 源数据切片</dt><dd>A cohort subgroup defined from <span class="mono">Scenario</span> before policy output or metric outcomes are known.</dd></div>
+          <div class="glossary-item" data-term="privileged 特权 future leakage"><dt>Privileged · 使用未来信息</dt><dd>A method can access information unavailable to a causal simulator. Log replay is privileged because it copies the recorded future.</dd></div>
+          <div class="glossary-item" data-term="open loop closed loop 开环 闭环"><dt>Closed loop · 闭环</dt><dd>In a closed-loop path, future actions observe simulated current state. M5 CV and IDM world-agent paths do this; privileged log replay instead copies the recorded future. Ego remains logged/exogenous for every accepted M5 baseline, so full ego-conditioned reactivity is not demonstrated.</dd></div>
+          <div class="glossary-item" data-term="idm intelligent driver model 智能驾驶员模型"><dt>IDM · Intelligent Driver Model</dt><dd>A longitudinal car-following model. EvalSim’s implementation responds to bumper gap but lacks lateral control and route-aware leader selection.</dd></div>
+          <div class="glossary-item" data-term="womd waymo open motion dataset 数据"><dt>WOMD</dt><dd>Waymo Open Motion Dataset. EvalSim uses a licensed, local-only path; no raw or processed dataset is published.</dd></div>
+          <div class="glossary-item" data-term="waymax simulator adapter reference"><dt>Waymax</dt><dd>An optional licensed data/execution/reference adapter behind EvalSim contracts; useful for bounded cross-checks, not independent ground truth.</dd></div>
+          <div class="glossary-item" data-term="jax jit vmap accelerator gpu cpu"><dt>JAX</dt><dd>A numerical computing system used here for bounded <span class="mono">jit</span>/<span class="mono">vmap</span> CPU evidence. It is not required by the core evaluator and does not imply GPU scale.</dd></div>
+          <div class="glossary-item" data-term="field of view 视野 blind spot"><dt>Metric field of view · 指标视野</dt><dd>The variables a metric can observe by construction. A position metric cannot detect a velocity-only change if position stays fixed.</dd></div>
+          <div class="glossary-item" data-term="generator artifact defect corruption 缺陷生成器"><dt>Generator artifact · 生成器伪影</dt><dd>A conclusion caused by an incorrect defect injector rather than by the evaluator behavior being studied.</dd></div>
+        </dl>
+
+        <label class="completion"><input type="checkbox" data-progress-id="glossary"> I can define ego, IDM, construct validity, pairing, Waymax, and JAX precisely.</label>
+      </section>
+
+      <section id="system" aria-labelledby="system-title">
+        <p class="section-kicker">03 · Complete system flow</p>
+        <h2 id="system-title">What every component contributes</h2>
+        <p class="section-lead">The architecture separates “where a scene came from,” “how actors move,” and “how output is judged.” That separation makes synthetic oracles and WOMD scenes comparable without letting metrics depend directly on Waymax.</p>
+
+        <div class="flow" aria-label="EvalSim evaluation data flow">
+          <div class="flow-step"><span>INPUT</span><strong>Source / adapter</strong><br><small>synthetic or WOMD</small></div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-step"><span>SEAM A</span><strong>Scenario</strong><br><small>typed common contract</small></div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-step"><span>BEHAVIOR</span><strong>Engine + policy</strong><br><small>advance world agents</small></div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-step"><span>OUTPUT</span><strong>Rollout</strong><br><small>future + provenance</small></div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-step"><span>EVALUATE</span><strong>Metrics</strong><br><small>components → scenario</small></div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-step"><span>DECIDE</span><strong>Paired scorecard</strong><br><small>bounded claim</small></div>
+        </div>
+
+        <div class="grid-2 component-list">
+          <article class="card"><h3>Source / adapter</h3><p>Produces the same contract from analytic synthetic scenes or licensed WOMD records.</p><p class="cn"><strong>Why:</strong> evaluator logic should not know the storage format.</p></article>
+          <article class="card"><h3><span class="mono">Scenario</span></h3><p>Validates timestamps, trajectories, masks, agent identities, dimensions, ego, map geometry, and metadata.</p><p class="cn"><strong>Why:</strong> one neutral semantic boundary prevents representation leakage.</p></article>
+          <article class="card"><h3>Simulator policy</h3><p>Consumes observed/current state and returns typed controls or an explicitly privileged state override.</p><p class="cn"><strong>Why:</strong> each probe isolates a legible behavior assumption.</p></article>
+          <article class="card"><h3>Rollout engine</h3><p>Owns timestamps, validity masks, births/re-entries, synchronous updates, physical integration, and feasibility clamps.</p><p class="cn"><strong>Why:</strong> policies cannot silently mutate time or lifecycle semantics.</p></article>
+          <article class="card"><h3><span class="mono">Rollout</span></h3><p>Records generated series plus sim name/version, seed, perturbation, and metadata.</p><p class="cn"><strong>Why:</strong> a number without execution identity is not reproducible evidence.</p></article>
+          <article class="card"><h3>Metric contract</h3><p>Declares construct, version, unit, direction, eligibility, missing reasons, scalar result, and retained components.</p><p class="cn"><strong>Why:</strong> missingness and distributions must survive aggregation.</p></article>
+          <article class="card"><h3>Slices + paired statistics</h3><p>Defines groups before outcomes, reduces to one value per scenario, then compares policies within each scenario.</p><p class="cn"><strong>Why:</strong> prevents outcome-dependent grouping and frame-level pseudo-replication.</p></article>
+          <article class="card"><h3>Evidence + stress audit</h3><p>Immutable manifests bind the official result; analytic oracles and M7 defects test calculations and field of view.</p><p class="cn"><strong>Why:</strong> correctness, construct validity, and decision relevance require different evidence.</p></article>
+        </div>
+
+        <div class="callout"><strong>Two supporting paths:</strong> Synthetic cases provide analytic oracles. Waymax provides optional licensed data/reference checks. Neither is allowed to bypass <span class="mono">Scenario → Rollout → Metric</span>.</div>
+        <label class="completion"><input type="checkbox" data-progress-id="components"> I can walk from source to claim and name who owns time, masks, eligibility, and pairing.</label>
+      </section>
+
+      <section id="baselines" aria-labelledby="baselines-title">
+        <p class="section-kicker">04 · Comparison probes</p>
+        <h2 id="baselines-title">Three baselines with known failure modes</h2>
+        <p class="section-lead">These are not three equivalent production simulators. Their simplicity is experimental leverage: when the output differs, you can reason about why.</p>
+
+        <div class="grid-3">
+          <article class="card baseline-card">
+            <p class="eyebrow">Privileged construction oracle</p>
+            <h3>Log replay</h3>
+            <p class="baseline-role">Copies the exact recorded future for world agents.</p>
+            <ul><li>Perfect logged-reference error by construction.</li><li>Useful for mapping and metric oracles.</li><li>Deterministic and easy to audit.</li></ul>
+            <p class="known-limit"><strong>Known limitation:</strong> sees the future and cannot react to a changed ego plan. It is not a causal deployment candidate or realism upper bound.</p>
+          </article>
+          <article class="card baseline-card">
+            <p class="eyebrow">Minimal causal extrapolator</p>
+            <h3>Constant velocity · CV</h3>
+            <p class="baseline-role">Continues each world agent’s current world-frame velocity.</p>
+            <ul><li>History-only.</li><li>Tests how far simple inertia goes.</li><li>Creates a transparent no-interaction reference.</li></ul>
+            <p class="known-limit"><strong>Known limitation:</strong> no interaction, acceleration intent, map following, or route reasoning.</p>
+          </article>
+          <article class="card baseline-card">
+            <p class="eyebrow">Limited interaction probe</p>
+            <h3>EvalSim IDM</h3>
+            <p class="baseline-role">Intelligent Driver Model: longitudinal bumper-gap response.</p>
+            <ul><li>History-only.</li><li>Can accelerate or brake in response to a selected leader.</li><li>Tests whether simple longitudinal interaction changes evaluation.</li></ul>
+            <p class="known-limit"><strong>Known limitation:</strong> no lateral controller; geometric, non-route-aware leader selection; pedestrians/cyclists fall back to CV.</p>
+          </article>
+        </div>
+
+        <div class="callout limit"><strong>Do not say:</strong> “IDM is the realistic baseline.” Its extra interaction assumption can improve one construct while worsening recorded-trajectory fidelity. That trade-off is the experiment.</div>
+        <label class="completion"><input type="checkbox" data-progress-id="baselines"> I can explain the capability and limitation of each baseline in one sentence.</label>
+      </section>
+
+      <section id="metrics" aria-labelledby="metrics-title">
+        <p class="section-kicker">05 · Evaluator contracts</p>
+        <h2 id="metrics-title">Four metrics, three lenses, no composite</h2>
+        <p class="section-lead">Every metric explanation must answer four questions: What construct does it observe? Why is it relevant? What does it reward? What plausible defect can it miss?</p>
+
+        <div class="grid-2">
+          <article class="card metric-card">
+            <p class="eyebrow">Fidelity lens</p>
+            <h3>position_error_m</h3>
+            <div class="contract-strip"><span>v1.0.0</span><span>metres</span><span>lower is better</span><span>logged-reference</span></div>
+            <div class="metric-question">How far is simulated position from the recorded future on jointly valid post-current world-agent components?</div>
+            <div class="metric-four">
+              <div><b>Construct</b>Recorded-position fidelity.</div>
+              <div><b>Decision relevance</b>Useful when reproducing or forecasting the observed trajectory matters.</div>
+              <div><b>Rewards by construction</b>Staying spatially close to the log; privileged replay receives zero.</div>
+              <div><b>Can miss</b>Velocity-only corruption, interaction quality, causal response, and plausible alternate futures.</div>
+            </div>
+          </article>
+
+          <article class="card metric-card">
+            <p class="eyebrow">Fidelity lens</p>
+            <h3>speed_error_mps</h3>
+            <div class="contract-strip"><span>v1.0.0</span><span>m/s</span><span>lower is better</span><span>logged-reference</span></div>
+            <div class="metric-question">How different is scalar speed from the recorded future on jointly valid components?</div>
+            <div class="metric-four">
+              <div><b>Construct</b>Recorded speed-magnitude fidelity.</div>
+              <div><b>Decision relevance</b>Useful for pace, stop, and acceleration-profile mismatch.</div>
+              <div><b>Rewards by construction</b>Matching <span class="mono">sqrt(vx² + vy²)</span> from the log.</div>
+              <div><b>Can miss</b>Direction, position, box overlap, right-of-way, and interaction quality.</div>
+            </div>
+          </article>
+
+          <article class="card metric-card">
+            <p class="eyebrow">Interaction proxy</p>
+            <h3>oriented_box_overlap_rate</h3>
+            <div class="contract-strip"><span>v1.0.0</span><span>fraction</span><span>lower is better</span><span>source-neutral</span></div>
+            <div class="metric-question">How often does an eligible target oriented box interpenetrate another valid object’s box?</div>
+            <div class="metric-four">
+              <div><b>Construct</b>Geometric interpenetration at target frames.</div>
+              <div><b>Decision relevance</b>A useful sanity signal for impossible occupancy.</div>
+              <div><b>Rewards by construction</b>Keeping oriented boxes non-overlapping.</div>
+              <div><b>Can miss</b>Near misses, collision pair count, severity, responsibility, safety, and useful motion.</div>
+            </div>
+          </article>
+
+          <article class="card metric-card">
+            <p class="eyebrow">Feasibility diagnostic</p>
+            <h3>waymax_kinematic_infeasibility_rate</h3>
+            <div class="contract-strip"><span>v1.0.1</span><span>fraction</span><span>lower is better</span><span>vehicle transitions</span></div>
+            <div class="metric-question">How often does an eligible vehicle transition violate pinned acceleration or curvature thresholds under fixed 0.1 s Waymax semantics?</div>
+            <div class="metric-four">
+              <div><b>Construct</b>Fixed-step inverse-dynamics threshold compliance.</div>
+              <div><b>Decision relevance</b>Flags abrupt velocity/heading transitions under one reference definition.</div>
+              <div><b>Rewards by construction</b>Smooth transitions within the pinned thresholds.</div>
+              <div><b>Can miss</b>Position-only corruption; it is not physical-time-normalized feasibility, complete dynamics, or safety.</div>
+            </div>
+          </article>
+        </div>
+
+        <div class="callout warning"><strong>Eligibility rule:</strong> A metric evaluates only valid components in its declared domain. Invalid/missing is reported with a reason; it is never silently converted to a favorable zero. In accepted M5, all 2,048 primary metric rows were valid.</div>
+        <label class="completion"><input type="checkbox" data-progress-id="metrics"> I can give construct, relevance, reward, blind spot, unit, and direction for all four metrics.</label>
+      </section>
+
+      <section id="experiment" aria-labelledby="experiment-title">
+        <p class="section-kicker">06 · Experimental reasoning</p>
+        <h2 id="experiment-title">What we did, step by step</h2>
+        <p class="section-lead">The goal was not merely to run policies. Each step removes a specific alternative explanation for the result.</p>
+
+        <div class="steps">
+          <article class="step"><h3>Freeze the question and definitions before outcomes</h3><p>Pre-register metric versions, primary cells, comparison direction, cohort rules, missingness, stability procedure, and claim gates.</p><p class="cn"><strong>Resolves:</strong> outcome-driven metric selection and silent definition changes.</p></article>
+          <article class="step"><h3>Build one deterministic conditional cohort</h3><p>From WOMD validation shards <span class="mono">00000–00009</span>, account for 2,916 raw records, 1,527 eligible records, and select 128 complete cases without quota deficit or fallback.</p><p class="cn"><strong>Resolves:</strong> hidden selection and untraceable cohort drift—not representativeness.</p></article>
+          <article class="step"><h3>Define slices from source only</h3><p>Compute eight slice memberships from <span class="mono">Scenario</span> before policy identity, rollout, or metric value is available.</p><p class="cn"><strong>Resolves:</strong> policy-dependent subgroup membership.</p></article>
+          <article class="step"><h3>Run every probe on the same scenes</h3><p>Execute log replay, CV, and IDM deterministically with seed 0 over the same 128 scenarios and 80 post-current transitions; ego remains logged/exogenous.</p><p class="cn"><strong>Resolves:</strong> scenario-mix confounding between policies.</p></article>
+          <article class="step"><h3>Compute typed component results</h3><p>Evaluate 13 registered metrics while retaining units, directions, validity, missing reasons, eligibility counts, and component distributions.</p><p class="cn"><strong>Resolves:</strong> an opaque score that cannot be audited.</p></article>
+          <article class="step"><h3>Reduce once per scenario</h3><p>Aggregate eligible agent/frame components to one scenario-level scalar for each policy and metric.</p><p class="cn"><strong>Resolves:</strong> treating correlated frames or agents as independent samples.</p></article>
+          <article class="step"><h3>Form paired policy effects</h3><p>For each metric, compare A−B within a scenario. All 12 primary all-slice cells retain paired <span class="mono">n=128</span>.</p><p class="cn"><strong>Resolves:</strong> between-scene variation obscuring policy contrasts.</p></article>
+          <article class="step"><h3>Measure finite-cohort stability</h3><p>Use deterministic scenario-level empirical reweighting: 100,000 resamples for each primary cell, with pointwise and multiplicity-adjusted bands.</p><p class="cn"><strong>Resolves:</strong> whether the observed fixed-cohort mean depends on a small empirical subset. It does not estimate population sampling error.</p></article>
+          <article class="step"><h3>Retain nulls, sparse cells, and contradictions</h3><p>Keep all 12 primary cells, including the two that do not pass the adjusted directional gate; suppress claims for sparse/insufficient evidence.</p><p class="cn"><strong>Resolves:</strong> winner-by-selective-reporting.</p></article>
+          <article class="step"><h3>Cross-check semantics without calling the reference truth</h3><p>On a bounded 16-scene × 20-transition subset, compare three overlapping metrics to native Waymax semantics; observed gates pass.</p><p class="cn"><strong>Resolves:</strong> mapping/computation mistakes in that bounded domain—not construct validity or decoder independence.</p></article>
+        </div>
+
+        <div class="grid-3 evidence-layers">
+          <article class="card"><h3>1 · Implementation correctness</h3><p>Was the metric computed as specified?</p><p><strong>Evidence:</strong> analytic oracles, contracts, reconstruction, bounded parity.</p></article>
+          <article class="card"><h3>2 · Construct validity</h3><p>Does it respond to the intended behavior for the intended reason?</p><p><strong>Evidence:</strong> M7 adds narrow field-of-view and generator-audit evidence.</p></article>
+          <article class="card"><h3>3 · Decision relevance</h3><p>Does that construct answer the downstream AV question?</p><p><strong>Status:</strong> task-specific; accepted M5 does not establish counterfactual reactivity or safety.</p></article>
+        </div>
+
+        <label class="completion"><input type="checkbox" data-progress-id="experiment"> I can explain why the scenario is paired/resampled and why the bands are not confidence intervals.</label>
+      </section>
+
+      <section id="m5-result" aria-labelledby="m5-title">
+        <p class="section-kicker">07 · Accepted empirical result</p>
+        <h2 id="m5-title">The ranking reverses across metrics</h2>
+        <p class="section-lead">All four primary metrics are lower-is-better. Read each row as a separate diagnostic statement; the table intentionally does not compute a total.</p>
+
+        <div class="stat-row" aria-label="M5 result facts">
+          <div class="stat"><strong>128</strong><span>fixed complete-case scenarios</span></div>
+          <div class="stat"><strong>12</strong><span>primary pairwise cells, all n=128</span></div>
+          <div class="stat"><strong>10</strong><span>adjusted directional cells</span></div>
+          <div class="stat"><strong>0</strong><span>supported overall winners</span></div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <caption class="sr-only">Mean policy ordering and accepted interpretation for the four primary M5 metrics</caption>
+            <thead><tr><th>Metric</th><th>Mean ordering (best → worst)</th><th>What is supported</th><th>What remains unsupported</th></tr></thead>
+            <tbody>
+              <tr><td><span class="mono">position_error_m</span></td><td class="result-order"><span class="best">replay</span> &lt; CV &lt; IDM</td><td>Replay best reproduces recorded position; CV is closer than IDM among history-only probes.</td><td>A realism, reactivity, or safety ranking.</td></tr>
+              <tr><td><span class="mono">speed_error_mps</span></td><td class="result-order"><span class="best">replay</span> &lt; CV &lt; IDM</td><td>Replay best reproduces recorded scalar speed; CV is closer than IDM.</td><td>Direction, position, interaction quality, or causal usefulness.</td></tr>
+              <tr><td><span class="mono">oriented_box_overlap_rate</span></td><td class="result-order"><span class="best">replay</span> &lt; IDM &lt; CV</td><td>Replay has lower overlap mean than both history-only probes.</td><td class="unsupported">IDM vs CV: adjusted band crosses zero, so no directional claim.</td></tr>
+              <tr><td><span class="mono">waymax_kinematic_infeasibility_rate</span></td><td class="result-order"><span class="best">IDM</span> &lt; CV &lt; replay</td><td>CV and IDM have lower fixed-step rates than replay.</td><td class="unsupported">IDM vs CV: adjusted band crosses zero; only 7 nonzero effects, event-sparse.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid-2">
+          <article class="card">
+            <h3>What we resolved</h3>
+            <ul><li>The metric implementation and official row domains are auditable.</li><li>Distinct evaluator families disagree on the fixed cohort.</li><li>Ten of twelve adjusted fixed-cohort bands exclude zero.</li><li>The two unsupported contrasts remain visible.</li><li>A single overall winner is not supported.</li></ul>
+          </article>
+          <article class="card">
+            <h3>What we did not resolve</h3>
+            <ul><li>Which simulator is universally “most realistic.”</li><li>WOMD-population or deployment-distribution performance.</li><li>Causal ego-conditioned reactivity.</li><li>Safety or real-vehicle validity.</li><li>Stochastic-policy uncertainty.</li><li>Whether a fixed-step diagnostic is complete physical feasibility.</li></ul>
+          </article>
+        </div>
+
+        <blockquote><strong>Bounded conclusion:</strong> On the fixed 128-scene complete-case conditional cohort, no baseline is universally best. Replay best reproduces recorded trajectories; CV matches the log better than IDM among the history-only probes; and CV and IDM have lower fixed-step kinematic-infeasibility rates than replay. IDM has no supported overall advantage over CV.</blockquote>
+        <p class="callout warning"><strong>Statistical boundary:</strong> The bands summarize sensitivity to empirical scene reweighting inside this fixed cohort. They are not confidence intervals, p-values, hypothesis tests, or WOMD-population uncertainty.</p>
+
+        <label class="completion"><input type="checkbox" data-progress-id="m5"> I know the four orderings, the two unsupported contrasts, and the exact bounded conclusion.</label>
+      </section>
+
+      <section id="m7-audit" aria-labelledby="m7-title">
+        <p class="section-kicker">08 · Evaluate the evaluator</p>
+        <h2 id="m7-title">A corrected generator changed the lesson</h2>
+        <p class="section-lead">M7 is a deliberately small, outcome-aware teaching audit: three hand-built cases, four controlled probes, four prevalence doses, and three selected metrics. It checks field of view and wiring—not general validity.</p>
+
+        <div class="stat-row" aria-label="M7 construct audit facts">
+          <div class="stat"><strong>3</strong><span>analytic cases</span></div>
+          <div class="stat"><strong>4 × 4</strong><span>defects × prevalence doses</span></div>
+          <div class="stat"><strong>3</strong><span>selected metrics</span></div>
+          <div class="stat"><strong>6 + 6</strong><span>responses + exact non-responses</span></div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <caption class="sr-only">Corrected M7 response matrix</caption>
+            <thead><tr><th>Controlled probe</th><th>Position error</th><th>Overlap rate</th><th>Kinematic infeasibility</th><th>Reason</th></tr></thead>
+            <tbody>
+              <tr><td>Future-only freeze v2</td><td class="yes">Responds</td><td class="no">No response</td><td class="yes">Responds</td><td>Position changes and the abrupt future stop enters velocity-derived dynamics.</td></tr>
+              <tr><td>Position-only teleport v1</td><td class="yes">Responds</td><td class="no">No response</td><td class="no">No response</td><td>Only position is changed; velocity-derived kinematics remain unchanged.</td></tr>
+              <tr><td>Velocity-only spike v1</td><td class="no">No response</td><td class="no">No response</td><td class="yes">Responds</td><td>Only velocity changes, exposing position metric’s field boundary.</td></tr>
+              <tr><td>Forced overlap v1</td><td class="yes">Responds</td><td class="yes">Responds</td><td class="no">No response</td><td>Boxes interpenetrate after position/heading changes; velocity stays unchanged.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <details class="learn-only">
+          <summary>See every four-dose mean (0.25, 0.50, 0.75, 1.00)</summary>
+          <div class="details-body table-wrap">
+            <table>
+              <thead><tr><th>Probe</th><th>Metric</th><th>Three-case arithmetic means</th></tr></thead>
+              <tbody>
+                <tr><td>Freeze v2</td><td>Position</td><td class="mono">[0.125000, 0.312500, 0.562500, 0.875000]</td></tr>
+                <tr><td>Freeze v2</td><td>Overlap</td><td class="mono">[0, 0, 0, 0]</td></tr>
+                <tr><td>Freeze v2</td><td>Kinematic</td><td class="mono">[0.062500, 0.125000, 0.187500, 0.250000]</td></tr>
+                <tr><td>Teleport</td><td>Position</td><td class="mono">[9.375000, 18.750000, 28.125000, 37.500000]</td></tr>
+                <tr><td>Teleport</td><td>Overlap</td><td class="mono">[0, 0, 0, 0]</td></tr>
+                <tr><td>Teleport</td><td>Kinematic</td><td class="mono">[0, 0, 0, 0]</td></tr>
+                <tr><td>Velocity spike</td><td>Position</td><td class="mono">[0, 0, 0, 0]</td></tr>
+                <tr><td>Velocity spike</td><td>Overlap</td><td class="mono">[0, 0, 0, 0]</td></tr>
+                <tr><td>Velocity spike</td><td>Kinematic</td><td class="mono">[0.125000, 0.250000, 0.375000, 0.500000]</td></tr>
+                <tr><td>Forced overlap</td><td>Position</td><td class="mono">[12.500337, 37.501012, 75.002025, 75.002025]</td></tr>
+                <tr><td>Forced overlap</td><td>Overlap</td><td class="mono">[0.500000, 0.750000, 1.000000, 1.000000]</td></tr>
+                <tr><td>Forced overlap</td><td>Kinematic</td><td class="mono">[0, 0, 0, 0]</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <div class="grid-2" style="margin-top:1rem">
+          <article class="card">
+            <p class="eyebrow">The bug</p>
+            <h3>Freeze v1 rewrote the current frame</h3>
+            <p>It zeroed velocity beginning at <span class="mono">current_index</span>, the last observed frame. That altered history and erased the current-to-future deceleration the kinematic metric should have seen.</p>
+          </article>
+          <article class="card">
+            <p class="eyebrow">The correction</p>
+            <h3>Freeze v2 starts in the future</h3>
+            <p>It preserves every field through the current frame, then holds future position/heading and sets future velocity to zero. The abrupt stop is now visible to the fixed-step diagnostic.</p>
+          </article>
+        </div>
+
+        <blockquote><strong>Permitted claim:</strong> On three hand-built analytic cases, the probes produced the complete six-response/six-non-response matrix. This verifies intended field of view and complementary blind spots: position misses velocity-only corruption, the fixed-step diagnostic misses position-only corruption, and overlap responds only to interpenetration in these cases.</blockquote>
+        <div class="callout limit"><strong>Always add:</strong> This audit is outcome-aware. It is not calibrated, source-disjoint, held-out, WOMD-backed, population-level, or general metric validation. It does not evaluate <span class="mono">speed_error_mps</span>, prove generic nonreactivity detection, or satisfy the original M7 v1 gates.</div>
+
+        <label class="completion"><input type="checkbox" data-progress-id="m7"> I can explain the freeze generator artifact and the exact claim M7 does—and does not—support.</label>
+      </section>
+
+      <section id="talk-tracks" aria-labelledby="talk-title">
+        <p class="section-kicker">09 · Tell the story</p>
+        <h2 id="talk-title">30 seconds, 2 minutes, 10 minutes</h2>
+        <p class="section-lead">Use the short version first and expand only when the interviewer signals interest. Every version leads with the question, gives evidence, and ends with a bounded insight.</p>
+
+        <div class="tabs">
+          <div role="tablist" aria-label="Talk-track length">
+            <button type="button" role="tab" id="tab-30" aria-controls="panel-30" aria-selected="true" tabindex="0">30 seconds</button>
+            <button type="button" role="tab" id="tab-2" aria-controls="panel-2" aria-selected="false" tabindex="-1">2 minutes</button>
+            <button type="button" role="tab" id="tab-10" aria-controls="panel-10" aria-selected="false" tabindex="-1">10 minutes</button>
+          </div>
+
+          <section role="tabpanel" id="panel-30" aria-labelledby="tab-30">
+            <div class="copy-row"><span class="timer">Target: 30–40 seconds</span><button class="copy-track" type="button" data-copy-target="script-30">Copy script</button></div>
+            <div class="script script-copy" id="script-30">
+              <p>EvalSim asks whether evaluator choice changes how we judge AV traffic simulations. I ran privileged log replay, constant velocity, and a limited longitudinal IDM on the same 128-scene conditional cohort. Four diagnostics disagreed: replay best matched recorded position and speed and had the lowest overlap mean, while CV and IDM had lower fixed-step kinematic-infeasibility rates. So the evidence supports no overall winner; simulator evaluation must stay metric- and use-case-specific. It is a personal learning project: core M5 is complete, while broader validation remains work in progress.</p>
+            </div>
+          </section>
+
+          <section role="tabpanel" id="panel-2" aria-labelledby="tab-2" hidden>
+            <div class="copy-row"><span class="timer">Target: 1:45–2:15</span><button class="copy-track" type="button" data-copy-target="script-2">Copy script</button></div>
+            <div class="script script-copy" id="script-2">
+              <p>EvalSim is a metrics-first learning project. Instead of asking which simulator is universally most realistic, I asked whether different evaluators produce one consistent ordering on the same scenes.</p>
+              <p>I chose three intentionally simple probes. Log replay copies the recorded future, so it is a privileged construction oracle and cannot react. Constant velocity is a minimal history-only causal extrapolator with no map or interaction reasoning. EvalSim IDM adds longitudinal bumper-gap response, but no lateral controller or route-aware leader selection.</p>
+              <p>All three ran on the same fixed 128-scene complete-case conditional WOMD cohort. I reduced valid agent-frame components to one value per scenario and used the scenario as the paired comparison and resampling unit. Slice membership was defined from source data before outcomes were available.</p>
+              <p>The four lower-is-better diagnostics disagreed. Replay had the best recorded-position and speed fidelity and the lowest overlap mean. CV and IDM had lower fixed-step kinematic-infeasibility rates than replay. CV matched the log better than IDM, while the IDM-versus-CV overlap and kinematic differences did not support directional claims.</p>
+              <p>Therefore I did not create a composite realism score or declare a winner. M7 then injected controlled defects and exposed complementary metric blind spots. It also caught a flawed freeze generator, which taught me that evaluating an evaluator requires validating the corruption generator too.</p>
+            </div>
+          </section>
+
+          <section role="tabpanel" id="panel-10" aria-labelledby="tab-10" hidden>
+            <div class="copy-row"><span class="timer">Target: 9–10 minutes plus questions</span><button class="copy-track" type="button" data-copy-target="script-10">Copy outline</button></div>
+            <div class="timeline script-copy" id="script-10">
+              <div class="timeline-item"><time>0:00–1:00</time><div><strong>Frame the decision.</strong> “Simulator evaluation is not automatically a leaderboard. Before comparing models, I need to define which behavior matters to a downstream decision.” State the core question and no-winner thesis.</div></div>
+              <div class="timeline-item"><time>1:00–2:00</time><div><strong>Introduce the probes.</strong> Replay isolates exact log reproduction but is privileged/nonreactive. CV isolates inertia without interaction. IDM adds longitudinal bumper-gap response but no lateral/route logic. Their legible failures make metric behavior attributable.</div></div>
+              <div class="timeline-item"><time>2:00–4:00</time><div><strong>Teach the four contracts.</strong> Position and speed measure logged fidelity; overlap is a geometric proxy; fixed-step kinematics checks pinned acceleration/curvature thresholds. For each, give unit, lower-is-better direction, decision relevance, and one blind spot.</div></div>
+              <div class="timeline-item"><time>4:00–5:15</time><div><strong>Explain fairness.</strong> Same 128 conditional scenes, source-only slices, 80 transitions, one scalar per scenario, paired policy effects, scenario-level deterministic reweighting, pre-registered primary gates, retained null/sparse results.</div></div>
+              <div class="timeline-item"><time>5:15–7:00</time><div><strong>Read the result.</strong> Position/speed: replay &lt; CV &lt; IDM. Overlap: replay has the lowest mean, but IDM–CV is unsupported. Fixed-step kinematics: CV/IDM beat replay, but IDM–CV is unsupported/event-sparse. Ten of twelve adjusted bands exclude zero, yet incompatible constructs still prevent an overall winner.</div></div>
+              <div class="timeline-item"><time>7:00–8:25</time><div><strong>Audit the evaluator.</strong> Show the M7 6/6 matrix. Explain why position misses velocity-only corruption and kinematics misses position-only corruption. Then tell the freeze v1/v2 generator story and narrow the claim to field of view.</div></div>
+              <div class="timeline-item"><time>8:25–9:20</time><div><strong>Separate evidence layers.</strong> M5 strongly checks implementation correctness and gives bounded fixed-cohort application. M7 adds narrow construct evidence. Decision relevance under an ego intervention remains unaccepted; M6 is pre-data.</div></div>
+              <div class="timeline-item"><time>9:20–10:00</time><div><strong>Close with judgment.</strong> “The key insight is not that one baseline won. It is that evaluator choice encodes a product or research preference. I would choose metrics from the decision, preserve plurality, and validate both the evaluator and its stress generators.” Mention personal learning/WIP status and invite the interviewer to choose a layer to explore.</div></div>
+            </div>
+          </section>
+        </div>
+        <p id="copy-status" class="small muted" role="status" aria-live="polite"></p>
+
+        <label class="completion"><input type="checkbox" data-progress-id="talk"> I have spoken the 30-second and 2-minute versions aloud without reading.</label>
+      </section>
+
+      <section id="interview-drill" aria-labelledby="drill-title">
+        <p class="section-kicker">10 · Adversarial drill</p>
+        <h2 id="drill-title">Answer the hard follow-ups</h2>
+        <p class="section-lead">Answer aloud before opening each card. Strong answers are precise, bounded, and decision-oriented; they do not apologize for an honest limitation.</p>
+
+        <div class="randomizer" aria-labelledby="random-title">
+          <h3 id="random-title">Random interview question</h3>
+          <div class="randomizer-controls">
+            <button type="button" id="new-question">Draw a question</button>
+            <button type="button" id="reveal-answer" disabled>Reveal bounded answer</button>
+          </div>
+          <p class="random-prompt" id="random-question">Press “Draw a question,” answer aloud, then reveal.</p>
+          <div class="random-answer" id="random-answer" hidden></div>
+        </div>
+
+        <div id="qa-list">
+          <details class="qa-card"><summary><span>Are you comparing which simulator is most realistic? <span class="cn">你是在找最真实的模拟器吗？</span></span><span class="qa-number">Q01</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>No. I compare how distinct diagnostics judge the same three probes on one fixed conditional cohort. The experiment has no independent scalar ground truth for “realism,” and the metrics encode different downstream preferences. The accepted result supports a multi-metric method, not a universal ranking.</p></div><p class="coach-note"><strong>Coach:</strong> 先纠正问题定义，再给 evidence boundary。</p></div></details>
+
+          <details class="qa-card"><summary><span>Why use such simple baselines? <span class="cn">为什么不用更强的 simulator？</span></span><span class="qa-number">Q02</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>Simplicity is experimental leverage. Replay, CV, and limited IDM have legible assumptions and failure modes, so I can attribute metric changes to specific behavior differences. A more complex model might score better, but it would make evaluator behavior harder to understand and would answer a different question.</p></div><p class="coach-note"><strong>Coach:</strong> 不要把简单说成资源不足；强调 identification。</p></div></details>
+
+          <details class="qa-card"><summary><span>Why not combine the metrics into one realism score? <span class="cn">为什么不做总分？</span></span><span class="qa-number">Q03</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>A weighted score would hide the central result: the metric families disagree. The weights would encode an unstated product decision about the value of fidelity, interpenetration, and fixed-step feasibility. I would only aggregate after a specific use case supplies defensible utilities and guardrails; this experiment does not.</p></div><p class="coach-note"><strong>Coach:</strong> “No composite” 是 deliberate governance choice。</p></div></details>
+
+          <details class="qa-card"><summary><span>Did log replay win? <span class="cn">Replay 是 winner 吗？</span></span><span class="qa-number">Q04</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>Replay won the logged-position and logged-speed fidelity comparisons by construction and had the lowest overlap mean on this cohort. But it uses the recorded future and cannot react, so it is a privileged construction oracle rather than a causal simulator. It cannot be called the overall winner or a realism upper bound.</p></div><p class="coach-note"><strong>Coach:</strong> 区分 score outcome 与 method capability。</p></div></details>
+
+          <details class="qa-card"><summary><span>Why can replay look worse on kinematic infeasibility? <span class="cn">真实记录怎么会更“不合理”？</span></span><span class="qa-number">Q05</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>The metric applies pinned inverse-dynamics thresholds under a fixed 0.1-second semantic to discrete states. It can respond to sampled or noisy logged transitions differently from engine-integrated baselines. The result demonstrates a diagnostic tension; it does not prove the recorded motion is physically impossible or that CV and IDM are safer.</p></div><p class="coach-note"><strong>Coach:</strong> 不要反推 “data bad” 或 “policy safe”。</p></div></details>
+
+          <details class="qa-card"><summary><span>Why is CV closer to the log than IDM? <span class="cn">有 interaction 的 IDM 为什么更差？</span></span><span class="qa-number">Q06</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>On this cohort and implementation, adding limited longitudinal bumper-gap response makes trajectories diverge more from the single recorded future than simple inertia does. IDM also lacks lateral and route-aware control. That says CV has better logged fidelity here; it does not establish that ignoring interaction is generally more realistic.</p></div><p class="coach-note"><strong>Coach:</strong> metric-specific result，不做 general model judgment。</p></div></details>
+
+          <details class="qa-card"><summary><span>Why is the scenario the statistical unit? <span class="cn">为什么不是 frame 或 agent？</span></span><span class="qa-number">Q07</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>Frames and agents within one traffic scene share context and are strongly dependent. Treating them as independent would create pseudo-replication and overly narrow uncertainty summaries. I first reduce eligible components to one scalar per scenario, then form paired policy effects and reweight scenarios.</p></div><p class="coach-note"><strong>Coach:</strong> 说清 aggregation unit 与 resampling unit。</p></div></details>
+
+          <details class="qa-card"><summary><span>Are the stability bands confidence intervals? <span class="cn">这些 band 有统计显著性吗？</span></span><span class="qa-number">Q08</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>No. They are deterministic empirical scene-reweighting summaries for the fixed cohort. They show whether a mean contrast is sensitive to which observed scenes receive more weight. They are not sampling-error confidence intervals, p-values, hypothesis tests, or population-level familywise guarantees.</p></div><p class="coach-note"><strong>Coach:</strong> 这是最重要的 statistical boundary。</p></div></details>
+
+          <details class="qa-card"><summary><span>Does the 128-scene cohort represent WOMD? <span class="cn">能泛化到 WOMD 吗？</span></span><span class="qa-number">Q09</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>No. It is a deterministic complete-case conditional cohort selected from the first ten validation shards after a frozen eligibility predicate. It supports a bounded application and paired comparison on those scenes, not WOMD prevalence, probability-sample inference, geography generalization, or deployment performance.</p></div><p class="coach-note"><strong>Coach:</strong> “conditional” 必须主动说。</p></div></details>
+
+          <details class="qa-card"><summary><span>Is overlap a safety metric? <span class="cn">Overlap 是否代表 collision/safety？</span></span><span class="qa-number">Q10</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>No. It is a target-frame oriented-box interpenetration rate. It does not count unique collision pairs, measure severity or responsibility, capture near misses, or predict harm. I use it as a geometric sanity proxy and keep its limitation explicit.</p></div><p class="coach-note"><strong>Coach:</strong> proxy 不等于 downstream outcome。</p></div></details>
+
+          <details class="qa-card"><summary><span>What exactly did M7 validate? <span class="cn">M7 到底证明了什么？</span></span><span class="qa-number">Q11</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>It verified the selected implementation paths and expected field boundaries on three hand-built cases: position misses velocity-only corruption, fixed-step kinematics misses position-only corruption, and overlap responds to forced interpenetration. Because the audit is outcome-aware and not held out, it is construct and wiring evidence—not calibrated or general evaluator validation.</p></div><p class="coach-note"><strong>Coach:</strong> field-of-view evidence，不说 validated realism evaluator。</p></div></details>
+
+          <details class="qa-card"><summary><span>What did the freeze-generator bug teach you? <span class="cn">generator artifact 的 insight 是什么？</span></span><span class="qa-number">Q12</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>The original injector changed velocity at the last observed frame, so it erased the future deceleration the kinematic metric should have observed. After preserving history and applying the freeze only in the future, the metric responded. A stress test can teach the evaluator to the answer, so the generator needs its own semantic oracle and immutability checks.</p></div><p class="coach-note"><strong>Coach:</strong> 这是很好的 failure-and-correction story。</p></div></details>
+
+          <details class="qa-card"><summary><span>What roles do Waymax and JAX play? <span class="cn">为什么 highlight Waymax/JAX？</span></span><span class="qa-number">Q13</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>Waymax is an optional licensed adapter for WOMD decoding, state construction, and bounded reference comparisons behind EvalSim contracts. The core evaluator can run without Waymax installed, while <span class="mono">waymax_kinematic_infeasibility_rate</span> intentionally mirrors one pinned Waymax fixed-0.1-second inverse-bicycle definition. JAX supports bounded <span class="mono">jit</span>/<span class="mono">vmap</span> computation and a narrow CPU benchmark. Neither technology is ground truth, and their use does not imply a GPU-scale production pipeline.</p></div><p class="coach-note"><strong>Coach:</strong> technology 是 evidence infrastructure，不是 contribution。</p></div></details>
+
+          <details class="qa-card"><summary><span>Is this a closed-loop simulator evaluation? <span class="cn">这是闭环实验吗？</span></span><span class="qa-number">Q14</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>The rollout engine supports current-state transitions, and the history-only CV and IDM world-agent paths advance from simulated current state. Privileged log replay is the exception because it copies the recorded future through absolute-state overrides. In accepted M5, ego follows its logged trajectory exogenously for every baseline. I therefore do not claim demonstrated ego-conditioned reactivity; the typed M6 counterfactual path exists pre-data, but no official WOMD outcome is accepted.</p></div><p class="coach-note"><strong>Coach:</strong> 不用 yes/no oversimplify；拆清 control boundary。</p></div></details>
+
+          <details class="qa-card"><summary><span>How would you prevent Goodharting? <span class="cn">如何防止模型刷 metric？</span></span><span class="qa-number">Q15</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>I would preserve multiple non-equivalent metrics, version their contracts, pre-register primary gates, retain adverse and null results, and audit controlled defects plus invariances. For a stronger validation claim, I would add source-disjoint held-out defects and real-scene checks. I would also avoid training and selecting a model against exactly the same evaluator suite without a separate decision audit.</p></div><p class="coach-note"><strong>Coach:</strong> metric plurality + separation + generator audit。</p></div></details>
+
+          <details class="qa-card"><summary><span>What would you do next? <span class="cn">下一步是什么？</span></span><span class="qa-number">Q16</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>I would start from the missing decision evidence, not the milestone number. If the question is ego-conditioned reactivity, I would complete the separately gated M6 paired study. If the question is general metric validity, I would pre-register source-disjoint calibration and held-out stress cohorts. I would not add GPU or model complexity unless the decision requires it.</p></div><p class="coach-note"><strong>Coach:</strong> 展示 prioritization，不要回答 “finish every milestone”。</p></div></details>
+
+          <details class="qa-card"><summary><span>Could you choose CV or IDM for a release decision? <span class="cn">现在能选一个替代另一个吗？</span></span><span class="qa-number">Q17</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>Not from this evidence alone. CV has better logged position and speed fidelity on the fixed cohort, while the IDM–CV overlap and fixed-step kinematic contrasts are not directionally supported. A replacement decision needs a defined use case, reactivity evidence, failure severity, target-distribution slices, and explicit launch thresholds.</p></div><p class="coach-note"><strong>Coach:</strong> 不回避 decision；列出缺失 evidence。</p></div></details>
+
+          <details class="qa-card"><summary><span>Do you need Linux or a GPU to reproduce the core story? <span class="cn">环境要求是什么？</span></span><span class="qa-number">Q18</span></summary><div class="details-body"><p class="answer-label">Bounded answer · English</p><div class="answer"><p>No. The contracts, NumPy baselines, metrics, statistics, synthetic construct audit, and presentation are CPU-first. Optional licensed WOMD reproduction requires the pinned TensorFlow, Waymax, and JAX runtime, but the accepted path ran on Apple Silicon CPU. GPU or Linux would need a separate scale or learned-model question.</p></div><p class="coach-note"><strong>Coach:</strong> 说 core path，不声称 universal portability。</p></div></details>
+        </div>
+
+        <label class="completion"><input type="checkbox" data-progress-id="qa"> I can answer at least 12 questions aloud without expanding the claim.</label>
+      </section>
+
+      <section id="flashcards" aria-labelledby="flashcards-title">
+        <p class="section-kicker">11 · Recall check</p>
+        <h2 id="flashcards-title">Twenty interview flashcards</h2>
+        <p class="section-lead">Say the answer before opening the card. Factual recall should be automatic so your interview bandwidth stays available for reasoning.</p>
+
+        <div class="flashcard-grid">
+          <details class="flashcard"><summary>1. What is EvalSim’s core question?<br><span class="cn">核心问题是什么？</span></summary><div class="details-body">Whether distinct diagnostics give one consistent ordering when log replay, CV, and IDM run on the same scenes. Accepted answer: no.</div></details>
+          <details class="flashcard"><summary>2. What is the contribution?<br><span class="cn">项目贡献是什么？</span></summary><div class="details-body">The evaluation methodology: explicit constructs, paired comparisons, preserved contradictions, evaluator stress tests, and bounded claims—not a production simulator.</div></details>
+          <details class="flashcard"><summary>3. What does log replay isolate?<br><span class="cn">Log replay 的作用？</span></summary><div class="details-body">Exact recorded-future construction and mapping correctness. It is privileged and nonreactive.</div></details>
+          <details class="flashcard"><summary>4. What does constant velocity isolate?<br><span class="cn">CV 的作用？</span></summary><div class="details-body">Minimal history-only inertial extrapolation without interaction or map following.</div></details>
+          <details class="flashcard"><summary>5. What does IDM stand for and do?<br><span class="cn">IDM 全称及能力？</span></summary><div class="details-body">Intelligent Driver Model; EvalSim uses longitudinal bumper-gap response with no lateral or route-aware controller.</div></details>
+          <details class="flashcard"><summary>6. What is ego in accepted M5?<br><span class="cn">M5 中 ego 是什么？</span></summary><div class="details-body">The focal vehicle, copied from the logged trajectory exogenously while policies simulate world agents.</div></details>
+          <details class="flashcard"><summary>7. Name the four primary metrics.<br><span class="cn">四个主指标？</span></summary><div class="details-body"><span class="mono">position_error_m</span>, <span class="mono">speed_error_mps</span>, <span class="mono">oriented_box_overlap_rate</span>, and <span class="mono">waymax_kinematic_infeasibility_rate</span>.</div></details>
+          <details class="flashcard"><summary>8. What direction do all four use?<br><span class="cn">指标方向？</span></summary><div class="details-body">Lower is better, within each metric’s own construct. That does not make their units or meanings interchangeable.</div></details>
+          <details class="flashcard"><summary>9. What is the accepted cohort?<br><span class="cn">Cohort 范围？</span></summary><div class="details-body">A fixed deterministic 128-scenario complete-case conditional cohort from WOMD validation shards 00000–00009.</div></details>
+          <details class="flashcard"><summary>10. Why pair by scenario?<br><span class="cn">为什么 scenario pairing？</span></summary><div class="details-body">To compare policies under the same scene and avoid scene-mix confounding; agent/frame components are correlated.</div></details>
+          <details class="flashcard"><summary>11. Position and speed ordering?<br><span class="cn">位置和速度排序？</span></summary><div class="details-body">Replay &lt; CV &lt; IDM by mean; all are lower-is-better.</div></details>
+          <details class="flashcard"><summary>12. Overlap ordering and caveat?<br><span class="cn">Overlap 排序和限制？</span></summary><div class="details-body">Replay &lt; IDM &lt; CV by mean, but the adjusted IDM–CV band crosses zero, so that contrast is not directional.</div></details>
+          <details class="flashcard"><summary>13. Kinematic ordering and caveat?<br><span class="cn">Kinematic 排序和限制？</span></summary><div class="details-body">IDM &lt; CV &lt; replay by mean, but IDM–CV is event-sparse with seven nonzero effects and its adjusted band crosses zero.</div></details>
+          <details class="flashcard"><summary>14. What does 10/12 mean?<br><span class="cn">10/12 是什么？</span></summary><div class="details-body">Ten of twelve multiplicity-adjusted primary fixed-cohort bands exclude zero and pass the other directional gates. It is not population significance.</div></details>
+          <details class="flashcard"><summary>15. What are the two unsupported contrasts?<br><span class="cn">哪两个不能定向？</span></summary><div class="details-body">IDM versus CV for overlap and IDM versus CV for fixed-step kinematic infeasibility.</div></details>
+          <details class="flashcard"><summary>16. What does M7’s 6+6 mean?<br><span class="cn">M7 6+6 是什么？</span></summary><div class="details-body">Across four defects and three selected metrics, six cells respond and six show exact non-response over all four doses.</div></details>
+          <details class="flashcard"><summary>17. What was wrong with freeze v1?<br><span class="cn">Freeze v1 错在哪里？</span></summary><div class="details-body">It changed velocity at the current observed frame and erased the future deceleration, creating a false kinematic miss.</div></details>
+          <details class="flashcard"><summary>18. What can M7 not claim?<br><span class="cn">M7 不能证明什么？</span></summary><div class="details-body">It is not calibrated, source-disjoint, held-out, WOMD-backed, population-level, or general metric validation; speed error was not audited.</div></details>
+          <details class="flashcard"><summary>19. Why use Waymax and JAX?<br><span class="cn">Waymax/JAX 做什么？</span></summary><div class="details-body">Waymax supplies optional licensed data/reference adapters; JAX supplies bounded jit/vmap CPU evidence. Neither is ground truth or core-project dependency.</div></details>
+          <details class="flashcard"><summary>20. What is the one-sentence conclusion?<br><span class="cn">一句话结论？</span></summary><div class="details-body">Metric choice changes the baseline ordering, so simulator evaluation must remain multi-metric, decision-specific, and explicit about blind spots.</div></details>
+        </div>
+
+        <label class="completion"><input type="checkbox" data-progress-id="flashcards"> I answered at least 16 of 20 cards correctly before opening them.</label>
+      </section>
+
+      <section id="pitfalls" aria-labelledby="pitfalls-title">
+        <p class="section-kicker">12 · Claim discipline</p>
+        <h2 id="pitfalls-title">Do not say this. Say this.</h2>
+        <p class="section-lead">Interview strength comes from matching every sentence to evidence. These substitutions preserve the insight without overselling it.</p>
+
+        <div class="table-wrap">
+          <table class="claim-table">
+            <thead><tr><th>Do not say</th><th>Say instead</th><th>Why</th></tr></thead>
+            <tbody>
+              <tr><td>“I compared three realistic simulators.”</td><td>“I used three deliberately simple comparison probes.”</td><td>Replay is privileged; CV/IDM are limited baselines.</td></tr>
+              <tr><td>“Replay is ground truth.”</td><td>“Replay is a privileged recorded-future construction oracle.”</td><td>It cannot react or provide independent causal truth.</td></tr>
+              <tr><td>“I found the most realistic simulator.”</td><td>“The metric families produced conflicting orderings; no overall winner is supported.”</td><td>No scalar realism construct was validated.</td></tr>
+              <tr><td>“Overlap measures collisions and safety.”</td><td>“Overlap is a target-frame geometric interpenetration proxy.”</td><td>No unique pair count, severity, responsibility, or harm.</td></tr>
+              <tr><td>“Kinematic infeasibility measures physical realism.”</td><td>“It is a pinned fixed-0.1-second inverse-dynamics threshold diagnostic.”</td><td>Not actual-time normalized or complete dynamics.</td></tr>
+              <tr><td>“The bands are confidence intervals.”</td><td>“They summarize fixed-cohort sensitivity to empirical scene reweighting.”</td><td>No probability-sample population inference.</td></tr>
+              <tr><td>“The 128 scenes represent WOMD.”</td><td>“They form a deterministic complete-case conditional cohort from ten shards.”</td><td>No representativeness design.</td></tr>
+              <tr><td>“M7 validated the evaluators.”</td><td>“M7 checked selected field-of-view and wiring on three analytic cases.”</td><td>Outcome-aware, non-held-out evidence.</td></tr>
+              <tr><td>“M6 proved reactivity.”</td><td>“M6 has a guarded pre-data implementation but no accepted WOMD outcome.”</td><td>Implementation is not empirical evidence.</td></tr>
+              <tr><td>“Waymax verified ground truth.”</td><td>“Bounded Waymax checks cross-checked overlapping computation semantics.”</td><td>Shared decode and limited subset prevent independence.</td></tr>
+              <tr><td>“JAX shows a scalable GPU pipeline.”</td><td>“JAX ran a bounded batch-two CPU jit/vmap benchmark.”</td><td>No GPU or end-to-end scaling evidence.</td></tr>
+              <tr><td>“1,444 tests prove realism.”</td><td>“Tests support software correctness at the current snapshot.”</td><td>Test count is not construct validity or generalization.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <label class="completion"><input type="checkbox" data-progress-id="claims"> I can correct every overclaim above without weakening the real contribution.</label>
+      </section>
+
+      <section id="last-day" aria-labelledby="last-day-title">
+        <p class="section-kicker">13 · Final rehearsal</p>
+        <h2 id="last-day-title">Last-day checklist</h2>
+        <p class="section-lead">Do this once the day before and once 30 minutes before the interview. These checkboxes also contribute to the saved readiness bar.</p>
+
+        <ul class="checklist">
+          <li><label><input type="checkbox" data-progress-id="last-script"><span>I can deliver the 30-second and 2-minute versions without reading.</span></label></li>
+          <li><label><input type="checkbox"><span>I remember <strong>128 / 12 / 10 / 2</strong>: scenes, primary cells, directional cells, unsupported contrasts.</span></label></li>
+          <li><label><input type="checkbox"><span>I remember M7: <strong>3 cases / 4 defects / 4 doses / 3 metrics / 6+6 cells</strong>.</span></label></li>
+          <li><label><input type="checkbox"><span>I can define ego, IDM, paired comparison, eligibility, and construct validity.</span></label></li>
+          <li><label><input type="checkbox"><span>For each metric, I can say construct, relevance, reward, blind spot, unit, and direction.</span></label></li>
+          <li><label><input type="checkbox"><span>I proactively say “fixed complete-case conditional cohort” and “no overall winner.”</span></label></li>
+          <li><label><input type="checkbox"><span>I can explain why bands are not confidence intervals and overlap is not safety.</span></label></li>
+          <li><label><input type="checkbox"><span>I can tell the freeze v1/v2 correction as a failure-and-learning story.</span></label></li>
+          <li><label><input type="checkbox"><span>I will label M6 pre-data and M7 outcome-aware/bounded.</span></label></li>
+          <li><label><input type="checkbox"><span>I will not use test count, JAX, or Waymax as realism or scale evidence.</span></label></li>
+          <li><label><input type="checkbox"><span>I prepared genuine professional examples for production impact, mentoring, and cross-team influence.</span></label></li>
+          <li><label><input type="checkbox" data-progress-id="last-links"><span>I checked the public project page and evidence links; no private interview material is shown.</span></label></li>
+        </ul>
+
+        <div class="callout"><strong>Final anchor:</strong> “The insight is not that one baseline won. It is that metric design determines which failure modes become visible and which decisions the evaluation can support.”</div>
+      </section>
+
+      <section id="sources" aria-labelledby="sources-title">
+        <p class="section-kicker">14 · Evidence and use boundary</p>
+        <h2 id="sources-title">Public evidence trail</h2>
+        <div class="grid-2">
+          <article class="card">
+            <h3>Read these in order</h3>
+            <ol>
+              <li><a href="/">Interactive project presentation</a></li>
+              <li><a href="https://github.com/6ickomod3/evalsim/blob/main/README.md">Repository overview and current status</a></li>
+              <li><a href="https://github.com/6ickomod3/evalsim/blob/main/docs/plans/2026-07-31-metrics-first-strategy.md">Metrics-first learning strategy</a></li>
+              <li><a href="https://github.com/6ickomod3/evalsim/blob/main/docs/results/m5-official-acceptance.md">Accepted M5 aggregate result</a></li>
+              <li><a href="https://github.com/6ickomod3/evalsim/blob/main/docs/results/m7-construct-audit.md">Corrected M7 construct-audit result</a></li>
+              <li><a href="https://github.com/6ickomod3/evalsim/blob/main/docs/interview/claim-evidence-ledger.md">Claim-to-evidence ledger</a></li>
+              <li><a href="https://github.com/6ickomod3/evalsim/blob/main/NOTICE.md">Complete third-party notices</a></li>
+            </ol>
+          </article>
+          <article class="card">
+            <h3>Current evidence state</h3>
+            <ul>
+              <li><strong>M3–M5:</strong> accepted historical evidence at bound snapshots.</li>
+              <li><strong>M6:</strong> pre-data implementation; fresh exact-source review is required before official data access.</li>
+              <li><strong>M7:</strong> bounded outcome-aware analytic audit; original v1 gates remain unmet.</li>
+              <li><strong>M8+:</strong> optional ideas, not current claims.</li>
+              <li><strong>Compute:</strong> core learning path is CPU-first; no Linux/GPU requirement.</li>
+              <li><strong>Current software snapshot:</strong> 1,444 passed, 1 skipped (the expected local-data skip). This supports software correctness, not realism.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="notice" style="margin-top:1rem">
+          <h3>Direct Waymo Open Dataset and Waymax notice</h3>
+          <p>EvalSim’s Waymo-backed path is developed and distributed on the operating assumption that it is used only for the stated <strong>personal, non-commercial interview-preparation purpose</strong> and personal experimentation. This is not legal advice; complete upstream agreements control.</p>
+
+          <h4>Waymo Open Dataset</h4>
+          <blockquote>This software was made using the Waymo Open Dataset, provided by Waymo LLC under the Waymo Dataset License Agreement for Non-Commercial Use, available at waymo.com/open/terms, and your access and use of such work are governed by the terms and conditions therein.</blockquote>
+          <p>Complete terms: <a href="https://waymo.com/open/terms/">https://waymo.com/open/terms/</a></p>
+
+          <h4>Waymax</h4>
+          <p class="small muted">The upstream prescribed notice spells “Waymx” as shown; that spelling is preserved verbatim.</p>
+          <blockquote>This software was made using the Waymax Licensed Materials, provided by Waymo LLC under the Waymax License Agreement for Non-Commercial Use, available at https://github.com/waymo-research/waymax/blob/main/LICENSE, and your access and use of the Waymx Licensed Materials are governed by the terms and conditions contained therein.</blockquote>
+          <pre>@inproceedings{waymax,
+  title={Waymax: An Accelerated, Data-Driven Simulator for Large-Scale Autonomous Driving Research},
+  author={Cole Gulino and Justin Fu and Wenjie Luo and George Tucker and Eli Bronstein and
+  Yiren Lu and Jean Harb and Xinlei Pan and Yan Wang and Xiangyu Chen and John D. Co-Reyes
+  and Rishabh Agarwal and Rebecca Roelofs and Yao Lu and Nico Montali and Paul Mougin and
+  Zoey Yang and Brandyn White and Aleksandra Faust and Rowan McAllister and Dragomir Anguelov
+  and Benjamin Sapp},
+  booktitle={Proceedings of the Neural Information Processing Systems Track on Datasets and Benchmarks},
+  year={2023}
+}</pre>
+          <p>Canonical license: <a href="https://github.com/waymo-research/waymax/blob/main/LICENSE">Waymax License Agreement for Non-Commercial Use</a><br>
+          Immutable license provenance for the pinned revision: <a href="https://github.com/waymo-research/waymax/blob/a64dfec9be8576b60d9cecc94f406d9812d4a7d0/LICENSE">revision <span class="mono">a64dfec9…</span> license</a></p>
+          <p><strong>Restriction summary:</strong> No WOMD data or generated experiment artifacts are published here. The governed path is not for commercial services, Production Systems, real-world vehicle development/operation/testing/validation, or prohibited foundation-model development. See <a href="https://github.com/6ickomod3/evalsim/blob/main/NOTICE.md">NOTICE.md</a> for the complete project notice and non-exhaustive restriction summary.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-row">
+        <span>EvalSim Interview Lab · sanitized public learning artifact</span>
+        <span><a href="/">Back to project presentation</a> · <a href="/index.html">Direct HTML fallback</a> · <a href="#top">Back to top</a></span>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const STORAGE_KEY = 'evalsim-interview-progress-v1';
+      const body = document.body;
+      const learnButton = document.getElementById('learn-mode');
+      const drillButton = document.getElementById('drill-mode');
+
+      function setMode(mode) {
+        body.dataset.mode = mode;
+        const learning = mode === 'learn';
+        learnButton.setAttribute('aria-pressed', String(learning));
+        drillButton.setAttribute('aria-pressed', String(!learning));
+      }
+
+      learnButton.addEventListener('click', () => setMode('learn'));
+      drillButton.addEventListener('click', () => setMode('drill'));
+
+      const progressBoxes = Array.from(document.querySelectorAll('[data-progress-id]'));
+      const progressBar = document.querySelector('.progress-bar');
+      const progressFill = document.querySelector('.progress-fill');
+      const progressCount = document.getElementById('progress-count');
+      const progressPercent = document.getElementById('progress-percent');
+
+      function readProgress() {
+        try {
+          const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+          return Array.isArray(value) ? new Set(value) : new Set();
+        } catch (_) {
+          return new Set();
+        }
+      }
+
+      function writeProgress(done) {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(done))); } catch (_) { /* browser storage may be unavailable */ }
+      }
+
+      function renderProgress() {
+        const complete = progressBoxes.filter((box) => box.checked).length;
+        const total = progressBoxes.length;
+        const percent = total ? Math.round((complete / total) * 100) : 0;
+        progressFill.style.width = `${percent}%`;
+        progressBar.setAttribute('aria-valuenow', String(percent));
+        progressCount.textContent = `${complete} of ${total} complete`;
+        progressPercent.textContent = `${percent}%`;
+      }
+
+      const storedProgress = readProgress();
+      progressBoxes.forEach((box) => {
+        box.checked = storedProgress.has(box.dataset.progressId);
+        box.addEventListener('change', () => {
+          const done = readProgress();
+          if (box.checked) done.add(box.dataset.progressId);
+          else done.delete(box.dataset.progressId);
+          writeProgress(done);
+          renderProgress();
+        });
+      });
+      renderProgress();
+
+      document.getElementById('clear-progress').addEventListener('click', () => {
+        try { localStorage.removeItem(STORAGE_KEY); } catch (_) { /* no-op */ }
+        progressBoxes.forEach((box) => { box.checked = false; });
+        renderProgress();
+      });
+
+      const glossaryInput = document.getElementById('glossary-filter');
+      const glossaryItems = Array.from(document.querySelectorAll('.glossary-item'));
+      const glossaryStatus = document.getElementById('glossary-status');
+
+      glossaryInput.addEventListener('input', () => {
+        const query = glossaryInput.value.trim().toLocaleLowerCase();
+        let visible = 0;
+        glossaryItems.forEach((item) => {
+          const haystack = `${item.dataset.term || ''} ${item.textContent}`.toLocaleLowerCase();
+          const show = !query || haystack.includes(query);
+          item.hidden = !show;
+          if (show) visible += 1;
+        });
+        glossaryStatus.textContent = `${visible} term${visible === 1 ? '' : 's'} shown`;
+      });
+
+      const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+      function activateTab(tab) {
+        tabs.forEach((candidate) => {
+          const selected = candidate === tab;
+          candidate.setAttribute('aria-selected', String(selected));
+          candidate.tabIndex = selected ? 0 : -1;
+          document.getElementById(candidate.getAttribute('aria-controls')).hidden = !selected;
+        });
+        tab.focus();
+      }
+      tabs.forEach((tab, index) => {
+        tab.addEventListener('click', () => activateTab(tab));
+        tab.addEventListener('keydown', (event) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          let next = index;
+          if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+          if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+          if (event.key === 'Home') next = 0;
+          if (event.key === 'End') next = tabs.length - 1;
+          activateTab(tabs[next]);
+        });
+      });
+
+      const copyStatus = document.getElementById('copy-status');
+      async function copyText(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+      }
+
+      document.querySelectorAll('[data-copy-target]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const target = document.getElementById(button.dataset.copyTarget);
+          try {
+            await copyText(target.innerText.trim());
+            copyStatus.textContent = 'Copied. Practice it aloud, then shorten any sentence you cannot say naturally.';
+          } catch (_) {
+            copyStatus.textContent = 'Copy was unavailable. Select the script text manually.';
+          }
+        });
+      });
+
+      const qaCards = Array.from(document.querySelectorAll('.qa-card'));
+      const randomQuestion = document.getElementById('random-question');
+      const randomAnswer = document.getElementById('random-answer');
+      const revealButton = document.getElementById('reveal-answer');
+      let currentQuestion = null;
+
+      document.getElementById('new-question').addEventListener('click', () => {
+        let next = Math.floor(Math.random() * qaCards.length);
+        if (qaCards.length > 1 && currentQuestion === next) next = (next + 1) % qaCards.length;
+        currentQuestion = next;
+        const card = qaCards[next];
+        randomQuestion.textContent = card.querySelector('summary span').textContent.trim();
+        randomAnswer.innerHTML = card.querySelector('.answer').innerHTML;
+        randomAnswer.hidden = true;
+        revealButton.disabled = false;
+        revealButton.textContent = 'Reveal bounded answer';
+      });
+
+      revealButton.addEventListener('click', () => {
+        const willShow = randomAnswer.hidden;
+        randomAnswer.hidden = !willShow;
+        revealButton.textContent = willShow ? 'Hide answer' : 'Reveal bounded answer';
+      });
+    })();
+  </script>
+</body>
+</html>

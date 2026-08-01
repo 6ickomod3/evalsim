@@ -6,6 +6,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const distRoot = resolve(projectRoot, "dist");
 const publicRoot = resolve(projectRoot, "public");
 const html = await readFile(resolve(projectRoot, "index.html"), "utf8");
+const interviewHtml = await readFile(resolve(projectRoot, "interview-prep.html"), "utf8");
 const publicEntries = await readdir(publicRoot, { withFileTypes: true });
 const unexpectedAssets = publicEntries
   .filter((entry) => entry.name !== "og.png" || !entry.isFile())
@@ -26,9 +27,11 @@ try {
   await mkdir(resolve(stagingRoot, "server"), { recursive: true });
   await mkdir(resolve(stagingRoot, "client"), { recursive: true });
   await writeFile(resolve(stagingRoot, "client", "index.html"), html);
+  await writeFile(resolve(stagingRoot, "client", "interview-prep.html"), interviewHtml);
   await writeFile(resolve(stagingRoot, "client", "og.png"), ogImage);
 
 const worker = `const PAGE = ${JSON.stringify(html)};
+const INTERVIEW_PAGE = ${JSON.stringify(interviewHtml)};
 const OG_BASE64 = ${JSON.stringify(ogBase64)};
 const PAGE_HEADERS = {
   "content-type": "text/html; charset=utf-8",
@@ -54,6 +57,16 @@ export default {
     }
     if (url.pathname === "/" || url.pathname === "/index.html") {
       return new Response(request.method === "HEAD" ? null : PAGE, { status: 200, headers: PAGE_HEADERS });
+    }
+    if (
+      url.pathname === "/interview" ||
+      url.pathname === "/interview/" ||
+      url.pathname === "/interview-prep.html"
+    ) {
+      return new Response(request.method === "HEAD" ? null : INTERVIEW_PAGE, {
+        status: 200,
+        headers: PAGE_HEADERS
+      });
     }
     if (url.pathname === "/og.png" && OG_BASE64) {
       return new Response(request.method === "HEAD" ? null : decodeBase64(OG_BASE64), {

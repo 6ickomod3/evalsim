@@ -1,22 +1,24 @@
 # M7 — Evaluator red-team and metric governance
 
 **Date:** 2026-07-31
-**Status:** Data-free foundation implemented and verified; WOMD detection matrix, invariance
-harness, and calibration/held-out split still pending (see Implementation status below)
+**Status:** Outcome-aware analytic construct audit implemented; the corrected frozen
+matrix matched, while the original v1 acceptance gates remain unmet
+
+**Scope preservation:** Sections 1–10 retain the original v1 pre-registration. The
+[metrics-first construct-audit amendment](2026-07-31-m7-metrics-first-amendment.md) is
+an implemented, verified amendment written after the development results were known. It
+defines a smaller outcome-aware teaching artifact; it does not retroactively change or
+satisfy v1.
 
 ## Implementation status (2026-07-31)
 
-The **data-free** M7 foundation is implemented in `evalsim/stress/` and verified by 36
-analytic-oracle tests (`tests/test_m7_defects.py`, `test_m7_detection.py`,
-`test_m7_metric_cards.py`, `test_m7_invariance.py`), reviewed by adversarial subagents.
-No P0. The review caught a **P1 and it was fixed**: the original `teleportation` family
-co-injected a velocity spike, so "infeasibility detects teleportation" was *teaching to
-the test* and masked a real blind spot; it is now split into a **position-only**
-`teleportation` and a **velocity-only** `kinematic_spike`, each with its docstring and
-oracle matching the pre-registered taxonomy. Several P2s were also addressed (0-based
-cohort ranks, `current_index < num_steps`, byte-identity now checks timestamps/provenance,
-nested-count oracles for every family, "seed recorded but selection deterministic"
-wording). Landed:
+The original **data-free** M7 foundation remains implemented in `evalsim/stress/` with
+analytic-oracle tests and adversarial review. That review caught and fixed a P1: the
+original `teleportation` family co-injected a velocity spike, so "infeasibility detects
+teleportation" was *teaching to the test*. It is now split into a **position-only**
+`teleportation` and a **velocity-only** `kinematic_spike`. Several P2s were also
+addressed (0-based cohort ranks, `current_index < num_steps`, whole-contract identity,
+nested-count oracles, and precise seed wording). The foundation includes:
 
 - a typed defect framework (`DefectSpec`, `DefectManifest`, `Defect`, `DefectRegistry`)
   with strict whole-contract severity-0 identity, no in-place mutation, and sanitized
@@ -28,23 +30,45 @@ wording). Landed:
   baseline, severity curve, `detected`, and `monotone`;
 - metric governance cards (`metric_cards.py`) recording each evaluator's detected families
   and blind spots;
-- an invariance-probe harness (`invariance.py`): agent-order permutation and rigid global
-  translation leave the M5 error/overlap metrics unchanged, and a semantics-breaking
-  control (translating only the rollout) is correctly flagged, proving the harness detects
-  real violations;
-- **the required negative results — complementary evaluator blind spots**: the
-  velocity-based `waymax_kinematic_infeasibility_rate` is **blind to position-domain
-  defects** (frozen/nonreactive agents *and* position-only teleportation both read as
-  feasible) but catches `kinematic_spike`; the log-deviation `position_error_m` is the
-  mirror image — it catches frozen/teleportation but is **blind to a velocity-only spike**
-  (positions still match the log). Two plausible metrics each shown misleading in the
-  other's domain, tying the frozen case directly to the M6 nonreactivity theme.
+- an invariance-probe harness (`invariance.py`) with agent-order permutation, rigid
+  whole-scene translation, and semantics-breaking controls.
 
-Still pending before an accepted M7 result: a calibration/held-out defect split; a broader
-defect taxonomy (off-road/route, dispersion, identity/mask/coordinate bugs); and the WOMD
-detection matrix on the accepted M4 cohort (deferred to a separate accepted run, like
-M5/M6 — needs pre-registration acceptance and a data-access decision). No WOMD data was
-opened for this foundation.
+The construct-audit review then found a second, interpretation-changing generator
+problem. Frozen-agent v1 zeroed velocity at `current_index`, the last observed/current
+frame. That changed history and erased the current-to-future deceleration. Its apparent
+kinematic non-response was therefore a **generator artifact**, not evidence that the
+fixed-step kinematic metric is generically blind to frozen agents or nonreactivity.
+Future-only freeze v2 preserves every field through the current frame, then holds
+selected agents and zeros their velocity from the next frame. This creates one abrupt
+stop per selected agent.
+
+The accepted outcome-aware audit uses exactly three hand-built analytic cases, four
+positive doses `(0.25, 0.50, 0.75, 1.00)`, four controlled probes, and three selected
+M5 metrics. The corrected complete matrix matched:
+
+| Controlled probe | Position | Overlap | Kinematic infeasibility |
+|---|---|---|---|
+| Future-only freeze v2 | responds | no response | responds |
+| Position-only teleport v1 | responds | no response | no response |
+| Velocity-only spike v1 | no response | no response | responds |
+| Forced overlap v1 | responds | responds | no response |
+
+That is six responses and six exact non-responses; all six responding curves are
+nondecreasing and globally non-flat. The kinematic response to future-only freeze proves
+only that this abrupt stop enters its velocity-derived field of view, not that it detects
+generic nonreactivity. The position/velocity field-separated non-responses and the
+overlap-only interpenetration response are construct and wiring evidence, not general
+metric validation. See the
+[sanitized construct-audit result](../results/m7-construct-audit.md).
+
+Still pending under the original v1 gates: calibration/held-out evaluation; broader
+defect families; padding, rotation, and serialization invariance across the registered
+metrics; the complete v1 governance-card fields; and the WOMD detection matrix. The
+construct audit does not claim those gates. It is outcome-aware, not calibrated,
+source-disjoint, held-out, WOMD-backed, population-level, or general metric validation.
+No WOMD data was opened. Broader synthetic or real-scene validation is optional future
+work requiring its own pre-registration and evidence boundary.
+
 **Governing roadmap:** [Waymo-aligned roadmap](2026-07-28-waymo-aligned-roadmap.md) (M7 section)
 **Depends on:** M5 metric system (accepted). Does **not** depend on the M6 scientific
 result, so M7 can proceed in parallel with the gated M6 run.
@@ -53,10 +77,10 @@ result, so M7 can proceed in parallel with the gated M6 run.
 
 M5 shipped thirteen hand-designed motion metrics with analytic oracles and a fixed-cohort
 WOMD application, but the claim ledger keeps "metric stress testing" and "hand-designed
-realism evaluators" at **Partial / Not yet**: adversarial *software* tests are not
+realism evaluators" at **Partial**: adversarial *software* tests are not
 metric-*validation* results. M7 closes that gap by red-teaming the evaluators themselves:
 inject known, severity-controlled defects and measure whether each metric detects them
-**for the right reason**, what it misses, and what it falsely flags.
+**for the right reason**, what they miss, and what they falsely flag.
 
 The M7 claim unlocked only after acceptance: *"developed a severity-calibrated metric
 stress suite that exposed evaluator blind spots."* M7 does **not** claim real-traffic
@@ -94,11 +118,13 @@ fixed cohort and the registered defect generators; they are not population claim
   hand-picked example.
 
 ### 1.5 Real-WOMD expectation (fixed cohort)
+
 Applying the calibrated thresholds to defect-injected variants of the accepted 128-scene
 cohort yields a detection matrix (true/false positives and negatives) with finite-cohort
 stability bands, honest about which metrics are blind to which families.
 
 ### 1.6 Bounded claim after acceptance
+
 A severity-calibrated metric stress suite with a data-derived detection matrix (including
 false positives, false negatives, and at least one exposed blind spot), conditional on
 the fixed cohort and the registered defect generators. No realism, causal, safety, or

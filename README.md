@@ -1,15 +1,28 @@
-# EvalSim — Closed-Loop Simulation-Evaluation Platform
+# EvalSim — Metrics-First Simulator Evaluation
 
-A reproducible platform for evaluating autonomous-driving traffic simulators along
-independent dimensions — kinematic realism, agent interaction, map adherence, behavioral
-diversity, closed-loop reactivity, and physical feasibility — rather than collapsing
-simulation quality into a single leaderboard number.
+A personal learning project about how evaluator choice changes conclusions about
+autonomous-driving traffic simulators. The core accepted experiment runs three
+deliberately simple baselines on the same fixed 128-scene complete-case conditional
+cohort and reports four primary diagnostics across fidelity, interaction, and fixed-step
+kinematic infeasibility rather than collapsing simulator quality into one score.
 
 **Hosted presentation:** [Explore the EvalSim policy lab](https://evalsim-policy-lab.jdai2013.chatgpt.site/)
 
 > **The contribution is the evaluation methodology, not the simulator.** We use simple
 > baselines (log-replay, constant-velocity, IDM) with deliberately different failure modes
 > and invest the engineering in the system *around* them.
+
+**Current status:** the core M5 three-baseline comparison is complete and accepted at its
+bound historical source snapshot. M6 has a pre-data implementation but no accepted WOMD
+scientific result. M7 now includes a deliberately small, outcome-aware, data-free
+construct audit: on three hand-built analytic cases, four controlled defects at four
+doses produced the frozen six-response/six-non-response matrix. This is field-of-view and
+wiring evidence, not calibrated, source-disjoint, held-out, WOMD-backed, or general metric
+validation; the original M7 v1 gates remain unmet.
+
+**Current strategy:** [metrics-first learning strategy](docs/plans/2026-07-31-metrics-first-strategy.md).
+It governs project positioning and learning priority; historical pre-registrations and
+accepted result reports retain their original definitions.
 
 **New here? Read in this order:** this README → the interactive technical presentation
 [`index.html`](index.html) → the design doc
@@ -21,16 +34,18 @@ the canonical
 > [Progress](#progress) table and [Completed work](#completed-work) changelog below always
 > reflect the current state of the repo.
 
-## Design in one paragraph
+## Strategy in one paragraph
 
-The platform is built **contract-first** (ports-and-adapters). The validated `Scenario`
-contract has both a synthetic producer and an M3 local WOMD producer through pinned
-Waymax/JAX on Apple Silicon CPU. M4 makes Waymax a recurring reference rollout and
-semantic-parity path. M5 adds the accepted contract-first metric, slicing,
-paired-statistics, result-store, reporting, and fail-closed official-runner stack, then
-exercises it on the unchanged 128-scenario ten-shard WOMD cohort. Downstream components
-continue to consume **only** project contracts. Synthetic scenes remain analytic
-oracles while every core feature from M3 onward also gets a real-WOMD acceptance path.
+The project asks whether distinct evaluators support one consistent ordering of log
+replay, constant velocity, and IDM. Its four primary M5 diagnostics ask different
+questions: recorded-position fidelity, recorded-speed fidelity, geometric overlap, and
+fixed-step kinematic infeasibility. Their accepted rankings conflict, so the evidence
+supports a multi-metric diagnostic method rather than an overall winner. The system is
+still built **contract-first**: synthetic and WOMD producers emit the same `Scenario`,
+policies emit `Rollout`, and downstream metrics never depend directly on Waymax. Synthetic
+cases provide analytic and controlled-defect oracles; the fixed WOMD cohort supplies a
+bounded real-scene application. Waymax/JAX, official runners, and provenance machinery
+remain advanced evidence infrastructure rather than the main learning story.
 
 ## Progress
 
@@ -44,12 +59,12 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started · 🖥️ Mac/CPU · �
 | M3 | Local WOMD → Waymax/JAX → EvalSim vertical slice | ✅ | 🖥️ |
 | M4 | Deterministic WOMD cohort + Waymax parity | ✅ | 🖥️ |
 | M5 | Metric system + statistical scorecards; real-WOMD acceptance | ✅ | 🖥️ |
-| M6 | Counterfactual closed-loop reactivity | 🚧 | 🖥️ |
-| M7 | Evaluator red-team + metric governance | 🚧 | 🖥️ |
-| M8 | JAX/Flax learned realism discriminator | ⬜ | 🖥️/☁️ |
-| M9 | Semantic-video and real camera/VLM bridge | ⬜ | 🖥️/☁️ |
-| M10 | Scalable, resumable evaluation pipeline | ⬜ | 🖥️/☁️ |
-| M11 | Decision package + staff-caliber communication | ⬜ | 🖥️ |
+| M6 | Counterfactual closed-loop reactivity | 🚧 pre-data | 🖥️ |
+| M7 | Evaluator red-team + metric governance | 🚧 construct audit complete; v1 unmet | 🖥️ |
+| M8 | JAX/Flax learned realism discriminator | ⬜ optional extension | 🖥️/☁️ |
+| M9 | Semantic-video and real camera/VLM bridge | ⬜ optional extension | 🖥️/☁️ |
+| M10 | Scalable, resumable evaluation pipeline | ⬜ optional extension | 🖥️/☁️ |
+| M11 | Decision package + staff-caliber communication | ⬜ optional extension | 🖥️ |
 
 M5 is accepted. Its official execution evaluated all three policies over the unchanged
 128-scenario complete-case conditional cohort from WOMD validation shards
@@ -63,18 +78,19 @@ overall winner or simulator-superiority claim. See the
 [sanitized M5 acceptance report](docs/results/m5-official-acceptance.md) and the
 [accepted pre-registration](docs/plans/2026-07-28-m5-real-womd-metrics-scorecards.md).
 
-M6 is now in progress under an
+M6 has a pre-data implementation under an
 [accepted outcome-blind pre-registration](docs/plans/2026-07-29-m6-counterfactual-reactivity.md).
 Its v1 scope is one typed identity control plus a source-templated ego-braking family
 with primary `b=2.0 m/s²` and secondary `b=4.0 m/s²` doses, an enforced
 history-only/privileged policy boundary, paired 40-transition NumPy evaluation, and a
 bounded 20-transition Waymax reference view. The
 [portable data-free implementation checkpoint](docs/plans/2026-07-29-m6-data-free-implementation-checkpoint.md)
-records the implemented foundations, accepted synthetic/Waymax reviews, and exact
-resume sequence. The pre-data official verifier and two-step `AWAITING_REVIEW` /
-`finalize-review` lifecycle are implemented and have completed fresh independent
-adversarial security review with no P0--P2 blockers. That is implementation acceptance,
-not scientific result acceptance: the required order remains eligibility-only scan,
+records the implemented foundations, prior synthetic/Waymax reviews, and exact resume
+sequence. The pre-data official verifier and two-step `AWAITING_REVIEW` /
+`finalize-review` lifecycle are implemented. The earlier security review was bound to
+its exact source snapshot; this strategy adoption changes `AGENTS.md`, so the current
+source requires fresh review, approval, and the prescribed tag before any official data
+access. No scientific result is accepted: the required order remains eligibility-only scan,
 outcome-suppressed compute pilot, official execution that stops at `AWAITING_REVIEW`,
 and a separate three-role `finalize-review`. The eligibility scan, compute pilot, WOMD
 outcomes, live determinism evidence, result claims, and presentation closure remain
@@ -82,10 +98,9 @@ pending. Four broader intervention families are explicitly deferred. No M6 WOMD
 eligibility count or policy outcome has been opened, and no M6 result claim is
 available yet.
 
-**Tests:** latest confirmed before final M6 result-store hardening: 1,173 passed + 1
-expected local-data skip; this remains historical evidence until the current full-suite
-rerun is recorded · **Last updated:** 2026-07-30 (M6 implementation/security
-accepted; official WOMD execution and scientific result remain pending)
+**Tests:** current full repository suite: 1,444 passed + 1 expected local-data skip on
+2026-07-31 · **Last updated:** 2026-07-31 (construct audit and presentation redesign
+verified; M6 official WOMD execution and scientific result remain pending)
 
 ## Completed work
 
@@ -504,8 +519,9 @@ reproduction must independently pass the same result verification and claim revi
 
 ## M6 official lifecycle (pending)
 
-M6 has implementation/security acceptance but no accepted scientific result. Before
-any M6 data access, audit and release the exact reviewed source snapshot, push `main`,
+M6's pre-data implementation passed security review at an earlier exact source snapshot,
+but it has no accepted scientific result and the current source is not approved. Before
+any M6 data access, freshly review and release the exact source snapshot, push `main`,
 and obtain independent approval of that exact pushed commit. Represent that independent
 approval with a **lightweight (not annotated)** `m6-approved-v1` tag exactly at pushed
 `main`, push the tag, and verify that remote `main` and the remote tag resolve to the
@@ -527,34 +543,47 @@ to M6. The exact eligibility → compute-pilot → official `AWAITING_REVIEW` �
 `finalize-review` command sequence is recorded in the
 [M6 checkpoint](docs/plans/2026-07-29-m6-data-free-implementation-checkpoint.md).
 
-## M7 evaluator red-team (in progress)
+## M7 evaluator red-team (bounded construct audit complete)
 
 M7 stress-tests the M5 evaluators themselves: inject known, severity-controlled defects
-and measure whether each metric detects them, what it misses, and what it falsely flags.
-The **data-free foundation** is implemented in `evalsim/stress/` and verified by 36
-analytic-oracle tests (adversarially subagent-reviewed — one **P1 caught and fixed**: the
-teleportation family had co-injected a velocity spike, "teaching to the test"; it's now a
-pure position defect, with velocity corruption split into a separate honest family):
+and measure which metric fields respond. The **data-free foundation** is implemented in
+`evalsim/stress/`. Review found two generator problems that materially changed the
+interpretation: teleportation had co-injected a velocity spike, and frozen-agent v1
+zeroed velocity at the current frame, erasing the future deceleration the kinematic
+diagnostic should observe. Teleportation is now position-only, velocity corruption is a
+separate family, and future-only freeze v2 preserves observed/current state before
+creating an abrupt stop.
 
 - a typed defect framework with strict whole-contract severity-0 identity and sanitized
   manifests (0-based cohort ranks only — no native id/coordinate/payload);
-- four severity-controlled families with monotone, nested oracles — `frozen_agent`
-  (nonreactivity), `teleportation` (position-only), `kinematic_spike` (velocity-only),
-  `overlap`;
-- a detection matrix (defect × metric × severity) and per-metric governance cards;
-- an invariance-probe harness (agent-order permutation + rigid translation leave the M5
-  metrics unchanged; a semantics-breaking control is correctly flagged);
-- the required negative results — **complementary evaluator blind spots**: the
-  velocity-based kinematic-infeasibility rate is **blind to position-domain defects**
-  (frozen/nonreactive agents *and* position-only teleportation) but catches a velocity
-  spike; log-deviation position error is the mirror image (catches those, blind to a
-  velocity-only spike). Each metric shown misleading in the other's domain — the frozen
-  case tying directly to the M6 nonreactivity theme.
+- four severity-controlled families with monotone, nested oracles — future-only
+  `frozen_agent` v2, `teleportation` (position-only), `kinematic_spike`
+  (velocity-only), and `overlap`;
+- a detection matrix (defect × metric × severity) and governance cards for the metrics
+  exercised in the foundation;
+- an invariance-probe harness (agent-order permutation + rigid translation leave the
+  selected position, overlap, and fixed-step kinematic metrics unchanged;
+  semantics-breaking controls are correctly flagged);
+- a complete outcome-aware construct audit over three analytic cases × four doses:
+  exactly six metric/defect cells respond and six do not; every responding curve is
+  nondecreasing and non-flat. Position error responds to future freeze, teleportation,
+  and forced overlap; the fixed-step kinematic diagnostic responds to the abrupt stop
+  created by future-only freeze and to a velocity spike; overlap responds only to forced
+  interpenetration in these cases.
 
-Deferred to an accepted M7 result: a calibration/held-out split, a broader defect
-taxonomy, and the WOMD detection matrix on the accepted M4 cohort (a separate accepted
-run, not opened here). Pre-registration + status:
-[M7 evaluator red-team](docs/plans/2026-07-31-m7-evaluator-red-team.md).
+The corrected result means the old frozen-agent/kinematic miss was a **generator
+artifact**, not evidence that the kinematic metric is generically blind to frozen or
+nonreactive agents. Its response here is evidence about one abrupt future stop, not
+general nonreactivity detection. The clean field-separated non-responses—position error
+to velocity-only corruption and kinematic infeasibility to position-only corruption—are
+useful construct/wiring checks, not metric validation.
+
+The [outcome-aware construct-audit amendment](docs/plans/2026-07-31-m7-metrics-first-amendment.md)
+defines the bounded audit; the [sanitized result](docs/results/m7-construct-audit.md)
+records the complete matrix and claim boundary. It does not rewrite the historical
+[M7 v1 preregistration](docs/plans/2026-07-31-m7-evaluator-red-team.md), whose original
+calibration, held-out, broader-invariance, governance-card, and WOMD gates remain unmet.
+No data was opened. Broader synthetic or real-scene validation is optional future work.
 
 ## Layout
 
@@ -568,7 +597,7 @@ evalsim/
   slices/       # real-WOMD scenario slicing (M5)
   stats/        # paired scenario statistics and aggregation (M5)
   perturb/      # counterfactual ego interventions (M6)
-  stress/       # evaluator corruptions, calibration, and governance (M7)
+  stress/       # evaluator corruptions, invariance, and construct audit (M7)
   report/       # scorecards and decision artifacts (M5/M11)
   config/       # reproducible CLI, caching, and resume (M10)
   viz.py        # static scenario visualization (M1)
@@ -582,7 +611,7 @@ public/og.png   # social preview artwork (not an experiment artifact)
 scripts/        # dependency-free presentation build and structural checks
 ```
 
-## Résumé framing
+## What this project currently demonstrates
 
 The current implemented stack is **Python · NumPy · PyArrow · Matplotlib**, plus an
 optional pinned **WOMD · Waymax · JAX · TensorFlow · Flax** runtime. M3 established the
@@ -595,8 +624,12 @@ reported metrics and 8 source-only slices were evaluated over that unchanged coh
 with paired finite-cohort scorecards, deterministic scenario-reweighting stability
 analysis, and bounded native Waymax metric cross-checks. The mixed result supports the
 evaluation methodology, not an overall policy winner, WOMD-population conclusion,
-causal claim, or simulator-superiority claim. M6 counterfactual implementation is now
-in progress under its accepted pre-registration, but counterfactual results, stress
-tests, learned evaluators, scalable execution, and video/VLM work remain unavailable
-as claims until their evidence gates pass. See the
+causal claim, or simulator-superiority claim. M6 counterfactual implementation exists
+pre-data, but no counterfactual WOMD result is accepted. M7's outcome-aware, data-free
+construct audit matched its frozen six-response/six-non-response matrix on three
+hand-built cases. It verifies intended field-of-view and wiring only: it is not
+calibrated, source-disjoint, held-out, WOMD-backed, or general metric validation, and the
+original v1 gates remain unmet. Learned
+evaluators, scalable execution, and video/VLM work remain optional extensions without
+supporting evidence. See the
 [claim-to-evidence ledger](docs/interview/claim-evidence-ledger.md).

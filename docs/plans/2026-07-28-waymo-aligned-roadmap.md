@@ -1,23 +1,42 @@
 # EvalSim — Waymo-aligned roadmap
 
-**Date:** 2026-07-30
-**Last evidence update:** 2026-07-30
-**Status:** Canonical plan for M3 onward
+**Date:** 2026-07-31
+**Last evidence update:** 2026-07-31
+**Status:** Canonical technical evidence roadmap for M3 onward
 **Supersedes:** The unfinished portion of
 [`2026-07-27-evalsim-implementation-plan.md`](2026-07-27-evalsim-implementation-plan.md)
 
-M0–M2 remain complete and unchanged. The old remaining sequence is retired because it
-postponed WOMD, Waymax, and JAX until the end and reduced learned evaluation to a small
-add-on. That would not provide convincing evidence for a simulation-evaluation role
-centered on learned discriminators, evaluator validity, scalable ML systems, and
-multimodal world-model evaluation.
+**Project-positioning companion:** the
+[metrics-first learning strategy](2026-07-31-metrics-first-strategy.md) governs what the
+project emphasizes publicly and what work is prioritized next. This roadmap retains the
+technical evidence sequence; it does not make every later milestone a presentation or
+completion requirement.
+
+M0–M2 remain complete and unchanged. This roadmap originally brought WOMD, Waymax, JAX,
+learned evaluation, scale, and multimodal ideas forward as a broad role-evidence
+sequence. Under the current strategy, M3–M5 remain historical accepted evidence; M7's
+bounded outcome-aware construct audit is implemented; and the later technology-heavy
+sections are optional extension designs rather than promised deliverables.
+
+## Strategy decision (2026-07-31)
+
+The primary project is now the M5 evaluation argument: use three deliberately simple
+baselines as probes, explain what four primary diagnostics measure and miss, and retain
+their contradictory rankings instead of manufacturing one realism score. M7's corrected
+construct audit is the current teaching artifact because it exposes evaluator
+field-of-view, generator risk, and bounded blind spots without claiming general metric
+validity. M6 remains a distinct pre-data counterfactual
+extension with no accepted WOMD result. M8--M11 are optional extensions, not prerequisites
+for a complete metrics-first presentation. The core path is CPU-first; Waymax/JAX and
+WOMD remain bounded reproduction/reference infrastructure, while Linux or GPU work must
+earn its place through a separately evidenced scaling or learned-model question.
 
 ## Operating principle
 
-> Synthetic scenarios remain the controlled test bench; from M3 onward, every core
-> feature must also have a real-WOMD acceptance path, and Waymax must be used repeatedly
-> as a data model, execution backend, and separately implemented domain-native
-> semantic reference with an explicit shared-decode limitation.
+> Use synthetic analytic oracles first. Any claim promoted as real-scene evidence
+> requires a separately gated real-WOMD acceptance path; learning, explanation, and
+> data-free evaluator validation do not require WOMD. When real-scene evidence is in
+> scope, use Waymax behind the project contracts and retain the shared-decode limitation.
 
 The contract-first architecture stays. EvalSim code outside adapters must not depend on
 Waymax representations. Synthetic cases provide analytic oracles and known defects;
@@ -42,21 +61,29 @@ work.
   bounded native Waymax parity ran over the unchanged 128-case cohort. The official
   result passed exact 6,656/1,024/312/144 row-domain verification, deterministic
   scorecard re-derivation, and independent semantic, statistical, and privacy/claim
-  reviews. M6 now has a
+  reviews. M7 now also has an outcome-aware, data-free construct audit: corrected
+  future-only freeze v2 plus three exact analytic cases produced the frozen
+  six-response/six-non-response matrix over four doses and three selected metrics. This
+  is intended field-of-view and wiring evidence only. M6 now has a
   [portable data-free implementation checkpoint](2026-07-29-m6-data-free-implementation-checkpoint.md):
   its contract, access-control, typed-plan, synthetic-oracle, bounded Waymax, and
   guarded-store foundations are implemented. Its capture-first official verifier/CLI,
-  runtime/source authority, and two-step result-review lifecycle have also completed a
-  fresh independent adversarial security review with no P0--P2 blockers. This accepts
-  the implementation boundary only; it does not accept a scientific M6 result. The
-  latest recorded full-suite result before final result-store hardening remains 1,173
-  passing tests and one expected local-data skip pending the current full-suite record.
+  runtime/source authority, and two-step result-review lifecycle were independently
+  reviewed at an earlier exact source snapshot. This accepts that historical
+  implementation boundary only; the current strategy change touches `AGENTS.md`, which
+  participates in the official source catalog, so fresh review, approval, and the
+  prescribed tag are required before any official M6 data access. It does not accept a
+  scientific M6 result. The current repository verification records 1,444 passing tests
+  and one expected local-data skip on 2026-07-31.
 - **Available locally:** WOMD v1.3.1 TFExample validation shards `00000`–`00009`.
   Additional files in the directory do not expand the frozen M4 population.
 - **Not yet accepted:** the M6 eligibility scan, compute pilot, WOMD/Waymax outcome
   execution, live determinism evidence, sealed result, three-role result review, and
-  result claim; evaluator stress tests; learned evaluators; multimodal/video/VLM
-  evaluation; and a scalable resumable pipeline. M5 supports fixed-cohort metric
+  result claim; any calibrated, source-disjoint, held-out, or separately gated WOMD
+  evaluator-stress claim; learned
+  evaluators; multimodal/video/VLM evaluation; and a scalable resumable pipeline. The
+  M7 construct audit does not satisfy the original v1 gates; broader validation is an
+  optional, separately pre-registered extension. M5 supports fixed-cohort metric
   comparisons, but not an overall policy winner, simulator superiority,
   WOMD-population inference, or production-readiness claim.
 
@@ -123,8 +150,8 @@ semantic loss at the fields we intentionally support?
 - Conversion is deterministic and the contract plus Parquet round-trip tests pass.
 - EvalSim and Waymax views agree on scenario/SDC identity, agent count, supported
   horizon, valid masks, and map placement.
-- The current full Waymo-extra suite passes 493 tests with one expected local-data
-  skip; the core-only suite passes 418 with 22 expected optional-runtime skips. The
+- At the M3 acceptance snapshot, the full Waymo-extra suite passed 493 tests with one expected local-data
+  skip; the core-only suite passed 418 with 22 expected optional-runtime skips. The
   separately opted-in M3 integration passed at M3 acceptance, and M4 now has its own
   standalone local-data acceptance.
 - No real-data golden fixture or converted payload is committed; regular CI uses
@@ -325,11 +352,12 @@ now in progress under its accepted outcome-blind pre-registration.
 **Accepted pre-registration:** [exact M6 v1 scope](2026-07-29-m6-counterfactual-reactivity.md).
 **Implementation checkpoint:** [portable data-free state and exact resume
 sequence](2026-07-29-m6-data-free-implementation-checkpoint.md).
-The official verifier/CLI and its capture-first authority boundary have completed
-independent adversarial security review with no P0--P2 blockers. M6 nevertheless
-remains in progress: no WOMD eligibility count or policy outcome has been opened, no
-live determinism receipt or sealed result exists, and no scientific result is accepted.
-The reviewed lifecycle is eligibility-only → outcome-suppressed compute pilot →
+At an earlier exact source snapshot, the official verifier/CLI and its capture-first
+authority boundary completed independent adversarial security review with no P0--P2
+blockers. The current source requires fresh review and approval before data access. No
+WOMD eligibility count or policy outcome has been opened, no live determinism receipt or
+sealed result exists, and no scientific result is accepted.
+The designed lifecycle is eligibility-only → outcome-suppressed compute pilot →
 official execution ending at `AWAITING_REVIEW` → separate three-role
 `finalize-review`.
 
@@ -373,23 +401,35 @@ cohort, with audited history-only policies and explicitly privileged log-replay,
 ego-plan, and Waymax references. This will not imply real-traffic causality, safety,
 simulator superiority, or evaluator validity beyond the registered measures.
 
-### M7 — Evaluator red-team and metric governance 🚧 (data-free foundation implemented)
+### M7 — Evaluator red-team and metric governance 🚧 (bounded construct audit implemented)
 
-The data-free M7 foundation is implemented and verified in `evalsim/stress/` (defect
-framework + four families — frozen-agent, position-only teleportation, velocity-only
-kinematic_spike, overlap — with analytic oracles, a detection matrix, metric governance
-cards, an invariance-probe harness, and complementary blind-spot negative results: the
-velocity-based infeasibility rate misses position-domain defects while position error
-misses velocity spikes). 36 oracle tests, adversarially subagent-reviewed (a P1 —
-teleportation teaching to the test — was caught and fixed). The calibration/held-out
-split, broader taxonomy, and the WOMD detection matrix remain pending. Pre-registration +
-status: [M7 evaluator red-team](2026-07-31-m7-evaluator-red-team.md).
+The data-free M7 foundation is implemented in `evalsim/stress/`: four controlled defect
+families, analytic oracles, a detection matrix, metric governance cards, and invariance
+probes. Review caught teleportation teaching to the kinematic test and split it into
+position-only teleportation plus a velocity-only spike. It then found that frozen-agent
+v1 changed velocity at the current frame and erased the future deceleration; that old
+kinematic miss was a generator artifact, not evidence of generic blindness to frozen
+agents or nonreactivity.
+
+The accepted, outcome-aware
+[construct-audit amendment](2026-07-31-m7-metrics-first-amendment.md) adds future-only
+freeze v2 and exactly three hand-built analytic cases. Across four doses, four probes,
+and three selected metrics, the corrected matrix has six responses and six exact
+non-responses; every responding curve is nondecreasing and globally non-flat. The
+kinematic response to freeze is specific to the injected abrupt stop. The position/
+velocity field separation and overlap response are construct/wiring evidence, not
+general validation. See the [sanitized result](../results/m7-construct-audit.md).
+
+The original v1 gates remain unmet. This audit is outcome-aware, not calibrated,
+source-disjoint, held-out, WOMD-backed, population-level, or general metric validation.
+Broader validation is optional future work. Historical pre-registration + status:
+[M7 evaluator red-team](2026-07-31-m7-evaluator-red-team.md).
 
 
 **Question:** Do the evaluators detect known defects for the right reason, and what do
 they miss or falsely flag?
 
-**Build**
+**Build (original v1 scope)**
 
 - Add severity-controlled defects: frozen/nonreactive agents, teleportation, jerk/yaw
   spikes, infeasible motion, overlap, offroad/wrong-way motion, collapse, excessive
@@ -406,14 +446,14 @@ they miss or falsely flag?
 - Release-candidate metrics pass identity, invariance, and expected-direction tests.
 - Detection is measured across severity curves, not one hand-picked example.
 - The data-derived detection matrix includes false positives, false negatives, and
-  confidence intervals.
+  deterministic finite-cohort stability bands.
 - At least one plausible metric is shown to be misleading.
 - The adversarial review finds no trivial provenance, padding, or preprocessing shortcut.
 
 **Claim unlocked after acceptance:** developed a severity-calibrated metric stress suite
 that exposed evaluator blind spots.
 
-### M8 — JAX/Flax learned realism discriminator
+### Optional extension M8 — JAX/Flax learned realism discriminator
 
 **Question:** Can a learned evaluator generalize beyond the simulator fingerprints and
 defect families it saw during training?
@@ -457,11 +497,11 @@ evaluation.
 Do not call this a large-scale discriminator pipeline until measured scale justifies the
 phrase.
 
-### M9 — Multimodal, video, and VLM evaluation bridge
+### Optional extension M9 — Multimodal, video, and VLM evaluation bridge
 
-This is the largest role-specific gap. WOMD motion TFExamples contain trajectories,
-roadgraph, lights, and paths—not camera pixels. A top-down raster animation must never
-be described as camera or sensor realism.
+This extension is not required for the metrics-first project. If pursued, remember that
+WOMD motion TFExamples contain trajectories, roadgraph, lights, and paths—not camera
+pixels. A top-down raster animation must never be described as camera or sensor realism.
 
 #### M9A — Semantic-scene video lab
 
@@ -497,7 +537,7 @@ be described as camera or sensor realism.
 driving sensor sequences across temporal, geometric, multimodal, and
 condition-following defects.
 
-### M10 — Scalable and resumable evaluation pipeline
+### Optional extension M10 — Scalable and resumable evaluation pipeline
 
 **Question:** Can the same experiment be reproduced, resumed, audited, and scaled without
 pretending a laptop run is production deployment?
@@ -529,7 +569,7 @@ pretending a laptop run is production deployment?
 **Claim unlocked after acceptance:** built a resumable, manifest-driven JAX evaluation
 pipeline and measured its local and accelerator cost/performance.
 
-### M11 — Decision package and staff-caliber communication
+### Optional extension M11 — Broader decision package and communication
 
 **Purpose:** Turn implementation into defensible evidence and demonstrate engineering
 judgment rather than a feature checklist.
@@ -553,7 +593,11 @@ The solo project can demonstrate architecture and technical direction. Mentoring
 organizational leadership claims must come from real professional experience, not from
 this repository.
 
-## Dependency map
+## Optional-extension dependency map
+
+This graph records technical prerequisites if an extension is separately chosen. It is
+not a required completion path; the current path is M5 explanation → bounded M7
+construct audit.
 
 ```mermaid
 flowchart TD
@@ -573,20 +617,21 @@ flowchart TD
     M9B -. "role-specific extension" .-> M11
 ```
 
-M7 is revisited after M8 and M9 so learned and VLM evaluators enter the same conformance
-suite.
+If optional M8 or M9 work is pursued, those evaluators may later enter the same M7
+conformance framework. That is not a current prerequisite.
 
-## Stop lines
+## Current completion boundary and optional packages
 
-| Package | Required milestones | Honest result |
+| Package | Scope | Honest result |
 |---|---|---|
-| Real Waymo foundation | M3–M4 | WOMD, Waymax, and JAX are used substantively |
-| Strong trajectory evaluator | M3–M8 | Real-data metrics, causal reactivity, evaluator red-team, learned discriminator |
-| Role-specific multimodal bridge | M9A–M9B | Validated semantic-video and real camera/VLM evaluator evidence |
-| Staff-caliber systems package | M10–M11 | Measured scale path, reliability, release reasoning, and communication |
+| Current metrics-first project | Accepted M3–M5 evidence + M7 outcome-aware construct audit | Mixed/no-winner comparison, explicit metric semantics, a corrected generator artifact, and bounded field-of-view evidence |
+| Counterfactual extension | M6, only after its fresh source/data gates | Bounded ego-conditioned reactivity evidence if an official result is accepted |
+| Learned-evaluator extension | M8, optional | Calibrated generator-held-out evidence if actually completed |
+| Multimodal extension | M9, optional | Semantic-video or real-camera evidence at the scope actually run |
+| Scale/decision extension | M10–M11, optional | Measured execution and formal decision artifacts, without production overclaiming |
 
-If time is constrained, protect M3, M4, M7, and M8. Reduce metric breadth before
-removing evaluator validation.
+Protect the M5 metric explanation and bounded M7 construct reasoning. Do not start M8--M11 merely
+to complete the old sequence.
 
 ## Explicit scope cuts
 

@@ -12,8 +12,16 @@ Artifacts:
   mapped to the implementation and empirical evidence required to use them.
 - [`interview-study-plan.md`](interview-study-plan.md) — concepts, exercises,
   adversarial questions, and staff-caliber system-design topics.
+- [Metrics-first learning strategy](../plans/2026-07-31-metrics-first-strategy.md) — the
+  canonical project positioning, presentation argument, and current learning priority.
+- [M7 construct-audit amendment](../plans/2026-07-31-m7-metrics-first-amendment.md) —
+  the accepted outcome-aware implementation plan for a bounded analytic teaching
+  artifact; it is not a held-out pre-registration.
+- [M7 construct-audit result](../results/m7-construct-audit.md) — the corrected complete
+  matrix, exact analytic curves, and claim boundary.
 - [Waymo-aligned roadmap](../plans/2026-07-28-waymo-aligned-roadmap.md) — the canonical
-  evidence-led implementation plan for M3 onward.
+  technical evidence sequence for M3 onward; later milestones are not all required for
+  the metrics-first presentation.
 
 Derived documents must omit personal contact details, recruiter correspondence,
 interview scheduling information, and other private résumé content.

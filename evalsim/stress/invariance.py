@@ -16,10 +16,10 @@ import numpy as np
 
 from evalsim.contracts.metric import Metric
 from evalsim.contracts.rollout import Rollout
-from evalsim.contracts.scenario import Agent, Scenario
+from evalsim.contracts.scenario import Agent, MapPolyline, Scenario
 from evalsim.metrics.registry import MetricRegistry
 
-_TOL = 1e-4
+_TOL = 1e-6
 
 
 @runtime_checkable
@@ -56,12 +56,31 @@ def _copy_agent(agent: Agent, *, dx: float = 0.0, dy: float = 0.0) -> Agent:
     )
 
 
-def _new_scenario(scenario: Scenario, agents: list[Agent]) -> Scenario:
+def _copy_map_feature(
+    feature: MapPolyline,
+    *,
+    dx: float = 0.0,
+    dy: float = 0.0,
+) -> MapPolyline:
+    offset = np.asarray([dx, dy], dtype=float)
+    return MapPolyline(
+        type=feature.type,
+        xy=np.array(feature.xy, copy=True) + offset,
+    )
+
+
+def _new_scenario(
+    scenario: Scenario,
+    agents: list[Agent],
+    *,
+    map_features: Sequence[MapPolyline] | None = None,
+) -> Scenario:
+    source_map = scenario.map if map_features is None else map_features
     return Scenario(
         scenario_id=scenario.scenario_id,
         timestamps=np.array(scenario.timestamps, copy=True),
         agents=agents,
-        map=list(scenario.map),
+        map=[_copy_map_feature(feature) for feature in source_map],
         ego_index=scenario.ego_index,
         metadata=dict(scenario.metadata),
     )
@@ -123,7 +142,14 @@ class TranslationProbe:
         del seed
         scn = [_copy_agent(a, dx=self.dx, dy=self.dy) for a in scenario.agents]
         rol = [_copy_agent(a, dx=self.dx, dy=self.dy) for a in rollout.agents]
-        return _new_scenario(scenario, scn), _new_rollout(rollout, rol)
+        map_features = [
+            _copy_map_feature(feature, dx=self.dx, dy=self.dy)
+            for feature in scenario.map
+        ]
+        return (
+            _new_scenario(scenario, scn, map_features=map_features),
+            _new_rollout(rollout, rol),
+        )
 
 
 class RolloutOnlyTranslationProbe:
@@ -143,6 +169,49 @@ class RolloutOnlyTranslationProbe:
         del seed
         scn = [_copy_agent(a) for a in scenario.agents]
         rol = [_copy_agent(a, dx=self.dx, dy=self.dy) for a in rollout.agents]
+        return _new_scenario(scenario, scn), _new_rollout(rollout, rol)
+
+
+class RolloutOnlyVelocityImpulseProbe:
+    """Semantics-BREAKING control: spike one world agent's rollout velocity.
+
+    The first non-ego agent receives a one-frame ``vx`` impulse at the registered
+    mid-future frame. The scenario and every other rollout field are defensively copied
+    without modification so this control isolates the kinematic metric's velocity path.
+    """
+
+    def __init__(self, impulse_mps: float = 100.0) -> None:
+        self.impulse_mps = float(impulse_mps)
+        if not np.isfinite(self.impulse_mps):
+            raise ValueError("impulse_mps must be finite")
+        self.name = "rollout_only_velocity_impulse"
+
+    def apply(
+        self, scenario: Scenario, rollout: Rollout, *, seed: int
+    ) -> tuple[Scenario, Rollout]:
+        del seed
+        current = scenario.metadata.get("current_index", 0)
+        if (
+            isinstance(current, (bool, np.bool_))
+            or not isinstance(current, (int, np.integer))
+            or not 0 <= int(current) < scenario.num_steps
+        ):
+            raise ValueError("current_index must index the scenario horizon")
+        current = int(current)
+
+        scn = [_copy_agent(agent) for agent in scenario.agents]
+        rol = [_copy_agent(agent) for agent in rollout.agents]
+        world_positions = [
+            position
+            for position in range(len(scenario.agents))
+            if position != scenario.ego_index
+        ]
+        if world_positions and current + 1 < rollout.num_steps:
+            impulse_frame = min(
+                current + max(1, (rollout.num_steps - 1 - current) // 2),
+                rollout.num_steps - 1,
+            )
+            rol[world_positions[0]].vx[impulse_frame] += self.impulse_mps
         return _new_scenario(scenario, scn), _new_rollout(rollout, rol)
 
 
@@ -203,6 +272,7 @@ __all__ = [
     "InvarianceProbe",
     "InvarianceResult",
     "RolloutOnlyTranslationProbe",
+    "RolloutOnlyVelocityImpulseProbe",
     "TranslationProbe",
     "check_invariance",
     "invariance_matrix",

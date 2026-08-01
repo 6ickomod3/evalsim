@@ -24,6 +24,7 @@ from evalsim.stress.defects import (
     DefectRegistryError,
     DefectSpec,
     FrozenAgentDefect,
+    FrozenAgentDefectV2,
 )
 
 
@@ -189,6 +190,107 @@ def test_frozen_agent_detected_by_position_error_monotone() -> None:
         assert lo <= hi + 1e-9  # monotone non-decreasing in severity
 
 
+# --- FrozenAgentDefectV2 corrected construct-audit oracles ----------------
+
+def test_frozen_agent_v2_zero_is_full_identity_without_shared_buffers() -> None:
+    scenario, rollout = _moving_pair()
+    rollout.metadata = {"nested": {"values": [1, {"labels": ["original"]}]}}
+    source_before = copy.deepcopy(scenario)
+    rollout_before = copy.deepcopy(rollout)
+    corrupted, manifest = FrozenAgentDefectV2().apply(
+        scenario, rollout, severity=0.0, seed=7
+    )
+
+    assert _rollouts_equal(corrupted, rollout)
+    assert _rollouts_equal(rollout, rollout_before)
+    assert manifest.family == "frozen_agent"
+    assert manifest.version == "v2"
+    assert manifest.affected_agent_ordinals == ()
+    assert not np.shares_memory(corrupted.timestamps, rollout.timestamps)
+    assert corrupted.metadata == rollout.metadata
+    assert corrupted.metadata is not rollout.metadata
+    assert corrupted.metadata["nested"] is not rollout.metadata["nested"]
+    assert (
+        corrupted.metadata["nested"]["values"]
+        is not rollout.metadata["nested"]["values"]
+    )
+    corrupted.metadata["nested"]["values"][1]["labels"].append("changed")
+    assert rollout.metadata["nested"]["values"][1]["labels"] == ["original"]
+    for copied, original in zip(corrupted.agents, rollout.agents, strict=True):
+        for field in ("valid", "x", "y", "heading", "vx", "vy"):
+            assert not np.shares_memory(getattr(copied, field), getattr(original, field))
+    assert scenario.metadata == source_before.metadata
+    assert np.array_equal(scenario.timestamps, source_before.timestamps)
+    for actual, before in zip(scenario.agents, source_before.agents, strict=True):
+        for field in ("valid", "x", "y", "heading", "vx", "vy"):
+            assert np.array_equal(getattr(actual, field), getattr(before, field))
+
+
+def test_v1_rebuild_deep_copies_nested_metadata_without_changing_values() -> None:
+    scenario, rollout = _moving_pair()
+    rollout.metadata = {"nested": {"values": [1, 2]}}
+    corrupted, manifest = FrozenAgentDefect().apply(
+        scenario, rollout, severity=0.0, seed=7
+    )
+    assert _rollouts_equal(corrupted, rollout)
+    assert manifest.version == "v1"
+    assert corrupted.metadata == rollout.metadata
+    assert corrupted.metadata["nested"] is not rollout.metadata["nested"]
+    assert (
+        corrupted.metadata["nested"]["values"]
+        is not rollout.metadata["nested"]["values"]
+    )
+    corrupted.metadata["nested"]["values"].append(3)
+    assert rollout.metadata == {"nested": {"values": [1, 2]}}
+
+
+def test_frozen_agent_v2_preserves_history_current_and_unselected_agents() -> None:
+    scenario, rollout = _moving_pair(n_world=4, current_index=1)
+    corrupted, manifest = FrozenAgentDefectV2().apply(
+        scenario, rollout, severity=0.25, seed=0
+    )
+    assert manifest.affected_agent_ordinals == (0,)
+    selected = corrupted.agents[1]
+    original = rollout.agents[1]
+    for field in ("valid", "x", "y", "heading", "vx", "vy"):
+        assert np.array_equal(getattr(selected, field)[:2], getattr(original, field)[:2])
+    assert np.all(selected.x[2:] == original.x[1])
+    assert np.all(selected.y[2:] == original.y[1])
+    assert np.all(selected.heading[2:] == original.heading[1])
+    assert np.all(selected.vx[2:] == 0.0)
+    assert np.all(selected.vy[2:] == 0.0)
+    assert np.array_equal(selected.valid, original.valid)
+
+    for copied, untouched in zip(corrupted.agents[2:], rollout.agents[2:], strict=True):
+        for field in ("valid", "x", "y", "heading", "vx", "vy"):
+            assert np.array_equal(getattr(copied, field), getattr(untouched, field))
+    assert corrupted.scenario_id == rollout.scenario_id
+    assert corrupted.sim_name == rollout.sim_name
+    assert corrupted.sim_version == rollout.sim_version
+    assert corrupted.seed == rollout.seed
+    assert corrupted.perturbation == rollout.perturbation
+    assert corrupted.metadata == rollout.metadata
+
+
+def test_frozen_agent_v2_manifests_have_exact_nested_counts() -> None:
+    scenario, rollout = _moving_pair(n_world=4)
+    manifests = [
+        FrozenAgentDefectV2().apply(scenario, rollout, severity=dose, seed=5)[1]
+        for dose in (0.25, 0.50, 0.75, 1.00)
+    ]
+    assert [manifest.affected_agent_count for manifest in manifests] == [1, 2, 3, 4]
+    assert [manifest.affected_agent_ordinals for manifest in manifests] == [
+        (0,),
+        (0, 1),
+        (0, 1, 2),
+        (0, 1, 2, 3),
+    ]
+    assert all(manifest.family == "frozen_agent" for manifest in manifests)
+    assert all(manifest.version == "v2" for manifest in manifests)
+    assert all(manifest.seed == 5 for manifest in manifests)
+    assert all(manifest.total_world_agent_count == 4 for manifest in manifests)
+
+
 # --- DefectRegistry --------------------------------------------------------
 
 def test_registry_one_active_version_and_sorted_iteration() -> None:
@@ -214,6 +316,7 @@ from evalsim.stress.defects import (  # noqa: E402
     KinematicSpikeDefect,
     OverlapDefect,
     TeleportationDefect,
+    construct_audit_defect_registry,
     default_defect_registry,
 )
 
@@ -372,6 +475,10 @@ def test_default_registry_exposes_all_families() -> None:
         "overlap",
         "teleportation",
     )
+    assert registry.get("frozen_agent").spec.version == "v1"
+    audit_registry = construct_audit_defect_registry()
+    assert audit_registry.families == registry.families
+    assert audit_registry.get("frozen_agent").spec.version == "v2"
 
 
 def test_future_frame_defects_are_honest_noop_at_terminal_current_index() -> None:

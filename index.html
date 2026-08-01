@@ -4,18 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07110f">
-  <meta name="description" content="EvalSim is a contract-first platform for evaluating traffic simulators. Explore accepted M0–M5 evidence, an official ten-shard WOMD evaluation on a fixed 128-scenario cohort, three baseline policies, and the in-progress M6 counterfactual reactivity build (implementation landed, no result yet).">
+  <meta name="description" content="EvalSim is a personal metrics-first learning project: three simple comparison baselines, four primary diagnostics, one fixed 128-scene conditional cohort, and controlled tests of blind spots in selected evaluators.">
   <link rel="canonical" href="https://evalsim-policy-lab.jdai2013.chatgpt.site/">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/">
-  <meta property="og:title" content="EvalSim — Closed-loop simulator evaluation">
-  <meta property="og:description" content="M0–M5 accepted · official ten-shard WOMD evaluation · 128 paired scenarios · M6 in progress (implementation landed, no result yet)">
+  <meta property="og:title" content="EvalSim — Metrics-first simulator evaluation">
+  <meta property="og:description" content="Three baseline probes · four primary diagnostics · one fixed 128-scene conditional cohort · no overall winner">
   <meta property="og:image" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/og.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="EvalSim — Closed-loop simulator evaluation">
-  <meta name="twitter:description" content="M0–M5 accepted · official ten-shard WOMD evaluation · 128 paired scenarios · M6 in progress (implementation landed, no result yet)">
+  <meta name="twitter:title" content="EvalSim — Metrics-first simulator evaluation">
+  <meta name="twitter:description" content="Three baseline probes · four primary diagnostics · one fixed 128-scene conditional cohort · no overall winner">
   <meta name="twitter:image" content="https://evalsim-policy-lab.jdai2013.chatgpt.site/og.png">
-  <title>EvalSim — Closed-loop simulator evaluation</title>
+  <title>EvalSim — Metrics-first simulator evaluation</title>
   <style>
     :root {
       color-scheme: dark;
@@ -159,6 +159,11 @@
     }
     .nav-links .source-link:hover {
       border-color: var(--mint);
+      color: var(--mint);
+    }
+    .nav-links .study-link {
+      border-color: var(--mint);
+      background: var(--mint-dark);
       color: var(--mint);
     }
 
@@ -456,6 +461,233 @@
       margin: auto 0 0;
       color: var(--muted);
     }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .metric-card {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 27px;
+      background:
+        linear-gradient(150deg, rgba(87, 239, 182, .045), transparent 52%),
+        var(--panel);
+    }
+    .metric-lens {
+      display: inline-flex;
+      margin-bottom: 18px;
+      border: 1px solid rgba(87, 239, 182, .32);
+      border-radius: 999px;
+      padding: 5px 9px;
+      color: var(--mint);
+      font: 800 10px/1.2 var(--mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .metric-card h3 {
+      margin-bottom: 10px;
+      font-size: clamp(18px, 2vw, 23px);
+      overflow-wrap: anywhere;
+    }
+    .metric-question {
+      min-height: 54px;
+      margin-bottom: 19px;
+      color: var(--ink);
+      font-size: 17px;
+    }
+    .metric-contract {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-bottom: 20px;
+    }
+    .metric-contract span {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 8px;
+      color: var(--muted);
+      font: 700 10px/1.2 var(--mono);
+    }
+    .metric-facts {
+      display: grid;
+      grid-template-columns: minmax(86px, auto) 1fr;
+      gap: 11px 14px;
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .metric-facts dt {
+      color: var(--faint);
+      font: 700 11px/1.5 var(--mono);
+      text-transform: uppercase;
+    }
+    .metric-facts dd { margin: 0; color: var(--muted); }
+    .metric-facts strong { color: var(--ink); }
+
+    .paired-design {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      margin-top: 20px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--line);
+    }
+    .paired-step {
+      min-height: 150px;
+      padding: 22px;
+      background: var(--panel);
+    }
+    .paired-step span {
+      display: block;
+      margin-bottom: 28px;
+      color: var(--mint);
+      font: 800 11px/1.2 var(--mono);
+    }
+    .paired-step strong { display: block; margin-bottom: 7px; }
+    .paired-step p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    .summary-block,
+    .development-block {
+      margin-top: 54px;
+      border-top: 1px solid var(--line);
+      padding-top: 38px;
+    }
+    .summary-block h3,
+    .development-block h3 {
+      max-width: 900px;
+      margin-bottom: 13px;
+      font-size: clamp(28px, 4vw, 46px);
+      letter-spacing: -.035em;
+    }
+    .summary-lede,
+    .development-lede {
+      max-width: 880px;
+      color: var(--muted);
+      font-size: 16px;
+    }
+    .compact-result-table { min-width: 850px; }
+    .compact-result-table tbody th { width: 26%; color: var(--ink); }
+    .compact-result-table tbody th span {
+      display: block;
+      margin-top: 4px;
+      color: var(--faint);
+      font: 700 10px/1.4 var(--mono);
+      text-transform: uppercase;
+    }
+    .compact-result-table .ordering {
+      color: var(--ink);
+      font: 750 13px/1.5 var(--mono);
+      white-space: nowrap;
+    }
+    .result-conclusion {
+      margin: 19px 0 0;
+      border-left: 3px solid var(--mint);
+      padding: 5px 0 5px 19px;
+      color: var(--ink);
+      font-size: 20px;
+    }
+
+    .development-matrix { min-width: 860px; }
+    .development-matrix tbody th { color: var(--ink); }
+    .development-matrix td { text-align: center; }
+    .development-matrix .responds { color: var(--mint); font-weight: 800; }
+    .development-matrix .no-response { color: var(--orange); font-weight: 800; }
+    .construct-curves { margin-top: 20px; }
+    .construct-curve-table { min-width: 980px; }
+    .construct-curve-table tbody th { color: var(--ink); }
+    .construct-curve-table td.numeric {
+      white-space: nowrap;
+      text-align: right;
+      font: 700 12px/1.45 var(--mono);
+    }
+    .construct-curve-table .zero { color: var(--faint); }
+    .construct-curve-table .positive { color: var(--mint); }
+    .construct-evidence-note {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .construct-implementation {
+      display: grid;
+      grid-template-columns: 5fr 3fr;
+      gap: 14px;
+      margin-top: 20px;
+    }
+    .construct-implementation article,
+    .construct-lesson {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 19px;
+      background: var(--panel-strong);
+    }
+    .construct-implementation h4,
+    .construct-lesson h4 {
+      margin: 0 0 9px;
+      color: var(--ink);
+      font-size: 15px;
+    }
+    .construct-implementation p,
+    .construct-lesson p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .construct-lessons {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 13px;
+      margin-top: 20px;
+    }
+    .construct-lesson.changed { border-color: rgba(255, 209, 102, .42); }
+    .construct-lesson.shows { border-color: rgba(87, 239, 182, .42); }
+    .construct-lesson.limits { border-color: rgba(255, 142, 131, .42); }
+    .development-caveat {
+      margin: 18px 0 0;
+      border: 1px solid rgba(255, 209, 102, .35);
+      border-radius: 13px;
+      padding: 17px 19px;
+      background: rgba(255, 209, 102, .04);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .development-caveat strong { color: var(--amber); }
+
+    .evidence-disclosure {
+      margin-top: 24px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: var(--panel);
+    }
+    .evidence-disclosure > summary {
+      min-height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 18px 22px;
+      color: var(--ink);
+      font-weight: 800;
+      cursor: pointer;
+      list-style: none;
+    }
+    .evidence-disclosure > summary::-webkit-details-marker { display: none; }
+    .evidence-disclosure > summary::after {
+      flex: 0 0 auto;
+      content: "+";
+      color: var(--mint);
+      font: 800 22px/1 var(--mono);
+    }
+    .evidence-disclosure[open] > summary::after { content: "−"; }
+    .evidence-disclosure[open] > summary { border-bottom: 1px solid var(--line); }
+    .evidence-disclosure-body { padding: 24px; }
+    .evidence-disclosure-body > :first-child { margin-top: 0; }
+    .evidence-disclosure-body > :last-child { margin-bottom: 0; }
 
     .lab {
       border: 1px solid var(--line);
@@ -1112,6 +1344,8 @@
     }
 
     @media (max-width: 1020px) {
+      .nav-links { gap: 14px; }
+      .nav-links .nav-secondary { display: none; }
       .hero { grid-template-columns: 1fr .72fr; gap: 36px; }
       .evidence-ribbon { grid-template-columns: repeat(3, 1fr); }
       .stat:nth-child(4) { border-left: 0; }
@@ -1126,6 +1360,7 @@
       .rollout-flow { grid-template-columns: repeat(3, 1fr); }
       .rollout-flow li:nth-child(3)::after { display: none; }
       .proof-grid { grid-template-columns: repeat(2, 1fr); }
+      .construct-implementation { grid-template-columns: 1fr; }
       .architecture { grid-template-columns: repeat(3, 1fr); }
       .arch-node:nth-child(3)::after { display: none; }
     }
@@ -1156,6 +1391,10 @@
       .section-head { grid-template-columns: 1fr; gap: 20px; }
       .tension-grid { grid-template-columns: 1fr; }
       .tension-card { min-height: 225px; }
+      .metric-grid,
+      .paired-design { grid-template-columns: 1fr; }
+      .construct-lessons { grid-template-columns: 1fr; }
+      .metric-question { min-height: auto; }
       .rollout-flow { grid-template-columns: repeat(2, 1fr); }
       .rollout-flow li:nth-child(3)::after { display: grid; }
       .rollout-flow li:nth-child(even)::after { display: none; }
@@ -1185,6 +1424,8 @@
         border-inline: 1px solid var(--line);
       }
       .lab { padding: 16px; }
+      .metric-card,
+      .evidence-disclosure-body { padding: 19px; }
       .lab-toolbar fieldset { width: 100%; }
       .scenario-button { flex: 1; padding-inline: 10px; }
       .rollout-flow,
@@ -1223,12 +1464,13 @@
         EVAL//SIM
       </a>
       <ul class="nav-links">
-        <li><a href="#why">Why</a></li>
-        <li><a href="#policy-lab">Policy lab</a></li>
-        <li><a href="#evidence">Evidence</a></li>
-        <li><a href="#roadmap">Roadmap</a></li>
-        <li><a href="#terms">Terms</a></li>
+        <li class="nav-secondary"><a href="#why">Why</a></li>
+        <li><a href="#policy-lab">Baselines</a></li>
+        <li><a href="#metrics">Metrics</a></li>
+        <li><a href="#stress-test">Blind spots</a></li>
+        <li class="nav-secondary"><a href="#terms">Terms</a></li>
         <li><a class="source-link" href="https://github.com/6ickomod3/evalsim" rel="noreferrer">View source ↗</a></li>
+        <li><a class="source-link study-link" href="/interview">Interview guide ↗</a></li>
       </ul>
     </nav>
   </header>
@@ -1236,19 +1478,20 @@
   <main id="main">
     <section class="shell hero" id="top" aria-labelledby="hero-title">
       <div>
-        <p class="kicker">M0 → M5 accepted · official ten-shard WOMD evaluation · M6 in progress</p>
-        <h1 id="hero-title">A simulator can match the log—and still <em>fail the test.</em></h1>
-        <p class="hero-copy">EvalSim is a contract-first platform for discovering how traffic simulators differ: what they replay, what they react to, where their motion breaks, and whether their outputs are useful for closed-loop evaluation.</p>
+        <p class="kicker">Three baselines · four primary metrics · one fixed 128-scene conditional cohort</p>
+        <h1 id="hero-title">The simulator ranking depends on <em>what you measure.</em></h1>
+        <p class="hero-copy">EvalSim asks whether log replay, constant velocity, and the Intelligent Driver Model (IDM) keep the same ordering under recorded-motion fidelity, geometric overlap, and a fixed-0.1-second kinematic-infeasibility diagnostic. Their metric-specific mean orderings differ. In the accepted comparison, the <em>ego</em>—the focal vehicle—is held to its recorded path while each baseline simulates the surrounding world agents. This is a personal learning project and work in progress; the accepted core result and bounded evaluator construct audit are complete, while broader validation remains optional.</p>
         <div class="hero-actions">
-          <a class="button primary" href="#policy-lab">Explore the policy lab ↓</a>
-          <a class="button" href="https://github.com/6ickomod3/evalsim/blob/main/README.md" rel="noreferrer">Read the technical README ↗</a>
+          <a class="button primary" href="#metrics">See what the metrics ask ↓</a>
+          <a class="button" href="/interview">Study for the interview ↗</a>
+          <a class="button" href="interview-prep.html">Direct HTML fallback ↗</a>
         </div>
       </div>
 
       <aside class="hero-visual" aria-label="Schematic trajectory divergence">
         <div class="visual-head">
           <span>Evaluation surface / 01</span>
-          <span class="status-live">Tested</span>
+          <span class="status-live">M5 accepted</span>
         </div>
         <div class="trajectory-stage" aria-hidden="true">
           <span class="lane top"></span>
@@ -1269,11 +1512,11 @@
     </section>
 
     <div class="shell evidence-ribbon" aria-label="Current project evidence">
-      <div class="stat"><strong>6</strong><span>milestones complete</span></div>
-      <div class="stat"><strong>876</strong><span>full-suite tests · M5 acceptance</span></div>
-      <div class="stat"><strong>5</strong><span>synthetic families</span></div>
+      <div class="stat"><strong>4</strong><span>primary diagnostics</span></div>
+      <div class="stat"><strong>1,444</strong><span>current full suite · 1 expected local-data skip</span></div>
+      <div class="stat"><strong>3</strong><span>simple baseline probes</span></div>
       <div class="stat"><strong>128</strong><span>conditional WOMD cohort</span></div>
-      <div class="stat"><strong>CPU</strong><span>Apple Silicon acceptance</span></div>
+      <div class="stat"><strong>CPU</strong><span>core path, no GPU required</span></div>
     </div>
 
     <section class="section shell" id="why" aria-labelledby="why-title">
@@ -1292,8 +1535,8 @@
         </article>
         <article class="tension-card">
           <span class="operator" aria-hidden="true">≠</span>
-          <h3>Low collision is not useful motion.</h3>
-          <p>An overly defensive agent may avoid contact by freezing or yielding unnaturally. Safety counts alone cannot explain whether behavior is plausible.</p>
+          <h3>Low box overlap is not useful motion.</h3>
+          <p>A frozen agent can avoid strict target-frame box interpenetration while being behaviorally useless. This proxy does not measure collision count, severity, safety, or plausibility.</p>
         </article>
         <article class="tension-card">
           <span class="operator" aria-hidden="true">≠</span>
@@ -1307,7 +1550,7 @@
       <div class="section-head">
         <div>
           <span class="section-index">02 / M2 policy lab</span>
-          <h2 id="lab-title">Same contract. Three different truths.</h2>
+          <h2 id="lab-title">Same contract. Three different assumptions.</h2>
         </div>
         <p>All three policies pass through one typed rollout engine. Change the scenario and scrub time to expose what each baseline can—and cannot—do.</p>
       </div>
@@ -1365,7 +1608,7 @@
           <article class="policy-card">
             <header>
               <span class="policy-number">POLICY / 03</span>
-              <h3>IDM</h3>
+              <h3>Intelligent Driver Model (IDM)</h3>
               <p>Longitudinal vehicle interaction</p>
             </header>
             <canvas class="policy-canvas" data-policy="idm" width="420" height="235" role="img" aria-label="Schematic IDM trajectory"></canvas>
@@ -1426,40 +1669,409 @@
       </div>
     </section>
 
+    <section class="section shell" id="metrics" aria-labelledby="metrics-title">
+      <div class="section-head">
+        <div>
+          <span class="section-index">03 / Four evaluator questions</span>
+          <h2 id="metrics-title">Each metric chooses what “better” means.</h2>
+        </div>
+        <p>All four metrics reduce frame- and agent-level components to one scalar per scenario. Lower is better, but the constructs, rewards, and blind spots are different.</p>
+      </div>
+
+      <div class="metric-grid">
+        <article class="metric-card" data-metric-id="position_error_m" data-version="1.0.0" data-unit="m" data-direction="lower">
+          <span class="metric-lens">Fidelity</span>
+          <h3><code>position_error_m</code></h3>
+          <p class="metric-question">How far is the simulated position from the recorded future?</p>
+          <div class="metric-contract" aria-label="Position error contract">
+            <span>v1.0.0</span><span>metres</span><span>lower is better</span><span>scene mean</span>
+          </div>
+          <dl class="metric-facts">
+            <dt>Components</dt>
+            <dd>Euclidean error for every source-valid non-ego target × post-current future frame; the component distribution is retained, then averaged once per scene.</dd>
+            <dt>Eligibility</dt>
+            <dd>At least one eligible target-frame; otherwise <code>no_eligible_target_frame</code>. Accepted M5: paired 128/128 for every contrast, with no exclusions or asymmetric missingness.</dd>
+            <dt>Rewards</dt>
+            <dd><strong>Recorded-path imitation.</strong> Privileged replay is favored by construction.</dd>
+            <dt>Misses</dt>
+            <dd>Reactivity, interaction quality, and alternative plausible futures.</dd>
+          </dl>
+        </article>
+
+        <article class="metric-card" data-metric-id="speed_error_mps" data-version="1.0.0" data-unit="m/s" data-direction="lower">
+          <span class="metric-lens">Fidelity</span>
+          <h3><code>speed_error_mps</code></h3>
+          <p class="metric-question">How different is scalar speed from the recorded future?</p>
+          <div class="metric-contract" aria-label="Speed error contract">
+            <span>v1.0.0</span><span>m/s</span><span>lower is better</span><span>scene mean</span>
+          </div>
+          <dl class="metric-facts">
+            <dt>Components</dt>
+            <dd>Absolute speed-magnitude error for every source-valid non-ego target × post-current future frame; the component distribution is retained, then averaged once per scene.</dd>
+            <dt>Eligibility</dt>
+            <dd>At least one eligible target-frame; otherwise <code>no_eligible_target_frame</code>. Accepted M5: paired 128/128 for every contrast, with no exclusions or asymmetric missingness.</dd>
+            <dt>Rewards</dt>
+            <dd><strong>Recorded speed-magnitude imitation.</strong></dd>
+            <dt>Misses</dt>
+            <dd>Signed direction, position, interaction response, and whether the motion belongs on the road.</dd>
+          </dl>
+        </article>
+
+        <article class="metric-card" data-metric-id="oriented_box_overlap_rate" data-version="1.0.0" data-unit="fraction" data-direction="lower">
+          <span class="metric-lens">Interaction proxy</span>
+          <h3><code>oriented_box_overlap_rate</code></h3>
+          <p class="metric-question">How often does a target box strictly interpenetrate another valid object?</p>
+          <div class="metric-contract" aria-label="Oriented box overlap contract">
+            <span>v1.0.0</span><span>fraction</span><span>lower is better</span><span>scene rate</span>
+          </div>
+          <dl class="metric-facts">
+            <dt>Components</dt>
+            <dd>One binary flag per source-valid non-ego target × post-current future frame; touching edges are not overlap. The binary distribution is retained, then reduced to a scene rate.</dd>
+            <dt>Eligibility</dt>
+            <dd>At least one eligible target-frame; otherwise <code>no_eligible_target_frame</code>. Accepted M5: paired 128/128 for every contrast, with no exclusions or asymmetric missingness.</dd>
+            <dt>Rewards</dt>
+            <dd><strong>Geometric separation.</strong> It penalizes strict box interpenetration.</dd>
+            <dt>Misses</dt>
+            <dd>Collision-pair count, severity, safety, and useful motion; a frozen agent can look good.</dd>
+          </dl>
+        </article>
+
+        <article class="metric-card" data-metric-id="waymax_kinematic_infeasibility_rate" data-version="1.0.1" data-unit="fraction" data-direction="lower">
+          <span class="metric-lens">Feasibility diagnostic</span>
+          <h3><code>waymax_kinematic_infeasibility_rate</code></h3>
+          <p class="metric-question">How often does a vehicle transition violate the pinned inverse-bicycle thresholds?</p>
+          <div class="metric-contract" aria-label="Kinematic infeasibility contract">
+            <span>v1.0.1</span><span>fraction</span><span>lower is better</span><span>scene rate</span>
+          </div>
+          <dl class="metric-facts">
+            <dt>Components</dt>
+            <dd>One binary acceleration/curvature flag per contiguous-valid non-ego vehicle future transition, using the pinned fixed <code>0.1 s</code> Waymax formula. The binary distribution is retained, then reduced to a scene rate.</dd>
+            <dt>Eligibility</dt>
+            <dd>At least one eligible vehicle transition; otherwise <code>no_eligible_vehicle_transition</code>. Accepted M5: paired 128/128 for every contrast, with no exclusions or asymmetric missingness.</dd>
+            <dt>Rewards</dt>
+            <dd><strong>Transitions inside the pinned acceleration and curvature limits.</strong></dd>
+            <dt>Misses</dt>
+            <dd>Progress, reactivity, map compliance, and safety; the fixed timebase is not a physical-time-normalized realism measure.</dd>
+          </dl>
+        </article>
+      </div>
+
+      <div class="summary-block" aria-labelledby="paired-design-title">
+        <span class="section-index">Evaluation design / same scenes first</span>
+        <h3 id="paired-design-title">The comparison unit is the scenario—not an agent or frame.</h3>
+        <div class="paired-design">
+          <article class="paired-step">
+            <span>01</span>
+            <strong>Hold the source fixed</strong>
+            <p>All three baselines run on the same 128 scenarios. Eligibility and slice membership use source data only, before policy outcomes.</p>
+          </article>
+          <article class="paired-step">
+            <span>02</span>
+            <strong>Reduce within each scene</strong>
+            <p>Every eligible component distribution becomes exactly one scalar per policy × metric × scenario.</p>
+          </article>
+          <article class="paired-step">
+            <span>03</span>
+            <strong>Compare paired differences</strong>
+            <p>Scene-level A − B effects keep scenario mix fixed; missingness, sparse effects, nulls, and contradictions stay visible.</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="summary-block" aria-labelledby="compact-results-title">
+        <span class="section-index">Accepted M5 / compact result</span>
+        <h3 id="compact-results-title">There is no overall winner: changing the evaluator changes the ordering.</h3>
+        <p class="summary-lede">These are observed mean orderings on the fixed 128-scene complete-case conditional cohort. “&lt;” means a lower mean metric value. It is not a universal realism ranking.</p>
+        <div class="comparison-wrap">
+          <table class="comparison compact-result-table" data-evidence="m5-accepted">
+            <caption class="sr-only">Compact four-row summary of accepted M5 mean metric orderings</caption>
+            <thead>
+              <tr>
+                <th scope="col">Evaluator</th>
+                <th scope="col">Mean ordering (lower is better)</th>
+                <th scope="col">Bounded interpretation</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-metric-id="position_error_m">
+                <th scope="row"><code>position_error_m</code><span>Fidelity</span></th>
+                <td class="ordering">Replay &lt; CV &lt; IDM</td>
+                <td>Replay is closest to the recorded path; CV is closer than IDM among the two history-only probes.</td>
+              </tr>
+              <tr data-metric-id="speed_error_mps">
+                <th scope="row"><code>speed_error_mps</code><span>Fidelity</span></th>
+                <td class="ordering">Replay &lt; CV &lt; IDM</td>
+                <td>Replay is closest to recorded scalar speed; CV is closer than IDM among the two history-only probes.</td>
+              </tr>
+              <tr data-metric-id="oriented_box_overlap_rate">
+                <th scope="row"><code>oriented_box_overlap_rate</code><span>Interaction proxy</span></th>
+                <td class="ordering">Replay &lt; IDM &lt; CV</td>
+                <td>Mean order only: the IDM–CV adjusted band crosses zero, so that directional comparison is held.</td>
+              </tr>
+              <tr data-metric-id="waymax_kinematic_infeasibility_rate">
+                <th scope="row"><code>waymax_kinematic_infeasibility_rate</code><span>Feasibility diagnostic</span></th>
+                <td class="ordering">IDM &lt; CV &lt; Replay</td>
+                <td>Replay reverses position/speed ordering. IDM–CV is event-sparse and its adjusted band crosses zero.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="result-conclusion"><strong>Conclusion:</strong> the evidence supports a multi-metric evaluation method and use-case-specific judgment—not a composite realism score or simulator champion.</p>
+      </div>
+    </section>
+
+    <section class="section shell" id="stress-test" aria-labelledby="stress-test-title">
+      <div class="section-head">
+        <div>
+          <span class="section-index">04 / Controlled evaluator red-team</span>
+          <h2 id="stress-test-title">A metric can be correct—and still miss the defect.</h2>
+        </div>
+        <p>Known synthetic corruptions make evaluator field-of-view legible. The corrected data-free runtime produced a complete 12-cell construct audit, bounded to three hand-built analytic cases.</p>
+      </div>
+
+      <div class="development-block">
+        <span class="section-index">M7 / Completed bounded construct audit</span>
+        <h3>Different diagnostics see different failure domains.</h3>
+        <p class="development-lede">“Responds” means every positive-dose mean rose more than <code>1e-6</code> above clean and the curve was non-flat and monotone. “No response” means every dose mean stayed within <code>±1e-6</code> of clean.</p>
+        <div class="comparison-wrap">
+          <table class="comparison development-matrix" data-evidence="m7-construct-audit">
+            <caption class="sr-only">Complete bounded M7 construct-audit response matrix</caption>
+            <thead>
+              <tr>
+                <th scope="col">Injected defect</th>
+                <th scope="col"><code>position_error_m</code></th>
+                <th scope="col"><code>oriented_box_overlap_rate</code></th>
+                <th scope="col"><code>waymax_kinematic_infeasibility_rate</code></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-defect="frozen_agent">
+                <th scope="row">Future-only freeze v2</th>
+                <td class="responds">Responds</td>
+                <td class="no-response">No response</td>
+                <td class="responds">Responds</td>
+              </tr>
+              <tr data-defect="teleportation">
+                <th scope="row">Position-only teleport</th>
+                <td class="responds">Responds</td>
+                <td class="no-response">No response</td>
+                <td class="no-response">No response</td>
+              </tr>
+              <tr data-defect="kinematic_spike">
+                <th scope="row">Velocity-only kinematic spike</th>
+                <td class="no-response">No response</td>
+                <td class="no-response">No response</td>
+                <td class="responds">Responds</td>
+              </tr>
+              <tr data-defect="overlap">
+                <th scope="row">Constructed box overlap</th>
+                <td class="responds">Responds</td>
+                <td class="responds">Responds</td>
+                <td class="no-response">No response</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <details class="evidence-disclosure construct-curves">
+          <summary>Open all twelve exact four-dose curves and implementation checks</summary>
+          <div class="evidence-disclosure-body">
+            <p class="construct-evidence-note">All values are three-case arithmetic means shown to six decimal places. Every clean mean is <code>0</code>, and every clean and injected metric result is valid with <code>eligible_components == total_components == 16</code>. These deterministic analytic curves are not uncertainty estimates.</p>
+            <div class="comparison-wrap">
+              <table class="comparison construct-curve-table" data-evidence="m7-construct-curves">
+                <caption class="sr-only">Exact M7 construct-audit means for all twelve defect and metric cells at four doses</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Controlled probe</th>
+                    <th scope="col">Metric</th>
+                    <th scope="col">Clean</th>
+                    <th scope="col">0.25</th>
+                    <th scope="col">0.50</th>
+                    <th scope="col">0.75</th>
+                    <th scope="col">1.00</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr data-curve="freeze-position">
+                    <th scope="row">Future-only freeze v2</th>
+                    <td><code>position_error_m</code></td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric positive">0.125000</td>
+                    <td class="numeric positive">0.312500</td>
+                    <td class="numeric positive">0.562500</td>
+                    <td class="numeric positive">0.875000</td>
+                  </tr>
+                  <tr data-curve="freeze-overlap">
+                    <th scope="row">Future-only freeze v2</th>
+                    <td><code>oriented_box_overlap_rate</code></td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                  </tr>
+                  <tr data-curve="freeze-kinematic">
+                    <th scope="row">Future-only freeze v2</th>
+                    <td><code>waymax_kinematic_infeasibility_rate</code></td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric positive">0.062500</td>
+                    <td class="numeric positive">0.125000</td>
+                    <td class="numeric positive">0.187500</td>
+                    <td class="numeric positive">0.250000</td>
+                  </tr>
+                  <tr data-curve="teleport-position">
+                    <th scope="row">Position-only teleport v1</th>
+                    <td><code>position_error_m</code></td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric positive">9.375000</td>
+                    <td class="numeric positive">18.750000</td>
+                    <td class="numeric positive">28.125000</td>
+                    <td class="numeric positive">37.500000</td>
+                  </tr>
+                  <tr data-curve="teleport-overlap">
+                    <th scope="row">Position-only teleport v1</th>
+                    <td><code>oriented_box_overlap_rate</code></td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                  </tr>
+                  <tr data-curve="teleport-kinematic">
+                    <th scope="row">Position-only teleport v1</th>
+                    <td><code>waymax_kinematic_infeasibility_rate</code></td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                  </tr>
+                  <tr data-curve="spike-position">
+                    <th scope="row">Velocity-only spike v1</th>
+                    <td><code>position_error_m</code></td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                  </tr>
+                  <tr data-curve="spike-overlap">
+                    <th scope="row">Velocity-only spike v1</th>
+                    <td><code>oriented_box_overlap_rate</code></td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                  </tr>
+                  <tr data-curve="spike-kinematic">
+                    <th scope="row">Velocity-only spike v1</th>
+                    <td><code>waymax_kinematic_infeasibility_rate</code></td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric positive">0.125000</td>
+                    <td class="numeric positive">0.250000</td>
+                    <td class="numeric positive">0.375000</td>
+                    <td class="numeric positive">0.500000</td>
+                  </tr>
+                  <tr data-curve="overlap-position">
+                    <th scope="row">Forced overlap v1</th>
+                    <td><code>position_error_m</code></td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric positive">12.500337</td>
+                    <td class="numeric positive">37.501012</td>
+                    <td class="numeric positive">75.002025</td>
+                    <td class="numeric positive">75.002025</td>
+                  </tr>
+                  <tr data-curve="overlap-overlap">
+                    <th scope="row">Forced overlap v1</th>
+                    <td><code>oriented_box_overlap_rate</code></td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric positive">0.500000</td>
+                    <td class="numeric positive">0.750000</td>
+                    <td class="numeric positive">1.000000</td>
+                    <td class="numeric positive">1.000000</td>
+                  </tr>
+                  <tr data-curve="overlap-kinematic">
+                    <th scope="row">Forced overlap v1</th>
+                    <td><code>waymax_kinematic_infeasibility_rate</code></td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                    <td class="numeric zero">0.000000</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="development-caveat"><strong>The plateau is part of the result.</strong> The forced-overlap position and overlap curves are unchanged between doses <code>0.75</code> and <code>1.00</code> because the discrete three-agent candidate set is already saturated. The curves remain nondecreasing and globally non-flat; the plateau is retained rather than smoothed away.</p>
+            <div class="construct-implementation">
+              <article>
+                <h4>Small, public, fail-closed API</h4>
+                <p><code>run_construct_audit()</code> uses exact <code>ConstructAuditCase</code> fixtures and returns an immutable <code>ConstructAuditResult</code> of <code>ConstructAuditCell</code> evidence. <code>construct_audit_defect_registry()</code> isolates <code>FrozenAgentDefectV2</code> while the historical v1 generator remains unchanged. Invalid or partial metric results, identity/version drift, duplicate or missing cells, non-nested manifests, and incorrect affected-agent counts raise an error instead of becoming apparent misses.</p>
+              </article>
+              <article>
+                <h4>51 focused M7 tests</h4>
+                <p>8 construct-audit, 27 defect, 7 detection, 6 invariance, and 3 governance-card tests. Agent permutation and whole-scene translation must preserve all three selected metrics; rollout-only translation, a velocity impulse, and an independent overlap-geometry oracle prove the checked paths are not vacuous.</p>
+              </article>
+            </div>
+          </div>
+        </details>
+
+        <div class="construct-lessons">
+          <article class="construct-lesson changed">
+            <h4>What changed</h4>
+            <p>The v1 freeze changed velocity at the observed current frame, erasing the future deceleration. Freeze v2 preserves history and the current frame, then introduces a future-only abrupt stop from the next frame. The old kinematic “miss” was therefore a generator artifact.</p>
+          </article>
+          <article class="construct-lesson shows">
+            <h4>What this shows</h4>
+            <p>This outcome-aware audit used exactly three hand-built analytic cases at four doses (<code>0.25</code>, <code>0.50</code>, <code>0.75</code>, <code>1.00</code>) and produced six responses and six non-responses. Position reads coordinates, overlap reads interpenetration, and the fixed-step kinematic diagnostic reads stored state transitions. The corrected freeze response is evidence about an abrupt-stop discontinuity, not generic nonreactivity.</p>
+          </article>
+          <article class="construct-lesson limits">
+            <h4>What this does not show</h4>
+            <p>The field-separated non-responses are partly true by construction. This outcome-aware evidence is not calibrated, source-disjoint, held-out, WOMD-backed, population-level, or general metric validation. <code>speed_error_mps</code> is excluded from this audit; it supports no aggregate realism score, metric winner, or simulator winner.</p>
+          </article>
+        </div>
+        <p class="development-caveat"><strong>Completed, bounded construct audit only.</strong> The original M7 v1 gates remain unmet, and broader validation is optional and separately gated.</p>
+      </div>
+    </section>
+
     <section class="section shell" id="mechanics" aria-labelledby="mechanics-title">
       <div class="section-head">
         <div>
-          <span class="section-index">03 / One rollout transition</span>
+          <span class="section-index">05 / Advanced engineering evidence</span>
           <h2 id="mechanics-title">The engine owns the physics boundary.</h2>
         </div>
         <p>Policies propose typed state overrides or controls. The engine owns time, identity, lifecycle, feasibility integration, and the evidence trail.</p>
       </div>
 
-      <ol class="rollout-flow">
-        <li><strong>Copy history</strong><span>Preserve all observations through <code>current_index</code>.</span></li>
-        <li><strong>Observe now</strong><span>Build immutable current-step frames; CV and IDM are tested against poisoned future world kinematics.</span></li>
-        <li><strong>Policy step</strong><span>Return typed controls or explicit absolute-state overrides.</span></li>
-        <li><strong>Integrate</strong><span>Apply actual Δt and audited acceleration, speed, braking, and yaw clamps.</span></li>
-        <li><strong>Update together</strong><span>Synchronously advance world agents; preserve births and re-entries.</span></li>
-        <li><strong>Record proof</strong><span>Emit rollout state plus complete engine and policy provenance.</span></li>
-      </ol>
+      <details class="evidence-disclosure">
+        <summary>Open the rollout transition, actor-control boundary, and provenance shape</summary>
+        <div class="evidence-disclosure-body">
+          <ol class="rollout-flow">
+            <li><strong>Copy history</strong><span>Preserve all observations through <code>current_index</code>.</span></li>
+            <li><strong>Observe now</strong><span>Build immutable current-step frames; CV and IDM are tested against poisoned future world kinematics.</span></li>
+            <li><strong>Policy step</strong><span>Return typed controls or explicit absolute-state overrides.</span></li>
+            <li><strong>Integrate</strong><span>Apply actual Δt and audited acceleration, speed, braking, and yaw clamps.</span></li>
+            <li><strong>Update together</strong><span>Synchronously advance world agents; preserve births and re-entries.</span></li>
+            <li><strong>Record proof</strong><span>Emit rollout state plus complete engine and policy provenance.</span></li>
+          </ol>
 
-      <div class="contract-callout">
-        <article class="callout">
-          <h3>One contract, two kinds of actor control</h3>
-          <p>In M2, the ego remains exogenous and follows its logged trajectory. Policies simulate world agents from the current state. M6 replaces ego motion through a typed perturbation without changing the world-policy seam; that seam is now implemented and security-reviewed, though no counterfactual result has run.</p>
-          <div class="actor-legend" aria-label="Trajectory legend">
-            <span><i class="legend-line logged" aria-hidden="true"></i> logged reference</span>
-            <span><i class="legend-line ego" aria-hidden="true"></i> exogenous ego</span>
-            <span><i class="legend-line world" aria-hidden="true"></i> simulated world</span>
-          </div>
-        </article>
-        <div class="code-card">
-          <div class="code-head">
-            <span>Rollout provenance / shape</span>
-            <button class="copy-button" type="button" data-copy="provenance">Copy</button>
-          </div>
-          <pre id="provenance"><code>{
+          <div class="contract-callout">
+            <article class="callout">
+              <h3>One contract, two kinds of actor control</h3>
+              <p>In the accepted M5 comparison, ego remains exogenous and follows its logged trajectory while policies simulate world agents from the current state. M6 adds a typed ego perturbation without changing that world-policy seam. The pre-data path is implemented, but its earlier security review was bound to an older exact source snapshot and no official counterfactual WOMD result is accepted.</p>
+              <div class="actor-legend" aria-label="Trajectory legend">
+                <span><i class="legend-line logged" aria-hidden="true"></i> logged reference</span>
+                <span><i class="legend-line ego" aria-hidden="true"></i> exogenous ego</span>
+                <span><i class="legend-line world" aria-hidden="true"></i> simulated world</span>
+              </div>
+            </article>
+            <div class="code-card">
+              <div class="code-head">
+                <span>Rollout provenance / shape</span>
+                <button class="copy-button" type="button" data-copy="provenance">Copy</button>
+              </div>
+              <pre id="provenance"><code>{
   <span class="token-key">"engine"</span>: { ... },
   <span class="token-key">"dynamics"</span>: {
     <span class="token-key">"limits"</span>: { ... },
@@ -1470,20 +2082,24 @@
   <span class="token-key">"rollout_start_index"</span>: <span class="token-value">0</span>,
   <span class="token-key">"agent_control_modes"</span>: { ... }
 }</code></pre>
+            </div>
+          </div>
         </div>
-      </div>
+      </details>
     </section>
 
     <section class="section shell" id="evidence" aria-labelledby="evidence-title">
       <div class="section-head">
         <div>
-          <span class="section-index">04 / Evidence</span>
+          <span class="section-index">06 / Audit evidence</span>
           <h2 id="evidence-title">Tests target the seams, not the screenshots.</h2>
         </div>
         <p>The suite uses analytic oracles, poisoned inputs, lifecycle probes, malformed policies, batch acceptance, and exact serialization round-trips.</p>
       </div>
 
-      <div class="proof-grid">
+      <details class="evidence-disclosure">
+        <summary>Open implementation, cohort, reference, and parity evidence</summary>
+        <div class="evidence-disclosure-body proof-grid">
         <article class="proof-card"><span class="proof-id">EVIDENCE / A</span><h3>Future-log poisoning</h3><p>CV and IDM receive altered future world kinematics without changing their rollouts, showing that these two policies do not consume those future values.</p></article>
         <article class="proof-card"><span class="proof-id">EVIDENCE / B</span><h3>Analytic dynamics</h3><p>Irregular Δt, speed caps, timed stops, no-reverse behavior, and clamp counts are checked against explicit oracles.</p></article>
         <article class="proof-card"><span class="proof-id">EVIDENCE / C</span><h3>Lifecycle identity</h3><p>Births, gaps, re-entries, validity masks, synchronous updates, and agent identity remain engine-owned.</p></article>
@@ -1498,13 +2114,16 @@
         <article class="proof-card"><span class="proof-id">EVIDENCE / L</span><h3>Batched JAX evidence</h3><p>A fresh-process Apple CPU exact-log microbenchmark used batch size 2 and 20 warm runs: 217.983625 ms compile, 1.897854 ms median, 2.617709 ms nearest-rank p95, and 1,053.821843 scenarios/s. Peak process high-water RSS was 587,808,768 bytes.</p></article>
         <article class="proof-card"><span class="proof-id">EVIDENCE / M</span><h3>Official M5 evaluation</h3><p>The bound ten-shard run completed on all 128 accepted scenarios and produced the pre-registered domains: 6,656 metric rows, 1,024 slice memberships, 312 scorecards, and 144 native-parity summaries. All 12 primary cells retained paired n = 128 with zero exclusions or asymmetric missingness.</p></article>
         <article class="proof-card"><span class="proof-id">EVIDENCE / N</span><h3>Native parity outcome</h3><p>On the bounded subset of 16 scenes × 20 post-current transitions × three policies, 38,754 overlap components and 37,770 fixed-step kinematic components had zero binary mismatches. Log divergence had zero tolerance mismatches across 38,754 components; 24 of 48 rows had nonzero error within the pre-registered float32 tolerance, so it is not claimed bit-exact.</p></article>
-      </div>
+        </div>
+      </details>
 
-      <div class="results-block" aria-labelledby="m5-results-title">
-        <span class="section-index">M5 / Complete promoted primary family</span>
-        <h3 id="m5-results-title">Twelve cells, including the contradictions.</h3>
-        <p>Every row below is from the <code>all</code> slice of the accepted official run. The policies are intentionally simple diagnostic baselines. The matrix is complete rather than selected for favorable outcomes.</p>
-        <div class="comparison-wrap">
+      <details class="evidence-disclosure">
+        <summary>Open the complete unchanged 12-cell M5 primary matrix</summary>
+        <div class="evidence-disclosure-body results-block" aria-labelledby="m5-results-title">
+          <span class="section-index">M5 / Complete promoted primary family</span>
+          <h3 id="m5-results-title">Twelve cells, including the contradictions.</h3>
+          <p>Every row below is from the <code>all</code> slice of the accepted official run. The policies are intentionally simple diagnostic baselines. The matrix is complete rather than selected for favorable outcomes.</p>
+          <div class="comparison-wrap">
           <table class="comparison result-table">
             <caption class="sr-only">Complete 12-cell M5 primary all-slice matrix from the accepted official ten-shard WOMD evaluation</caption>
             <thead>
@@ -1668,13 +2287,14 @@
               </tr>
             </tbody>
           </table>
+          </div>
+          <p class="results-note"><strong>How to read this:</strong> the raw effect is the exact finite-cohort mean of per-scene A − B values; all four registered directions are lower. The oriented advantage is reported separately as −(raw mean), so a positive oriented sign means A is better under that metric. Every cell has paired N = 128, no effect suppression, and 100,000 deterministic scene-resampling draws. The pointwise and Bonferroni-adjusted ranges are finite-cohort sensitivity bands—not confidence intervals, hypothesis tests, or population claims. Ten of 12 adjusted bands exclude zero; the two held cells remain visible.</p>
+          <p class="results-note"><strong>Mixed result, no winner:</strong> privileged log replay is lowest on logged-position error, logged-speed error, and the overlap proxy; the causal CV baseline is lower than IDM on the two logged-error diagnostics. The fixed-0.1-second Waymax kinematic diagnostic reverses the replay comparison, while the small IDM–CV difference is event-sparse. Every contrast has metrics pointing in both directions, so M5 does not establish overall realism, superiority, causality, or policy quality.</p>
         </div>
-        <p class="results-note"><strong>How to read this:</strong> the raw effect is the exact finite-cohort mean of per-scene A − B values; all four registered directions are lower. The oriented advantage is reported separately as −(raw mean), so a positive oriented sign means A is better under that metric. Every cell has paired N = 128, no effect suppression, and 100,000 deterministic scene-resampling draws. The pointwise and Bonferroni-adjusted ranges are finite-cohort sensitivity bands—not confidence intervals, hypothesis tests, or population claims. Ten of 12 adjusted bands exclude zero; the two held cells remain visible.</p>
-        <p class="results-note"><strong>Mixed result, no winner:</strong> privileged log replay is lowest on logged-position error, logged-speed error, and the overlap proxy; the causal CV baseline is lower than IDM on the two logged-error diagnostics. The fixed-0.1-second Waymax kinematic diagnostic reverses the replay comparison, while the small IDM–CV difference is event-sparse. Every contrast has metrics pointing in both directions, so M5 does not establish overall realism, superiority, causality, or policy quality.</p>
-      </div>
+      </details>
 
       <div class="review-strip" aria-label="Current validation evidence">
-        <div><strong>876 passed</strong><span>full suite at the M5 acceptance snapshot (1 expected local-data skip; clean core-only 790 passed, 28 skips). The current M6 worktree adds the official-runner suite; a full-suite green run is a tracked follow-up.</span></div>
+        <div><strong>1,444 passed</strong><span>current full repository suite with 1 expected local-data skip. Historical M5 acceptance snapshot: 876 passed with 1 expected local-data skip; clean core-only: 790 passed with 28 expected optional/local skips. Test counts are software evidence, not realism evidence.</span></div>
         <div><strong>6,656 + 1,024</strong><span>metric rows plus slice memberships; 312 complete scorecards and 144 parity summaries verified</span></div>
         <div><strong>2,916 → 128</strong><span>raw ten-shard records to selected complete-case cohort; all primary cells paired, conditional and nonrepresentative by design</span></div>
       </div>
@@ -1692,40 +2312,47 @@
           <li><strong>M5 is finite-cohort diagnostic evidence, not a winner.</strong> The accepted result is conditional on one deterministic 128-scenario complete-case cohort, shared Waymax decode, seed-zero policies, logged/exogenous ego motion, and a privileged recorded-future replay baseline. Every contrast has diagnostics in both directions; there is no overall realism, superiority, causal, production, or population-level claim.</li>
           <li><strong>The uncertainty language is intentionally narrow.</strong> The pointwise and adjusted ranges are deterministic scene-reweighting sensitivity bands, not confidence intervals, hypothesis tests, or population uncertainty. The overlap rate is a target-frame proxy, and the kinematic rate is a fixed-0.1-second Waymax diagnostic rather than a physical-time-normalized safety metric. Native offroad, route, and signal metrics remain outside the current contract.</li>
           <li><strong>The benchmark is deliberately narrow.</strong> It measures a batch-2 exact-log JAX kernel on Apple CPU after host-to-device transfer—not ingestion, the full cohort, accelerator speedup, scaling efficiency, or production throughput. RSS is process high-water memory, not JAX device memory.</li>
-          <li><strong>No M6 counterfactual result yet.</strong> The typed ego-perturbation seam, paired reactivity metrics, and the outcome-blind official runner/CLI are implemented and have passed independent security review, but no WOMD evaluation has run and no reactivity result is claimed.</li>
+          <li><strong>M6 is implemented pre-data, not scientifically accepted.</strong> The typed ego-perturbation seam, paired reactivity metrics, and outcome-blind runner exist, but no WOMD evaluation has run. Because the strategy change updates a source-catalogued file, fresh exact-source review and approval are required before official M6 data access.</li>
+          <li><strong>M7 construct evidence is not general evaluator validation.</strong> The completed outcome-aware audit covers three hand-built analytic cases, four controlled defects, three metrics, and four doses. The historical v1 freeze changed velocity at the current frame and erased future deceleration; corrected freeze v2 preserves that boundary and creates a future-only abrupt stop. Its kinematic response therefore demonstrates sensitivity to that discontinuity, not generic nonreactivity. The matrix is exactly six responses and six non-responses; original v1 gates remain unmet, and broader validation is optional and separately gated.</li>
         </ul>
-        <p class="next-question"><span>Next falsifiable question / M6 in progress — no result yet</span>When ego motion is changed through a typed intervention, do causal world policies respond differently from privileged log replay—and can paired reactivity metrics distinguish response from trajectory imitation without leaking recorded futures?</p>
+        <p class="next-question"><span>Construct-audit insight / M7 evaluator field-of-view</span>The diagnostics disagree for understandable reasons: position reads trajectory coordinates, overlap reads interpenetration, and the fixed-step kinematic diagnostic reads state-transition consistency.</p>
       </div>
     </section>
 
     <section class="section shell" id="architecture" aria-labelledby="architecture-title">
       <div class="section-head">
         <div>
-          <span class="section-index">05 / Architecture</span>
+          <span class="section-index">08 / Advanced architecture</span>
           <h2 id="architecture-title">Built solid. Planned dashed.</h2>
         </div>
         <p>Downstream layers consume stable contracts rather than WOMD or Waymax internals. Synthetic scenes remain analytic oracles; Waymax becomes a recurring real-data, rollout, and parity reference.</p>
       </div>
 
-      <div class="architecture" aria-label="EvalSim architecture from source to reports">
-        <article class="arch-node done"><span class="arch-status">Implemented · M0</span><h3>Contracts</h3><p>Scenario, rollout, simulator, metric, serialization, and manifest seams.</p></article>
-        <article class="arch-node done"><span class="arch-status">Implemented · M1</span><h3>Scenario source</h3><p>Five deterministic synthetic families into one validated contract.</p></article>
-        <article class="arch-node done"><span class="arch-status">Implemented · M2</span><h3>Simulation</h3><p>Replay, CV, IDM, typed policy steps, engine dynamics, and provenance.</p></article>
-        <article class="arch-node done"><span class="arch-status">Implemented · M3</span><h3>Waymo substrate</h3><p>Exact local WOMD decode, pinned Waymax/JAX adapter, mapping, and one-record contract acceptance.</p></article>
-        <article class="arch-node done"><span class="arch-status">Implemented · M4</span><h3>Evaluation substrate</h3><p>Deterministic conditional cohort, exact-log gates, Waymax reference execution, and batched CPU JAX evidence.</p></article>
-        <article class="arch-node done"><span class="arch-status">Implemented + accepted · M5</span><h3>Metrics + statistics</h3><p>Official ten-shard WOMD evaluation, 13 metrics, 8 source-only slices, complete paired scorecards, deterministic scene-reweighting bands, native parity, immutable local results, and a fail-closed runner.</p></article>
-        <article class="arch-node next"><span class="arch-status">Implemented (pre-data) · M6</span><h3>Counterfactual reactivity</h3><p>Typed ego-perturbation seam, paired reactivity metrics, outcome-blind official runner/CLI, and a fail-closed review lifecycle — implementation and independent security review accepted; no WOMD result yet.</p></article>
-      </div>
-      <div class="producer-note" aria-label="Source implementation status">
-        <span class="implemented">Synthetic producer · implemented locally</span>
-        <span class="implemented">WOMD / Waymax / JAX producer · conditional ten-shard M4 and M5 paths accepted locally</span>
-      </div>
+      <details class="evidence-disclosure">
+        <summary>Open contract architecture and milestone-bound implementation status</summary>
+        <div class="evidence-disclosure-body">
+          <div class="architecture" aria-label="EvalSim architecture from source to reports">
+            <article class="arch-node done"><span class="arch-status">Implemented · M0</span><h3>Contracts</h3><p>Scenario, rollout, simulator, metric, serialization, and manifest seams.</p></article>
+            <article class="arch-node done"><span class="arch-status">Implemented · M1</span><h3>Scenario source</h3><p>Five deterministic synthetic families into one validated contract.</p></article>
+            <article class="arch-node done"><span class="arch-status">Implemented · M2</span><h3>Simulation</h3><p>Replay, CV, IDM, typed policy steps, engine dynamics, and provenance.</p></article>
+            <article class="arch-node done"><span class="arch-status">Implemented · M3</span><h3>Waymo substrate</h3><p>Exact local WOMD decode, pinned Waymax/JAX adapter, mapping, and one-record contract acceptance.</p></article>
+            <article class="arch-node done"><span class="arch-status">Implemented · M4</span><h3>Evaluation substrate</h3><p>Deterministic conditional cohort, exact-log gates, Waymax reference execution, and batched CPU JAX evidence.</p></article>
+            <article class="arch-node done"><span class="arch-status">Implemented + accepted · M5</span><h3>Metrics + statistics</h3><p>Official ten-shard WOMD evaluation, 13 metrics, 8 source-only slices, complete paired scorecards, deterministic scene-reweighting bands, native parity, immutable local results, and a fail-closed runner.</p></article>
+            <article class="arch-node next"><span class="arch-status">Implemented (pre-data) · M6</span><h3>Counterfactual reactivity</h3><p>Typed ego-perturbation seam, paired reactivity metrics, outcome-blind official runner/CLI, and a fail-closed review lifecycle. No official WOMD result is accepted; the current source requires fresh approval before data access.</p></article>
+            <article class="arch-node done"><span class="arch-status">Completed bounded construct audit · M7</span><h3>Evaluator red-team</h3><p>Three exact analytic cases, four controlled defects, a corrected future-only freeze, invariance/non-tautology checks, and the complete six-response/six-non-response matrix are implemented. Original v1 gates remain unmet; broader validation is optional and separately gated.</p></article>
+          </div>
+          <div class="producer-note" aria-label="Source implementation status">
+            <span class="implemented">Synthetic producer · implemented locally</span>
+            <span class="implemented">WOMD / Waymax / JAX producer · conditional ten-shard M4 and M5 paths accepted locally</span>
+          </div>
+        </div>
+      </details>
     </section>
 
     <section class="section shell" id="terms" aria-labelledby="terms-title">
       <div class="section-head">
         <div>
-          <span class="section-index">06 / Upstream terms</span>
+          <span class="section-index">09 / Upstream terms</span>
           <h2 id="terms-title">Local evidence, licensed inputs.</h2>
         </div>
         <p>The M3+ path is maintained under the repository owner’s stated personal, non-commercial interview-preparation purpose. The complete upstream agreements control; this summary is not legal advice.</p>
@@ -1761,12 +2388,15 @@
     <section class="section shell" id="roadmap" aria-labelledby="roadmap-title">
       <div class="section-head">
         <div>
-          <span class="section-index">07 / Roadmap</span>
+          <span class="section-index">10 / Advanced roadmap and reproduction</span>
           <h2 id="roadmap-title">A claim ledger, not a completion meter.</h2>
         </div>
-        <p>Every statement is separated into implemented, next, or planned work. The repository README remains the detailed source of truth.</p>
+        <p>The accepted comparison is the core project. Current work deepens metric understanding; later technology milestones are optional extensions rather than a completion checklist.</p>
       </div>
 
+      <details class="evidence-disclosure">
+        <summary>Open milestone ledger and local reproduction commands</summary>
+        <div class="evidence-disclosure-body">
       <div class="roadmap">
         <article class="roadmap-column">
           <h3>Implemented <span>tested now</span></h3>
@@ -1780,15 +2410,15 @@
           </dl>
         </article>
         <article class="roadmap-column next">
-          <h3>In progress <span>implementation landed</span></h3>
+          <h3>Current focus <span>metrics first</span></h3>
           <dl class="roadmap-list">
-            <div class="roadmap-item"><dt>M6</dt><dd><strong>Counterfactual reactivity</strong><span>Typed ego interventions, paired reactivity metrics, and the outcome-blind official runner implemented and security-reviewed; WOMD result pending the release gate</span></dd></div>
+            <div class="roadmap-item"><dt>M7</dt><dd><strong>Evaluator red-team</strong><span>Outcome-aware bounded construct audit complete: corrected freeze v2 and a full six-response/six-non-response matrix; original v1 gates remain unmet</span></dd></div>
           </dl>
         </article>
         <article class="roadmap-column future">
-          <h3>Planned <span>role evidence</span></h3>
+          <h3>Extensions <span>separately gated</span></h3>
           <dl class="roadmap-list">
-            <div class="roadmap-item"><dt>M7</dt><dd><strong>Evaluator red-team</strong><span>Severity curves, held-out defects, metric governance</span></dd></div>
+            <div class="roadmap-item"><dt>M6</dt><dd><strong>Counterfactual reactivity</strong><span>Implemented pre-data; no WOMD result, and current source needs fresh exact-source approval before official data access</span></dd></div>
             <div class="roadmap-item"><dt>M8</dt><dd><strong>Learned discriminator</strong><span>Flax, leakage audits, calibration, generator holdout</span></dd></div>
             <div class="roadmap-item"><dt>M9</dt><dd><strong>Video / VLM bridge</strong><span>Semantic BEV first; real camera evidence before camera claims</span></dd></div>
             <div class="roadmap-item"><dt>M10–11</dt><dd><strong>Scale + decisions</strong><span>Resume/retry, measured cost, governance, communication</span></dd></div>
@@ -1799,7 +2429,7 @@
       <div class="reproduce">
         <article class="reproduce-copy">
           <h3>Run the implemented paths.</h3>
-          <p>M0–M5 run locally through the repository’s <code>uv</code>-managed environment. The core and M5 synthetic path remain usable without Waymo dependencies. The official ten-shard command reproduced the complete accepted aggregate matrix shown above; its raw data, detailed diagnostics, and generated result store remain ignored and local-only.</p>
+          <p>The core explanation, synthetic checks, and bounded M7 construct audit run in the repository’s CPU-first <code>uv</code>-managed environment without Linux or a GPU. Waymax/JAX/WOMD are not required for that data-free path; they are required for separately licensed M3–M5 real-data/reference reproduction and any separately approved official M6 real-data execution. The official ten-shard M5 run produced the accepted aggregate matrix shown above; its raw data, detailed diagnostics, and generated result store remain ignored and local-only.</p>
           <p class="data-note">WOMD data and all derived artifacts are excluded from Git and deployment. M3 requires separately obtained shard <code>00000</code>; M4 and M5 require the exact ten-shard set <code>00000</code>–<code>00009</code>, the accepted ignored M4 run, a clean pushed worktree, a fresh ignored output directory, explicit data-access opt-in, and acceptance of the complete upstream terms above.</p>
         </article>
         <div class="code-card">
@@ -1807,8 +2437,14 @@
             <span>Terminal / local verification</span>
             <button class="copy-button" type="button" data-copy="commands">Copy</button>
           </div>
-          <pre id="commands"><code>uv sync --extra dev
+          <pre id="commands"><code>uv sync --frozen --extra dev --python 3.11.5
 uv run pytest
+
+# Current repository snapshot:
+# 1,444 passed, 1 expected local-data skip
+
+# Focused M7 construct-audit stack: 51 tests
+uv run pytest tests/test_m7_construct_audit.py tests/test_m7_defects.py tests/test_m7_detection.py tests/test_m7_invariance.py tests/test_m7_metric_cards.py
 
 # M5 acceptance snapshot (clean core-only environment):
 # 790 passed, 28 expected optional/local skips
@@ -1819,7 +2455,7 @@ uv run evalsim-m5-synthetic \
   --run-name data-free-acceptance-01
 
 # Optional Waymo dependencies:
-uv sync --extra dev --extra waymo
+uv sync --frozen --extra dev --extra waymo --python 3.11.5
 uv run --extra waymo pytest
 # M5 acceptance snapshot (full repository suite): 876 passed, 1 expected local-data skip
 # Locked 12-file M4 matrix: 421 passed, 1 skipped
@@ -1851,13 +2487,17 @@ uv run evalsim-m6-synthetic \
 # runtime rebuilt without the dev extra) and runs only via evalsim/cli/m6_bootstrap.py.</code></pre>
         </div>
       </div>
+        </div>
+      </details>
     </section>
   </main>
 
   <footer>
     <div class="shell footer-row">
-      <span>EvalSim · M0–M5 accepted · official ten-shard WOMD evaluation complete · M6 in progress (implementation landed, no result yet) · updated 2026-07-30</span>
+      <span>EvalSim · metrics-first learning project · M5 comparison accepted · bounded M7 construct audit complete · updated 2026-07-31</span>
       <div class="footer-links">
+        <a href="/interview">Interview guide</a>
+        <a href="interview-prep.html">Direct HTML</a>
         <a href="https://github.com/6ickomod3/evalsim" rel="noreferrer">Source</a>
         <a href="https://github.com/6ickomod3/evalsim/blob/main/README.md" rel="noreferrer">README</a>
         <a href="https://github.com/6ickomod3/evalsim/tree/main/docs/plans" rel="noreferrer">Design docs</a>

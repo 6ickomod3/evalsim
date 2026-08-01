@@ -1,8 +1,18 @@
 # Interview study plan
 
-This plan turns each build milestone into an interview-ready technical argument. It is
-organized by evidence loops rather than calendar weeks so it remains useful if the
-interview timeline changes.
+This plan turns current evidence—and optional extensions only if pursued—into
+interview-ready technical arguments. It is organized by evidence loops rather than a
+milestone checklist or calendar weeks.
+
+## Current metrics-first priority
+
+The presentation should be a technical argument, not a list of finished milestones.
+Start with three simple baselines, explain the four primary M5 diagnostics and their
+assumptions, show how their rankings conflict on the fixed 128-scene conditional cohort,
+and use M7's controlled defects to explain evaluator blind spots. State explicitly that this is a
+personal learning project and work in progress, but place that status after the core
+question rather than using it as the opening. M6 is a pre-data extension; M8--M11 are
+optional topics rather than required completion targets.
 
 ## The repeatable loop
 
@@ -20,7 +30,7 @@ For each topic:
 
 ### 1. WOMD, Waymax, and JAX semantics
 
-Build with M3–M4. Be able to explain:
+Study the accepted M3–M4 evidence. Be able to explain:
 
 - WOMD history/current/future boundaries, validity masks, object roles, roadgraph, and
   traffic-light semantics;
@@ -33,7 +43,7 @@ Build with M3–M4. Be able to explain:
 Use the accepted M4 result as a bounded case study: explain why 2,916 raw records became
 1,527 eligible records and a deterministic 128-scenario complete-case cohort; why that
 cohort is conditional rather than representative; why a shared Waymax decode limits
-independence; why the privileged Waymax IDM reference was restricted to 16 scenes × 20
+independence; why the privileged logged-trajectory waypoint-following Waymax IDM reference was restricted to 16 scenes × 20
 transitions; and why a batch-two exact-log kernel benchmark is not end-to-end or
 production-scale throughput. Do not turn successful execution into a claim about
 realism; M5 supplies a separate metric and statistical evidence gate.
@@ -63,9 +73,9 @@ complete-case cohort: the bands are not confidence intervals or hypothesis tests
 the result is not WOMD-population inference, causal evidence, or a policy replacement
 decision.
 
-### 3. Closed-loop causal evaluation
+### 3. Implemented pre-data extension — closed-loop causal evaluation
 
-Build with M6. Be able to explain:
+Study the implemented M6 design without claiming a WOMD result. Be able to explain:
 
 - why log replay is invalid as a reactive reference after ego perturbation;
 - open-loop fidelity versus closed-loop usefulness;
@@ -75,17 +85,28 @@ Build with M6. Be able to explain:
 
 ### 4. Evaluating the evaluator
 
-Build with M7. Be able to explain:
+Use the implemented M7 foundation and outcome-aware construct audit. Be able to explain:
 
-- Goodharting and metric gaming;
-- invariance, sensitivity, specificity, monotonicity, and calibration;
-- held-out defect families and false-positive analysis;
-- a plausible metric that failed and how the design changed;
-- ownership, versioning, launch thresholds, and evaluator regressions.
+- why the v1 frozen-agent/kinematic miss was a generator artifact: changing velocity at
+  the current frame erased the future deceleration;
+- why future-only freeze v2 makes the fixed-step kinematic diagnostic respond to one
+  abrupt stop, without proving detection of generic nonreactivity;
+- the corrected six-response/six-non-response matrix across three analytic cases and
+  four doses;
+- why position missing velocity-only corruption and kinematic infeasibility missing
+  position-only corruption verify field-of-view and wiring, but are partly tautological
+  and do not establish general construct validity;
+- why the overlap response is specific to forced interpenetration in these cases;
+- Goodharting, generator validity, non-vacuity controls, invariance, sensitivity,
+  monotonicity, and evaluator versioning; and
+- why this outcome-aware audit is not calibrated, source-disjoint, held-out,
+  WOMD-backed, or population evidence. Calibration, false-positive analysis, sealed
+  held-out defects, and real-scene stress tests are optional future validation work, not
+  completed evidence.
 
-### 5. Learned discriminators
+### 5. Optional if pursued — learned discriminators
 
-Build with M8. Be able to explain:
+If M8 is separately chosen, be able to explain:
 
 - scenario-grouped splits and simulator-fingerprint leakage;
 - why logistic/feature baselines precede a Flax temporal model;
@@ -94,9 +115,9 @@ Build with M8. Be able to explain:
 - generator-held-out evaluation and shortcut audits;
 - what a discriminator learns when “real” and “simulated” preprocessing differ.
 
-### 6. Multimodal/video/VLM evaluation
+### 6. Optional if pursued — multimodal/video/VLM evaluation
 
-Build with M9. Be able to explain:
+If M9 is separately chosen, be able to explain:
 
 - temporal stability, geometric consistency, cross-modal consistency, and condition
   following when ground truth is incomplete;
@@ -107,10 +128,10 @@ Build with M9. Be able to explain:
 - how motion evaluation and real sensor evaluation share governance but require
   different data and contracts.
 
-### 7. Scale, production, and technical leadership
+### 7. Optional project extension — scale and production
 
-Build with M10–M11 and use real professional examples for organizational questions. Be
-able to explain:
+If M10–M11 are separately chosen, study the following; use real professional examples,
+not this solo project, for organizational questions:
 
 - streaming, batching, caching, backpressure, resume/retry, deduplication, and lineage;
 - measured compile time, throughput, memory, utilization, and cost;
@@ -141,8 +162,9 @@ able to explain:
   assumption while preserving dependency inversion.
 - **Semantic discrepancy:** finding and resolving a mask, coordinate, horizon, or metric
   mismatch between EvalSim and Waymax.
-- **Metric failure:** discovering that a reasonable metric missed or rewarded a known
-  defect.
+- **Metric/generator failure:** discovering that a frozen-agent generator erased the
+  transition the metric should observe, correcting it, and narrowing the resulting
+  claim rather than presenting the original miss as a metric weakness.
 - **Learned-evaluator failure:** detecting leakage, a simulator fingerprint, calibration
   failure, or OOD collapse.
 - **Scale/reliability tradeoff:** changing a batching, caching, or execution design based

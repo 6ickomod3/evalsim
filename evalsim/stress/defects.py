@@ -8,6 +8,7 @@ cohort-relative accounting -- never native agent ids, coordinates, or source pay
 """
 from __future__ import annotations
 
+from copy import deepcopy
 import math
 import re
 from collections.abc import Iterable, Iterator
@@ -142,7 +143,7 @@ def _rebuild(rollout: Rollout, agents: list[Agent]) -> Rollout:
         timestamps=np.array(rollout.timestamps, copy=True),
         agents=agents,
         perturbation=rollout.perturbation,
-        metadata=dict(rollout.metadata),
+        metadata=deepcopy(rollout.metadata),
     )
 
 
@@ -195,6 +196,64 @@ class FrozenAgentDefect:
             seed=seed,
             total_world_agent_count=n_world,
             affected_agent_ordinals=tuple(range(count)),
+        )
+        return _rebuild(rollout, agents), manifest
+
+
+class FrozenAgentDefectV2:
+    """Freeze a nested world-agent prefix strictly after the observed history.
+
+    Unlike :class:`FrozenAgentDefect`, this corrected construct-audit probe preserves
+    every rollout field through ``current_index``. Selected agents hold their current
+    position and heading, and have zero velocity, only from the first future frame.
+    The v1 generator remains available for the historical M7 development matrix.
+    """
+
+    spec = DefectSpec(
+        family="frozen_agent",
+        version="v2",
+        severity_min=0.0,
+        severity_max=1.0,
+        severity_unit="fraction_of_world_agents",
+        target="rollout",
+        description=(
+            "hold a nested fraction of world agents static strictly after "
+            "current_index"
+        ),
+    )
+
+    def apply(
+        self,
+        scenario: Scenario,
+        rollout: Rollout,
+        severity: float,
+        *,
+        seed: int,
+    ) -> tuple[Rollout, DefectManifest]:
+        if not isinstance(seed, int) or isinstance(seed, bool):
+            raise ValueError("seed must be an int")
+        severity = self.spec.clamp(severity)
+        current = _current_index(scenario)
+        positions = _world_positions(scenario, rollout)
+        n_world = len(positions)
+        count = math.ceil(severity * n_world)
+        future = current + 1
+        applied = count if future < rollout.num_steps else 0
+        agents = [_copy_agent(agent) for agent in rollout.agents]
+        for position in positions[:applied]:
+            agent = agents[position]
+            for name in ("x", "y", "heading"):
+                series = getattr(agent, name)
+                series[future:] = series[current]
+            agent.vx[future:] = 0.0
+            agent.vy[future:] = 0.0
+        manifest = DefectManifest(
+            family=self.spec.family,
+            version=self.spec.version,
+            severity=severity,
+            seed=seed,
+            total_world_agent_count=n_world,
+            affected_agent_ordinals=tuple(range(applied)),
         )
         return _rebuild(rollout, agents), manifest
 
@@ -428,6 +487,23 @@ def default_defect_registry() -> DefectRegistry:
     )
 
 
+def construct_audit_defect_registry() -> DefectRegistry:
+    """Return the corrected, isolated registry used by the construct audit.
+
+    The family set matches :func:`default_defect_registry`, but ``frozen_agent`` is
+    explicitly v2. Keeping this factory separate prevents the outcome-aware audit
+    correction from changing the historical v1 detection harness.
+    """
+    return DefectRegistry(
+        [
+            FrozenAgentDefectV2(),
+            KinematicSpikeDefect(),
+            OverlapDefect(),
+            TeleportationDefect(),
+        ]
+    )
+
+
 __all__ = [
     "Defect",
     "DefectManifest",
@@ -435,8 +511,10 @@ __all__ = [
     "DefectRegistryError",
     "DefectSpec",
     "FrozenAgentDefect",
+    "FrozenAgentDefectV2",
     "KinematicSpikeDefect",
     "OverlapDefect",
     "TeleportationDefect",
+    "construct_audit_defect_registry",
     "default_defect_registry",
 ]

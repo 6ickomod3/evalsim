@@ -73,9 +73,39 @@
 - Before official M6 execution, create the immutable runtime with
   `uv sync --frozen --extra waymo --python 3.11.5` (no `dev` extra), then require the
   bootstrap's complete environment-catalog recheck to pass before data access.
-- From M3 onward, retain synthetic scenarios as analytic oracles but require a real-WOMD
-  acceptance path for every core evaluation feature. Use Waymax repeatedly as a
-  data/execution/reference adapter while keeping it behind the project contracts.
+- Use synthetic analytic oracles first. Any claim promoted as real-scene evidence
+  requires a separately gated real-WOMD acceptance path; learning, explanation, and
+  data-free evaluator validation do not require WOMD. When real-scene evidence is in
+  scope, use Waymax as a data/execution/reference adapter while keeping it behind the
+  project contracts.
+
+## Metrics-first project strategy
+
+- Keep the primary project surface metrics-first and learning-oriented. Explain what
+  each evaluator measures, rewards, and misses before presenting milestone breadth,
+  simulator implementation detail, or optional technology plans.
+- Use log replay, constant velocity, and EvalSim IDM as deliberately simple comparison
+  probes with known failure modes. Do not describe them as three equivalent causal
+  simulators or candidate production systems.
+- Lead with the four canonical M5 primary metrics, grouped as fidelity
+  (`position_error_m`, `speed_error_mps`), interaction proxy
+  (`oriented_box_overlap_rate`), and feasibility diagnostic
+  (`waymax_kinematic_infeasibility_rate`). Preserve their canonical names, versions,
+  units, eligibility, directions, missingness, component distributions, and known
+  limitations.
+- Preserve metric plurality. Never collapse incompatible metrics into a composite
+  realism score, overall simulator winner, or total ordering. Keep contradictory,
+  sparse, null, and adverse results visible.
+- Keep the core learning and presentation path CPU-first and independent of optional
+  WOMD, Waymax, JAX, TensorFlow, Linux, or GPU requirements. Treat those dependencies
+  as licensed reproduction/reference adapters or separately evidenced future
+  extensions.
+- Treat accepted pre-registrations, result reports, schemas, receipts, and source-bound
+  claims as historical evidence. Narrative or API changes must not rewrite accepted
+  definitions or imply that an accepted run executed at a newer commit.
+- `AGENTS.md` participates in the official M5/M6 source catalogs. After changing this
+  file, require fresh exact-source M6 review, approval, and the prescribed tag before
+  any official M6 data access; prior source-snapshot approval does not carry forward.
 
 ## Milestone delivery workflow
 
@@ -93,9 +123,11 @@ For every milestone, follow this sequence:
 4. **Execute:** implement incrementally with targeted tests and complete provenance.
    Keep plans and unverified results from being represented as completed evidence.
 5. **Verify and review the execution:** run unit, contract, analytic-oracle, and
-   end-to-end tests; exercise the required real-WOMD path; cross-check against an
-   independent reference where possible; inspect negative and contradictory results;
-   and obtain an adversarial review for semantic errors, leakage, and overclaiming.
+   end-to-end tests; exercise any pre-registered real-WOMD path required by the claim;
+   cross-check against an independent reference where possible; inspect negative and
+   contradictory results; and obtain an adversarial review for semantic errors, leakage,
+   and overclaiming. Data-free claims remain bounded to their analytic or held-out
+   evidence.
 6. **Close documentation:** update the README, presentation/webpage, canonical roadmap,
    claim ledger, limitations, and any relevant schemas or small reproducibility metadata.
 7. **Audit the release:** inspect the working tree and staged files for datasets,
